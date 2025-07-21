@@ -277,7 +277,7 @@ sh start_genie.sh
   url = {https://github.com/jd-opensource/joyagent-jdgenie},
   version = {0.1.0},
   publisher = {GitHub},
-  email = {jiashilin1@jd.com;liyang.1236@jd.com;liushangkun@jd.com;tianshaohua.1@jd.com;wangzhen449@jd.com}
+  email = {jiashilin1@jd.com;liyang.1236@jd.com;liushangkun@jd.com;tianshaohua.1@jd.com;wangzhen449@jd.com;yaoting.2@jd.com}
 }
 ```
 欢迎沟通和联系我们
