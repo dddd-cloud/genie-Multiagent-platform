@@ -13,26 +13,19 @@ Genie UI 是一个基于 React、TypeScript 和 Vite 的现代化项目。
 
 ## 快速开始
 
-1. 克隆仓库：
-
-```bash
-git clone https://github.com/your-username/genie-ui.git
-cd genie-ui
-```
-
-2. 安装依赖：
+1. 安装依赖：
 
 ```bash
 pnpm install
 ```
 
-3. 启动开发服务器：
+2. 启动开发服务器：
 
 ```bash
 pnpm run dev
 ```
 
-4. 在浏览器中打开 http://localhost:3000 查看应用。
+3. 在浏览器中打开 http://localhost:3000 查看应用。
 
 ## 可用脚本
 
