@@ -15,7 +15,7 @@ if ! command -v pnpm &> /dev/null; then
 fi
 
 # Check if pnpm version is 7
-if [[ $(pnpm -v | cut -c 1) != "7" ]]; then
+if [ $(pnpm -v | cut -d. -f1,2) -lt 7 ]; then
   echo "pnpm version 7 is required. Current version: $(pnpm -v)"
   exit 1
 fi
