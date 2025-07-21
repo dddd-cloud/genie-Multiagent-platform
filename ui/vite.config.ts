@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
 
-const serverBaseUrl = 'http://127.0.0.1:8080';
+const serverBaseUrl = 'http://127.0.0.1:8088';
 
 export default defineConfig((mode) => ({
   plugins: [
