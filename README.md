@@ -343,6 +343,10 @@ sh start_genie.sh
   email = {jiashilin1@jd.com;liyang.1236@jd.com;liushangkun@jd.com;tianshaohua.1@jd.com;wangzhen449@jd.com;yaoting.2@jd.com}
 }
 ```
+
+# Star History
+[![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date)](https://www.star-history.com/#jd-opensource/joyagent-jdgenie&Date)
+
 欢迎沟通和联系我们  
 ![contact](./docs/img/ME1753153769883.png)
 
