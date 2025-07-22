@@ -12,7 +12,7 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 此外，我们的开源多智能体产品JoyAgent-JDGenie相对比较轻量，不像阿里的SpringAI-Alibaba需要依赖阿里云百炼平台相关功能（基于百炼平台调用LLM），Coze依赖火山引擎平台。
 
 我们整体开源了智能体产品JoyAgent-JDGenie，包括前端、后端、框架、引擎、核心子智能体（报告生成智能体、代码智能体、PPT智能体、文件智能体等）、想用微调后效果更好的欢迎使用JoyAgent。
-## 相关功能展示
+## 案例展示
 <table>
 <tbody>
 <tr>
@@ -29,54 +29,23 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 
 <table>
-
 <tbody>
-
 <tr>
-
 <td>
-
-
 https://github.com/user-attachments/assets/065b8d1a-92e4-470a-bbe3-426fafeca5c4
-
-
-
-
 <td>
-
-  
-
 https://github.com/user-attachments/assets/15dcf089-5659-489e-849d-39c651ca7e5a
-
-
 </td>
-
 </tr>
-
 <tr>
-
 <td>
-
-  
-
 https://github.com/user-attachments/assets/cd99e2f8-9887-459f-ae51-00e7883fa050
-
-
 </td>
-
 <td>
-
-
 https://github.com/user-attachments/assets/657bbe61-5516-4ab9-84c2-c6ca75cc4a6f
-
-
-  
 </td>
-
 </tr>
-
 </tbody>
-
 </table>
 
 ## 产品对比
