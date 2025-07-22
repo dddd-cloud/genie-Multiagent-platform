@@ -28,41 +28,38 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 
 
-[//]: # (<table>)
+<table>
 
-[//]: # (<tbody>)
+<tbody>
 
-[//]: # (<tr>)
+<tr>
 
-[//]: # (<td>)
+<td>
 
-[//]: # (<video controls autoplay muted>)
+<video controls autoplay muted>
 
-[//]: # (  <source src="./docs/video/mov1-ua_ybNOH.mp4" type="video/mp4">)
+  <source src="https://raw.githubusercontent.com/jd-opensource/joyagent-jdgenie/main/docs/video/mov1-ua_ybNOH.mp4" type="video/mp4">
 
-[//]: # (  Your browser does not support the video tag.)
+  Your browser does not support the video tag.
 
-[//]: # (</video>)
+</video>
 
-[//]: # ()
-[//]: # (<td><img src="./docs/img/report.png" alt=""></td>)
 
-[//]: # (</tr>)
+<td><img src="./docs/img/report.png" alt=""></td>
 
-[//]: # (<tr>)
+</tr>
 
-[//]: # (<td><img src="./docs/img/table_analysis.png" alt=""></td>)
+<tr>
 
-[//]: # (<td><img src="./docs/img/review.png" alt=""></td>)
+<td><img src="./docs/img/table_analysis.png" alt=""></td>
 
-[//]: # (</tr>)
+<td><img src="./docs/img/review.png" alt=""></td>
 
-[//]: # (</tbody>)
+</tr>
 
-[//]: # (</table>)
+</tbody>
 
-[//]: # (Video:)
-[//]: # (https:/ui/dist/assets/mov1-ua_ybNOH.mov)
+</table>
 
 ## 产品对比
 
