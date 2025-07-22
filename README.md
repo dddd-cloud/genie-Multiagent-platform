@@ -280,5 +280,7 @@ sh start_genie.sh
   email = {jiashilin1@jd.com;liyang.1236@jd.com;liushangkun@jd.com;tianshaohua.1@jd.com;wangzhen449@jd.com;yaoting.2@jd.com}
 }
 ```
-欢迎沟通和联系我们
+欢迎沟通和联系我们  
+![contact](./docs/img/ME1753153769883.png)
+
 ![contact](./docs/img/contact.jpg)
