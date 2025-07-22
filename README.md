@@ -36,9 +36,9 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 [//]: # (<td>)
 
-[//]: # (<video controls autoplay>)
+[//]: # (<video controls autoplay muted>)
 
-[//]: # (  <source src="./ui/dist/assets/mov1-ua_ybNOH.mov" type="video/quicktime">)
+[//]: # (  <source src="./docs/video/mov1-ua_ybNOH.mp4" type="video/mp4">)
 
 [//]: # (  Your browser does not support the video tag.)
 
@@ -61,10 +61,7 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 [//]: # (</table>)
 
-[//]: # ()
 [//]: # (Video:)
-
-[//]: # ()
 [//]: # (https:/ui/dist/assets/mov1-ua_ybNOH.mov)
 
 ## 产品对比
@@ -233,8 +230,6 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
   - source .venv/bin/activate
 
 ## 快速开始
-
-对于新手小白我们强烈推荐查看Deploy.md来进行部署
 
 注意，第一次执行的时候执行
 
