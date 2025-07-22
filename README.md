@@ -12,6 +12,60 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 此外，我们的开源多智能体产品JoyAgent-JDGenie相对比较轻量，不像阿里的SpringAI-Alibaba需要依赖阿里云百炼平台相关功能（基于百炼平台调用LLM），Coze依赖火山引擎平台。
 
 我们整体开源了智能体产品JoyAgent-JDGenie，包括前端、后端、框架、引擎、核心子智能体（报告生成智能体、代码智能体、PPT智能体、文件智能体等）、想用微调后效果更好的欢迎使用JoyAgent。
+## 相关功能展示
+<table>
+<tbody>
+<tr>
+<td><img src="./docs/img/首页.png" alt=""></td>
+<td><img src="./docs/img/ppt.png" alt=""></td>
+</tr>
+<tr>
+<td><img src="./docs/img/report.png" alt=""></td>
+<td><img src="./docs/img/table_analysis.png" alt=""></td>
+</tr>
+</tbody>
+</table>
+
+
+
+[//]: # (<table>)
+
+[//]: # (<tbody>)
+
+[//]: # (<tr>)
+
+[//]: # (<td>)
+
+[//]: # (<video controls autoplay>)
+
+[//]: # (  <source src="./ui/dist/assets/mov1-ua_ybNOH.mov" type="video/quicktime">)
+
+[//]: # (  Your browser does not support the video tag.)
+
+[//]: # (</video>)
+
+[//]: # ()
+[//]: # (<td><img src="./docs/img/report.png" alt=""></td>)
+
+[//]: # (</tr>)
+
+[//]: # (<tr>)
+
+[//]: # (<td><img src="./docs/img/table_analysis.png" alt=""></td>)
+
+[//]: # (<td><img src="./docs/img/review.png" alt=""></td>)
+
+[//]: # (</tr>)
+
+[//]: # (</tbody>)
+
+[//]: # (</table>)
+
+[//]: # ()
+[//]: # (Video:)
+
+[//]: # ()
+[//]: # (https:/ui/dist/assets/mov1-ua_ybNOH.mov)
 
 ## 产品对比
 
@@ -179,6 +233,8 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
   - source .venv/bin/activate
 
 ## 快速开始
+
+对于新手小白我们强烈推荐查看Deploy.md来进行部署
 
 注意，第一次执行的时候执行
 
