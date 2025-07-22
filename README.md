@@ -236,6 +236,24 @@ sh start_genie_init.sh
 sh start_genie.sh
 ```
 
+## docker 一键启动服务
+
+```
+git clone https://github.com/jd-opensource/joyagent-jdgenie.git
+
+cd genie-tool
+
+修改.env.example执行工具使用的配置
+
+回到根目录
+
+docker build -t genie:latest .
+
+# -v 设置本地存储 -e 设置对话模型
+docker run -d -p 3004:3000 -p 8080:8080 -p 1601:1601 -v /Users/{user}/code/autobots/genie/genie-tool:/data/genie-tool -e OPENAI_BASE_URL="" -e OPENAI_API_KEY="" --name genie-app genie:latest
+
+```
+
 ## 二次开发样例
 
 ### 如何添加自己的MCP工具到JoyAgent-JDGenie中
