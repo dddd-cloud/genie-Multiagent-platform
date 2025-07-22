@@ -28,41 +28,56 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 
 
-[//]: # (<table>)
+<table>
 
-[//]: # (<tbody>)
+<tbody>
 
-[//]: # (<tr>)
+<tr>
 
-[//]: # (<td>)
+<td>
 
-[//]: # (<video controls autoplay muted>)
 
-[//]: # (  <source src="./docs/video/mov1-ua_ybNOH.mp4" type="video/mp4">)
+https://github.com/user-attachments/assets/065b8d1a-92e4-470a-bbe3-426fafeca5c4
 
-[//]: # (  Your browser does not support the video tag.)
 
-[//]: # (</video>)
 
-[//]: # ()
-[//]: # (<td><img src="./docs/img/report.png" alt=""></td>)
 
-[//]: # (</tr>)
+<td>
 
-[//]: # (<tr>)
+  
 
-[//]: # (<td><img src="./docs/img/table_analysis.png" alt=""></td>)
+https://github.com/user-attachments/assets/15dcf089-5659-489e-849d-39c651ca7e5a
 
-[//]: # (<td><img src="./docs/img/review.png" alt=""></td>)
 
-[//]: # (</tr>)
+</td>
 
-[//]: # (</tbody>)
+</tr>
 
-[//]: # (</table>)
+<tr>
 
-[//]: # (Video:)
-[//]: # (https:/ui/dist/assets/mov1-ua_ybNOH.mov)
+<td>
+
+  
+
+https://github.com/user-attachments/assets/cd99e2f8-9887-459f-ae51-00e7883fa050
+
+
+</td>
+
+<td>
+
+
+https://github.com/user-attachments/assets/657bbe61-5516-4ab9-84c2-c6ca75cc4a6f
+
+
+  
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
 
 ## 产品对比
 
