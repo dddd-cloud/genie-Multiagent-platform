@@ -350,4 +350,4 @@ sh start_genie.sh
 欢迎沟通和联系我们  
 ![contact](./docs/img/ME1753153769883.png)
 
-![contact](./docs/img/contact.jpg)
+[//]: # (![contact]&#40;./docs/img/contact.jpg&#41;)
