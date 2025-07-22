@@ -36,24 +36,30 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 <td>
 
-<video controls autoplay muted>
 
-  <source src="https://raw.githubusercontent.com/jd-opensource/joyagent-jdgenie/main/docs/video/mov1-ua_ybNOH.mp4" type="video/mp4">
-
-  Your browser does not support the video tag.
-
-</video>
+https://github.com/user-attachments/assets/065b8d1a-92e4-470a-bbe3-426fafeca5c4
 
 
-<td><img src="./docs/img/report.png" alt=""></td>
+
+
+<td>
+
+  
+</td>
 
 </tr>
 
 <tr>
 
-<td><img src="./docs/img/table_analysis.png" alt=""></td>
+<td>
 
-<td><img src="./docs/img/review.png" alt=""></td>
+  
+</td>
+
+<td>
+
+  
+</td>
 
 </tr>
 
