@@ -213,21 +213,11 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 - 基于已有工具迭代产生新工具，而不是从0-1直接生成新工具（减少错误工具的生成） 
 - 基于已有工具隐性拆解为原子工具，并基于原子工具结合大模型自动组合成新工具（不需要花费人力预先定义和拆解原子工具）
 
-## 环境准备
 
-- jdk17
-- python3.11
-- python环境准备 
-  - pip install uv 
-  - cd genie-tool 
-  - uv sync
-  - source .venv/bin/activate
 
 ## 快速开始
 
-参考文件中操作[Deploy.md](Deploy.md)
-
-## docker 一键启动服务
+### 方式1: docker 一键启动服务（推荐）
 
 ```
 git clone https://github.com/jd-opensource/joyagent-jdgenie.git
@@ -240,12 +230,25 @@ cd genie-tool
 
 docker build -t genie:latest .
 
-# -v 设置本地存储 -e 设置对话模型
-docker run -d -p 3004:3000 -p 8080:8080 -p 1601:1601 -v /Users/{user}/code/autobots/genie/genie-tool:/data/genie-tool -e OPENAI_BASE_URL="" -e OPENAI_API_KEY="" --name genie-app genie:latest
-
+# -e 设置对话模型服务地址、APIKEY
+docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 -e OPENAI_BASE_URL="" -e OPENAI_API_KEY="" --name genie-app genie:latest
 ```
 
-## 二次开发样例
+### 方式2: 手动初始化环境，启动服务
+
+#### 环境准备
+- jdk17
+- python3.11
+- python环境准备
+  - pip install uv
+  - cd genie-tool
+  - uv sync
+  - source .venv/bin/activate
+
+#### step by step部署手册
+参考 [Step by Step](./Deploy.md)
+
+## 二次开发
 
 ### 如何添加自己的MCP工具到JoyAgent-JDGenie中
 
@@ -265,8 +268,10 @@ sh start_genie.sh
 
 #### 开始对话
 
-比如添加12306工具后，查询北京到上海的火车票，效果如下
-![12306](./docs/img/12306.png)
+比如添加12306工具后，规划7月7天2人从北京出发去新疆旅行计划，并查询相关火车票信息，
+genie会进行旅行计划设计，然后调用mcp工具查询车票信息，最终输出报告。
+![img.png](./docs/img/mcp_example.png)
+
 
 ### 新增自定义子Agent到JoyAgent-JDGenie中
 
