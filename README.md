@@ -329,9 +329,16 @@ toolCollection.addTool(weatherTool);
 sh start_genie.sh
 ```
 
-## 贡献和合作
 
-我们是京东CHO企业信息化团队（EI），热忱欢迎开发者加入JoyAgent-JDGenie的建设！无论是完善产品和框架、修复 bug 还是添加新特性，您的贡献都非常宝贵。如需学术引用或联系，请使用以下 BibTeX：
+## 贡献者
+贡献者：Liu Shangkun,Li Yang,Jia Shilin,Tian Shaohua,Wang zhen,Yao Ting,Zhou xiaoqing,Liu min,Zhang Shuang,Liuwen,Yangdong,Xu Jialei,Zhou Meilei,Zhao Tingchong,Wu jiaxing, Wang Hanmin,Xu Shiyue,Liu Jiarun
+
+所属机构:京东CHO企业信息化团队（EI）
+
+
+## 引用和合作
+
+热忱欢迎开发者加入JoyAgent-JDGenie的建设！无论是完善产品和框架、修复 bug 还是添加新特性，您的贡献都非常宝贵。如需学术引用或联系，请使用以下 BibTeX：
 ```bibtex
 @software{JoyAgent-JDGenie,
   author = {Agent Team at JDCHO},
