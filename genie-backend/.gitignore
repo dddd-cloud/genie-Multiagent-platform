@@ -1,0 +1,9 @@
+# IDE
+.idea/
+.vscode/
+.joycoder/
+
+# Logs
+Logs/
+logs/
+*.log
