@@ -331,7 +331,7 @@ sh start_genie.sh
 
 
 ## 贡献者
-贡献者：Liu Shangkun,Li Yang,Jia Shilin,Tian Shaohua,Wang zhen,Yao Ting,Zhou xiaoqing,Liu min,Zhang Shuang,Liuwen,Yangdong,Xu Jialei,Zhou Meilei,Zhao Tingchong,Wu jiaxing, Wang Hanmin,Xu Shiyue,Liu Jiarun
+贡献者：Liu Shangkun,Li Yang,Jia Shilin,Tian Shaohua,Wang zhen,Yao Ting,Wang Hongtao,Zhou xiaoqing,Liu min,Zhang Shuang,Liuwen,Yangdong,Xu Jialei,Zhou Meilei,Zhao Tingchong,Wu jiaxing, Wang Hanmin,Xu Shiyue,Liu Jiarun
 
 所属机构:京东CHO企业信息化团队（EI）
 
