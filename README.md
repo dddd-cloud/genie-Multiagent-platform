@@ -355,7 +355,7 @@ sh start_genie.sh
 ```
 
 # Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date)](https://www.star-history.com/#jd-opensource/joyagent-jdgenie&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date&cache=false)](https://star-history.com/#jd-opensource/joyagent-jdgenie&Date)
 
 欢迎沟通和联系我们  
 ![contact](./docs/img/ME1753153769883.png)
