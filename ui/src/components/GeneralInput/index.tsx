@@ -97,7 +97,7 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
             value={question}
             placeholder={placeholder}
             className={classNames(
-              "h-80 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-[#fff]",
+              "h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-[#fff]",
               showBtn && product ? "indent-86" : ""
             )}
             onChange={questionChange}
