@@ -194,7 +194,7 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
   - 多智能体上下文管理
   - 高并发DAG执行引擎，极致的执行效率
 - **子智能体和工具**
-  - 子Agent和工具可插拔：预制多种子智能体和工具
+  - 子Agent和工具可插拔：预置多种子智能体和工具
   - 多种文件交付样式：html、ppt、markdown
   - plan和工具调用 RL优化迭代
   - 全链路流式输出
@@ -245,8 +245,15 @@ docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 -e OPENAI_BASE_URL="" -e OP
   - uv sync
   - source .venv/bin/activate
 
-#### step by step部署手册
-参考 [Step by Step](./Deploy.md)
+#### 方案1：手动step by step部署手册
+手动超详细攻略参考 [Step by Step](./Deploy.md)
+
+#### 方案2：手动一键启动部署
+直接通过shell启动所有服务
+```
+sh check_dep_port.sh # 检查所有依赖和端口占用情况
+sh Genie_start.sh  # 直接启动，以后改动配置直接重启动脚本即可，control+c 一键kill所有服务
+```
 
 ## 二次开发
 
@@ -347,8 +354,14 @@ sh start_genie.sh
 }
 ```
 
+## Contributors
+
+<a href="https://github.com/jd-opensource/joyagent-jdgenie/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=jd-opensource/joyagent-jdgenie" />
+</a>
+
 # Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date)](https://www.star-history.com/#jd-opensource/joyagent-jdgenie&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date&cache=false)](https://star-history.com/#jd-opensource/joyagent-jdgenie&Date)
 
 欢迎沟通和联系我们  
 ![contact](./docs/img/ME1753153769883.png)
