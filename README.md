@@ -246,7 +246,14 @@ docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 -e OPENAI_BASE_URL="" -e OP
   - source .venv/bin/activate
 
 #### step by step部署手册
-参考 [Step by Step](./Deploy.md)
+手动超详细攻略参考 [Step by Step](./Deploy.md)
+
+### 一键启动部署
+直接通过shell启动所有服务
+```
+sh check_dep_port.sh # 检查所有依赖和端口占用情况
+sh Genie_start.sh  # 直接启动，以后改动配置直接重启动脚本即可，control+c 一键kill所有服务
+```
 
 ## 二次开发
 
