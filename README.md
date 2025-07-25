@@ -179,7 +179,8 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 | LRC-Huawei                | 0.406      | 0.5283       | 0.4302       | 0.0769       | Huawei     |
 | xManus                    | 0.4061     | 0.8113       | 0.2791       | 0.0000       | OpenManus  |
 
-![比分](./docs/img/score.png)
+<img width="1073" height="411" alt="score" src="https://github.com/user-attachments/assets/9d997b68-565e-4228-8f5b-229158f33617" />
+
 ## 系统架构
 
 ![archi](./docs/img/archi.png)
