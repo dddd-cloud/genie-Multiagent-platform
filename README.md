@@ -165,10 +165,10 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 ## 框架效果先进性
 
-### Test集效果 75.15%
+### Test集效果 65.12%
 <img width="3524" height="1022" alt="test" src="https://github.com/user-attachments/assets/06c85286-e61f-4b5e-8335-413cd22ecbf4" />
 
-### Validation集效果 65.12%
+### Validation集效果 75.15%
 
 | Agent                     | Score      | Score_level1 | Score_level2 | Score_level3 | 机构         |
 |---------------------------|------------|--------------|--------------|--------------|------------|
