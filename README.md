@@ -254,7 +254,7 @@ docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 -e OPENAI_BASE_URL="" -e OP
 #### 方案1：手动step by step部署手册
 手动超详细攻略参考 [Step by Step](./Deploy.md)
 
-#### 方案2：手动一键启动部署
+#### 方案2：手动一键启动部署（推荐）
 直接通过shell启动所有服务
 ```
 sh check_dep_port.sh # 检查所有依赖和端口占用情况
