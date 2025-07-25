@@ -339,16 +339,15 @@ sh start_genie.sh
 
 所属机构:京东CHO企业信息化团队（EI）
 
-## 贡献
+## 贡献和合作
 
-我们欢迎所有好想法和建议，如果您想成为JoyAgent-Genie项目的共建者，可随时向我们提Pull Request
-在此之前需要您阅读并签署贡献者协议,请阅读 [贡献指南中文](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_ZH.pdf)，[贡献指南英文](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_EN.pdf)
+我们欢迎所有好想法和建议，如果您想成为项目的共建者，可随时向我们提Pull Request。无论是完善产品和框架、修复bug还是添加新特性，您的贡献都非常宝贵。
+在此之前需要您阅读并签署贡献者协议，请阅读 [贡献指南中文](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_ZH.pdf)，[贡献指南英文](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_EN.pdf)
 
 
+## 引用
 
-## 引用和合作
-
-热忱欢迎开发者加入JoyAgent-JDGenie的建设！无论是完善产品和框架、修复 bug 还是添加新特性，您的贡献都非常宝贵。如需学术引用或联系，请使用以下 BibTeX：
+如需学术引用或联系，请使用以下 BibTeX：
 ```bibtex
 @software{JoyAgent-JDGenie,
   author = {Agent Team at JDCHO},
