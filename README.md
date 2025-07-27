@@ -223,22 +223,26 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 ## 快速开始
 
-### 方式1: docker 一键启动服务（推荐）
+### 方式1: docker 一键启动服务
 
 ```
-git clone https://github.com/jd-opensource/joyagent-jdgenie.git
+1. git clone https://github.com/jd-opensource/joyagent-jdgenie.git
 
-cd genie-tool
+2. 手动更新 genie-backend/src/main/resources/application.yml中 base_url、apikey、model、max_tokens、model_name等配置
+使用DeepSeek时: 注意deepseek-chat 为max_tokens: 8192
 
-修改.env_template执行工具使用的配置
+手动更新 genie-tool/.env_template 中的 OPENAI_API_KEY、OPENAI_BASE_URL、DEFAULT_MODEL、SERPER_SEARCH_API_KEY
+使用DeepSeek时: 设置DEEPSEEK_API_KEY、DEEPSEEK_API_BASE，DEFAULT_MODEL 设置为 deepseek/deepseek-chat，所有 ${DEFAULT_MODEL} 也都改成deepseek/deepseek-chat
 
-回到根目录
-
+3. 编译dockerfile
 docker build -t genie:latest .
 
-# -e 设置对话模型服务地址、APIKEY
-docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 -e OPENAI_BASE_URL="" -e OPENAI_API_KEY="" --name genie-app genie:latest
+4. 启动dockerfile
+docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 --name genie-app genie:latest
+
+5. 浏览器输入 localhost:3000 访问genie
 ```
+如果部署遇到问题，可以参考视频:【5分钟使用deepseek启动开源智能体应用joyagent-genie-哔哩哔哩】 https://b23.tv/8VQDBOK
 
 ### 方式2: 手动初始化环境，启动服务
 
