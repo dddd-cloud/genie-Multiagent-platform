@@ -259,6 +259,9 @@ docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 --name genie-app genie:late
 手动超详细攻略参考 [Step by Step](./Deploy.md)
 
 #### 方案2：手动一键启动部署（推荐）
+
+[![deploy](./docs/img/deploy.png)](https://www.bilibili.com/video/BV1Py8Yz4ELK/?vd_source=a5601a346d433a490c55293e76180c9d)
+
 直接通过shell启动所有服务
 ```
 sh check_dep_port.sh # 检查所有依赖和端口占用情况
