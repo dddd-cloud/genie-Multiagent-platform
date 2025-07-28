@@ -1,5 +1,5 @@
 # Agent开源git开源文档
-简体中文 | [英文](README_EN.md)
+简体中文 | [English Version](README_EN.md)
 
 ## 业界首个开源高完成度轻量化通用多智能体产品(JoyAgent-JDGenie)
 **解决快速构建多智能体产品的最后一公里问题**
