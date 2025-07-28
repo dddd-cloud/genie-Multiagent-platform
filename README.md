@@ -274,6 +274,7 @@ sh Genie_start.sh  # 直接启动，以后改动配置直接重启动脚本即�
 #### 配置文件
 
 在 `genie-backend/src/main/resources/application.yml` 添加mcp_server服务，多个server逗号分隔
+在 `ui/.env` 中可以修改前端请求后端的路径
 
 ```yaml
 mcp_server_url: "http://ip1:port1/sse,http://ip2:port2/sse"
