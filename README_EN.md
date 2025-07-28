@@ -1,19 +1,25 @@
-# Agent开源git开源文档
-简体中文 | [英文](README_EN.md)
+# JoyAgent-JDGenie Open Source Documentation
 
-## 业界首个开源高完成度轻量化通用多智能体产品(JoyAgent-JDGenie)
-**解决快速构建多智能体产品的最后一公里问题**
+## The industry’s first open-source, highly complete, lightweight, general-purpose multi-agent product (JoyAgent-JDGenie)
+**Address the last-mile challenge in rapidly developing multi-agent products.**
 
-## 简介
+## Introduction
+Most existing open-source agent projects are primarily SDKs or frameworks, requiring users to perform additional development and lacking true out-of-the-box usability. In contrast, our open-source JoyAgent-JDGenie is an end-to-end multi-agent product that can directly answer or resolve user queries or tasks. For example, when a user submits a query like“Provide an analysis of recent trends between the US dollar and gold,”JoyAgent-JDGenie can instantly generate a report in web or PPT format.
 
-当前相关开源agent主要是SDK或者框架，用户还需基于此做进一步的开发，无法直接做到开箱即用。我们开源的JoyAgent-JDGenie是端到端的多Agent产品，对于输入的query或者任务，可以直接回答或者解决。例如用户query"给我做一个最近美元和黄金的走势分析"，JoyAgent-Genie可以直接给出网页版或者PPT版的报告文档。
+- **Generality and Customization**
+  - JoyAgent-JDGenie is a versatile multi-agent framework. To customize functionality for new scenarios, users only need to integrate relevant sub-agents or tools into JoyAgent-Genie. To demonstrate its generality, JoyAgent-JDGenie achieved 75.15% accuracy on the GAIA benchmark Validation set and 65.12% on the Test set, outperforming industry-leading products such as OWL (CAMEL), Smolagent (Hugging Face), LRC-Huawei (Huawei), xManus (OpenManus), and AutoAgent (University of Hong Kong).
 
-JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制的一些新场景功能，只需将相关的子智能体或者工具挂载到JoyAgent-Genie即可。为了验证JoyAgent-JDGenie的通用性，在GAIA榜单Validation集准确率**75.15%、**Test集**65.12%**，已超越OWL（CAMEL）、Smolagent（Huggingface）、LRC-Huawei（Huawei）、xManus（OpenManus）、AutoAgent（香港大学）等行业知名产品。
+- **Lightweight and Independence**
+  - Unlike Alibaba’s SpringAI-Alibaba (which relies on the Alibaba Cloud Bailian platform for LLM capabilities) or Coze (dependent on the Volcano Engine platform), our open-source multi-agent product JoyAgent-JDGenie is lightweight and platform-agnostic.
 
-此外，我们的开源多智能体产品JoyAgent-JDGenie相对比较轻量，不像阿里的SpringAI-Alibaba需要依赖阿里云百炼平台相关功能（基于百炼平台调用LLM），Coze依赖火山引擎平台。
+- **Comprehensive Open-Source Offering**
+  - We have fully open-sourced JoyAgent-JDGenie, including its:
+    - Frontend and backend
+    - Framework and engine
+    - Core sub-agents (e.g., Report Generator Agent, Code Agent, PPT Agent, File Agent)
+    - For enhanced performance, we welcome users to leverage JoyAgent with fine-tuned models.
 
-我们整体开源了智能体产品JoyAgent-JDGenie，包括前端、后端、框架、引擎、核心子智能体（报告生成智能体、代码智能体、PPT智能体、文件智能体等）、想用微调后效果更好的欢迎使用JoyAgent。
-## 案例展示
+## Case Studies
 <table>
 <tbody>
 <tr>
@@ -59,117 +65,117 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 </tbody>
 </table>
 
-## 产品对比
+## Product Comparison
 
 <table>
 <thead>
 <tr>
-<th>分类</th>
+<th>Category</th>
 <th>agent</th>
-<th>是否开源</th>
-<th>是否开源完整产品</th>
-<th>是否依赖生态</th>
+<th>Open Sourced?</th>
+<th>Fully Open-Sourced Product?</th>
+<th>Dependent on Ecosystem?</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td rowspan="2"><strong>SDK类</strong></td>
+<td rowspan="2"><strong>SDK</strong></td>
 <td>SpringAI-Alibaba</td>
-<td>部分</td>
-<td>否，只开源SDK（SDK）</td>
-<td>是（阿里云百炼平台）</td>
+<td>Partial</td>
+<td>No (SDK only)</td>
+<td>Yes (Alibaba Cloud Bailian Platform)</td>
 </tr>
 <tr>
 <td>Coze</td>
-<td>部分</td>
-<td>否，只开源部分Nieo SDK（SDK）</td>
-<td>是（火山引擎平台）</td>
+<td>Partial</td>
+<td>No (Nieo SDK only)</td>
+<td>Yes (Volcano Engine Platform)</td>
 </tr>
 <tr>
-<td rowspan="6"><strong>框架类</strong></td>
+<td rowspan="6"><strong>Framework</strong></td>
 <td>Fellow</td>
-<td>是</td>
-<td>否，只开源了Eko智能体框架（框架）</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Eko Agent Framework only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>Dify</td>
-<td>是</td>
-<td>否，只开源了智能体框架，且主要是workflow（框架）</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Workflow-focused framework only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>SkyworkAI</td>
-<td>是</td>
-<td>否，只开源了智能体框架（框架）</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Agent framework only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>OpenManus</td>
-<td>是</td>
-<td>否，只开源了智能体框架（框架）</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Agent framework only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>Owl</td>
-<td>是</td>
-<td>否，只开源了智能体框架（框架）</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Agent framework only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>n8n</td>
-<td>是</td>
-<td>否，只开源了智能体框架，且主要是workflow（框架）</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Agent framework only)</td>
+<td>no</td>
 </tr>
 <tr>
-<td rowspan="3"><strong>协议类</strong></td>
+<td rowspan="3"><strong>Protocol</strong></td>
 <td>MCP</td>
-<td>是</td>
-<td>否，只是开源协议</td>
-<td>否</td>
+<td>Yes</td>
+<td>No (Protocol only)</td>
+<td>no</td>
 </tr>
 <tr>
 <td>A2A</td>
-<td>是</td>
-<td>否，只是开源协议</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Protocol only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>AG-UI</td>
-<td>是</td>
-<td>否，只是开源协议</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Protocol only)</td>
+<td>No</td>
 </tr>
 <tr>
-<td rowspan="2"><strong>技术模块类</strong></td>
+<td rowspan="2"><strong>Technical Module</strong></td>
 <td>memory0</td>
-<td>是</td>
-<td>否，只是开源的技术模块</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Technical module only)</td>
+<td>No</td>
 </tr>
 <tr>
 <td>LlamaIndex</td>
-<td>是</td>
-<td>否，只是开源的技术模块</td>
-<td>否</td>
+<td>YES</td>
+<td>No (Technical module only)</td>
+<td>No</td>
 </tr>
 <tr>
-<td><strong>产品类</strong></td>
+<td><strong>Product</strong></td>
 <td>Our</td>
-<td>是</td>
-<td>是，开源端到端完整的Agent产品（产品）</td>
-<td>否</td>
+<td>YES</td>
+<td>Yes (End-to-end open-source agent product)</td>
+<td>No</td>
 </tr>
 </tbody>
 </table>
 
-## 框架效果先进性
+## Framework Performance Superiority
 
-### Test集效果 65.12%
+### Test set performance 65.12%
 <img width="3524" height="1022" alt="test" src="https://github.com/user-attachments/assets/06c85286-e61f-4b5e-8335-413cd22ecbf4" />
 
-### Validation集效果 75.15%
+### Validation set performance 75.15%
 
 | Agent                     | Score      | Score_level1 | Score_level2 | Score_level3 | 机构         |
 |---------------------------|------------|--------------|--------------|--------------|------------|
@@ -187,180 +193,181 @@ JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制�
 
 <img width="1073" height="411" alt="score" src="https://github.com/user-attachments/assets/9d997b68-565e-4228-8f5b-229158f33617" />
 
-## 系统架构
+## System Architecture
 
 ![archi](./docs/img/archi.png)
 
-本开源项目基于JoyAgent-JDGenie产品开源了整体的产品界面、智能体的多种核心模式（react模式、plan and executor模式等）、多个子智能体（report agent、search agent等）以及多整体间交互协议。
+This open-source project is based on JoyAgent-JDGenie, publicly releasing the complete product interface, multiple core agent modes (React mode, Plan and Execute mode, etc.), multiple sub-agents (Report Agent, Search Agent, etc.), and multi-agent interaction protocols.
+### Key Features and Advantages
 
-### 主要特点和优势
+- **End-to-End Multi-Agent Product: Ready out-of-the-box with support for secondary development**
+- **Agent Framework Protocols**
+  - Support for Diverse Agent Design Patterns
+  - Multi-Agent Context Management
+  - High-Concurrency DAG Execution Engine: Exceptional execution efficiency
+- **Sub-Agents and Tools**
+  - Pluggable sub-agents and tools: Pre-configured with various sub-agents and utilities
+  - Multiple file export formats: HTML, PPT, Markdown
+  - Plan & Tool Call Optimization: Iteratively enhanced via Reinforcement Learning (RL)
+  - End-to-End Streaming Responses
 
-- **端到端完整的多智能体产品，开箱即用，支持二次开发**
-- **智能体框架协议**
-  - 支持多种智能体设计模式
-  - 多智能体上下文管理
-  - 高并发DAG执行引擎，极致的执行效率
-- **子智能体和工具**
-  - 子Agent和工具可插拔：预置多种子智能体和工具
-  - 多种文件交付样式：html、ppt、markdown
-  - plan和工具调用 RL优化迭代
-  - 全链路流式输出
-
-### 主要创新点
+### Key Innovations
 
 ![invo](./docs/img/invo.png)
 
-#### multi-level and multi-pattern thinking:结合多种智能体设计模式支持多层级的规划和思考
-- **multi-level**：work level 和 task level
-- **multi-pattern**：plan and executor模式和react模式
+#### multi-level and multi-pattern thinking
+- **multi-level**：work level VS task level
+- **multi-pattern**：plan and executor VS react
 
-#### cross task workflow memory:跨任务级别的相似任务memory
+#### cross task workflow memory
 
 #### tool evolution via auto-disassembly-and-reassembly of atom-tools
-- 基于已有工具迭代产生新工具，而不是从0-1直接生成新工具（减少错误工具的生成） 
-- 基于已有工具隐性拆解为原子工具，并基于原子工具结合大模型自动组合成新工具（不需要花费人力预先定义和拆解原子工具）
+Generates novel tools from existing ones instead of creating from scratch (reducing faulty tool generation):
+- Implicit Atomization:
+  - Automatically decomposes existing tools into atomic sub-tools
+  - No need for manual pre-definition of atomic components
+- LLM-Driven Reassembly:
+  - Dynamically recombines atomic tools via large language models
+  - Enables emergent tool creation without human intervention
 
+## Quick Start
 
-
-## 快速开始
-
-### 方式1: docker 一键启动服务
+### Method 1: One-Command Docker Deployment
 
 ```
-1. git clone https://github.com/jd-opensource/joyagent-jdgenie.git
+1.git clone https://github.com/jd-opensource/joyagent-jdgenie.git
 
-2. 手动更新 genie-backend/src/main/resources/application.yml中 base_url、apikey、model、max_tokens、model_name等配置
-使用DeepSeek时: 注意deepseek-chat 为max_tokens: 8192
+2.Manually update the following configurations in genie-backend/src/main/resources/application.yml:
+base_url, apikey, model, max_tokens, model_name
+Note for DeepSeek users: Set max_tokens: 8192 for deepseek-chat
 
-手动更新 genie-tool/.env_template 中的 OPENAI_API_KEY、OPENAI_BASE_URL、DEFAULT_MODEL、SERPER_SEARCH_API_KEY
-使用DeepSeek时: 设置DEEPSEEK_API_KEY、DEEPSEEK_API_BASE，DEFAULT_MODEL 设置为 deepseek/deepseek-chat，所有 ${DEFAULT_MODEL} 也都改成deepseek/deepseek-chat
+Manually update the following environment variables in genie-tool/.env_template:
+OPENAI_API_KEY, OPENAI_BASE_URL, DEFAULT_MODEL, SERPER_SEARCH_API_KEY
+DeepSeek Configuration:Set DEEPSEEK_API_KEY and DEEPSEEK_API_BASE，Configure DEFAULT_MODEL = deepseek/deepseek-chat，
+Replace all occurrences of ${DEFAULT_MODEL} with deepseek/deepseek-chat
 
-3. 编译dockerfile
+3.Build the Docker image
 docker build -t genie:latest .
 
-4. 启动dockerfile
+4.Launch the Docker container
 docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 --name genie-app genie:latest
 
-5. 浏览器输入 localhost:3000 访问genie
+5.Access Genie via browser
+Open http://localhost:3000
 ```
-如果部署遇到问题，可以参考视频:【5分钟使用deepseek启动开源智能体应用joyagent-genie-哔哩哔哩】 https://b23.tv/8VQDBOK
+If you encounter deployment issues, refer to this video tutorial:【5分钟使用deepseek启动开源智能体应用joyagent-genie-哔哩哔哩】 https://b23.tv/8VQDBOK
 
-### 方式2: 手动初始化环境，启动服务
+### Method 2: Manual Environment Initialization and Service Launch
 
-#### 环境准备
+#### Prerequisites
 - jdk17
 - python3.11
-- python环境准备
+- python Environment Setup
   - pip install uv
   - cd genie-tool
   - uv sync
   - source .venv/bin/activate
 
-#### 方案1：手动step by step部署手册
-手动超详细攻略参考 [Step by Step](./Deploy.md)
+#### Option 1: Step-by-Step Manual Deployment
+Ultra-detailed guide reference: [Step by Step](./Deploy.md)
 
-#### 方案2：手动一键启动部署（推荐）
-
-直接通过shell启动所有服务
+#### Option 2: One-Command Launch (Recommended)
+Directly start all services via shell:
 ```
-sh check_dep_port.sh # 检查所有依赖和端口占用情况
-sh Genie_start.sh  # 直接启动，以后改动配置直接重启动脚本即可，control+c 一键kill所有服务
+sh check_dep_port.sh # Verify all dependencies and port occupancy
+sh Genie_start.sh  # Launch services directly; restart this script after configuration changes (terminate all services with Control+C)
 ```
-部署时可以参考视频:【joyagent-jdgenie部署演示】 https://www.bilibili.com/video/BV1Py8Yz4ELK/?vd_source=a5601a346d433a490c55293e76180c9d
+For deployment guidance, refer to the demonstration video:【joyagent-jdgenie部署演示】 https://www.bilibili.com/video/BV1Py8Yz4ELK/?vd_source=a5601a346d433a490c55293e76180c9d
 
-## 二次开发
+## Custom development
 
-### 如何添加自己的MCP工具到JoyAgent-JDGenie中
+### Integrating Custom MCP Tools into JoyAgent-JDGenie
 
-#### 配置文件
+#### Configuration File:
 
-在 `genie-backend/src/main/resources/application.yml` 添加mcp_server服务，多个server逗号分隔
-在 `ui/.env` 中可以修改前端请求后端的路径
+Edit genie-backend/src/main/resources/application.yml to add MCP server URLs (comma-separated):
+
+You can change the front-end request path to the back-end in ui/.env.
 
 ```yaml
 mcp_server_url: "http://ip1:port1/sse,http://ip2:port2/sse"
 ```
 
-#### 启动服务
+#### Start Service:
 
 ```bash
 sh start_genie.sh
 ```
 
-#### 开始对话
+#### Usage Example:
 
-比如添加12306工具后，规划7月7天2人从北京出发去新疆旅行计划，并查询相关火车票信息，
-genie会进行旅行计划设计，然后调用mcp工具查询车票信息，最终输出报告。
+After integrating the 12306 ticket tool, initiate:
+*"Plan a 7-day trip for 2 people from Beijing to Xinjiang in July and query train tickets"*
+→ Genie designs travel itinerary → Invokes MCP tool for ticket queries → Generates final report
 ![img.png](./docs/img/mcp_example.png)
 
 
-### 新增自定义子Agent到JoyAgent-JDGenie中
+### Adding Custom Sub-Agent to JoyAgent-JDGenie
 
-实现BaseTool接口，声明工具的名称、描述、参数、调用方法。
+Implementing the BaseTool Interface: Declaring Tool Name, Description, Parameters, and Invocation Methods.
 
 ```java
-/**
- * 工具基接口
- */
-public interface BaseTool {
-    String getName(); // 工具名称
-    String getDescription(); // 工具描述
-    Map<String, Object> toParams(); // 工具参数
-    Object execute(Object input); // 调用工具
+/** * Base Tool Interface */publicinterfaceBaseTool {
+    StringgetName(); // Tool name
+    StringgetDescription(); // Tool description
+    Map<String, Object> toParams(); // Tool parameters
+    Objectexecute(Objectinput); // Invoke tool
 }
-
-// 天气智能体示例
-public class WeatherTool implements BaseTool {
+// Weather Agent Example
+    publicclassWeatherToolimplementsBaseTool {
     @Override
-    public String getName() {
-        return "agent_weather";
+    publicStringgetName() {
+        return"agent_weather";
     }
 
     @Override
-    public String getDescription() {
-        return "这是一个可以查询天气的智能体";
+    publicStringgetDescription() {
+        return"A weather query agent";
     }
 
     @Override
-    public Map<String, Object> toParams() {
-        return "{\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"地点\",\"type\":\"string\"}},\"required\":[\"location\"]}";
+    publicMap<String, Object> toParams() {
+        return"{\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"地点\",\"type\":\"string\"}},\"required\":[\"location\"]}";
     }
 
     @Override
-    public Object execute(Object input) {
-        return "今日天气晴朗";
+    publicObjectexecute(Objectinput) {
+        return"Today's weather is sunny";
     }
 }
 ```
 
-在`com.jd.genie.controller.GenieController#buildToolCollection`中添加如下代码，引入自定义Agent
-
+Add the following code in `com.jd.genie.controller.GenieController#buildToolCollection` to integrate custom Agent.
 ```java
 WeatherTool weatherTool = new WeatherTool();
 toolCollection.addTool(weatherTool);
 ```
 
-#### 启动服务
+#### Start service
 
 ```bash
 sh start_genie.sh
 ```
 
 
-## 项目共建者
-贡献者：Liu Shangkun,Li Yang,Jia Shilin,Tian Shaohua,Wang Zhen,Yao Ting,Wang Hongtao,Zhou Xiaoqing,Liu min,Zhang Shuang,Liuwen,Yangdong,Xu Jialei,Zhou Meilei,Zhao Tingchong,Wu jiaxing, Wang Hanmin,Xu Shiyue,Liu Jiarun
+## Contributors
+Core Team: Liu Shangkun,Li Yang,Jia Shilin,Tian Shaohua,Wang Zhen,Yao Ting,Wang Hongtao,Zhou Xiaoqing,Liu min,Zhang Shuang,Liuwen,Yangdong,Xu Jialei,Zhou Meilei,Zhao Tingchong,Wu jiaxing, Wang Hanmin,Xu Shiyue,Liu Jiarun
 
-所属机构:京东CHO企业信息化团队（EI）
+Core Team: JD.com CHO Enterprise Informatization Team (EI)
 
-## 贡献和合作
+## Contribution & Collaboration
+We welcome all great ideas and suggestions. If you wish to become a project co-builder, you may submit Pull Requests at any time. Whether it's improving products/frameworks, fixing bugs, or adding new features - all contributions are highly valued.
+Before contributing, you need to read and sign the Contributor Agreement and send it to org.developer3@jd.com.
+ [Chinese Version](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_ZH.pdf)，[English Version](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_EN.pdf)
 
-我们欢迎所有好想法和建议，如果您想成为项目的共建者，可随时向我们提Pull Request。无论是完善产品和框架、修复bug还是添加新特性，您的贡献都非常宝贵。
-在此之前需要您阅读并签署贡献者协议并发送到邮箱org.developer3@jd.com，请阅读 [贡献指南中文版](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_ZH.pdf)，[贡献指南英文版](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_EN.pdf)
 
-
-## 引用
-
-如需学术引用，请使用以下 BibTeX：
+## Citation
+For academic references or inquiries, please use the following BibTeX entry:：
 ```bibtex
 @software{JoyAgent-JDGenie,
   author = {Agent Team at JDCHO},
@@ -382,7 +389,7 @@ sh start_genie.sh
 # Star History
 [![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date&cache=false)](https://star-history.com/#jd-opensource/joyagent-jdgenie&Date)
 
-欢迎沟通和联系我们  
+Contact Us  
 ![contact](./docs/img/ME1753153769883.png)
 
 [//]: # (![contact]&#40;./docs/img/contact.jpg&#41;)
