@@ -359,7 +359,7 @@ sh start_genie.sh
 
 ## 引用
 
-如需学术引用或联系，请使用以下 BibTeX：
+如需学术引用，请使用以下 BibTeX：
 ```bibtex
 @software{JoyAgent-JDGenie,
   author = {Agent Team at JDCHO},
