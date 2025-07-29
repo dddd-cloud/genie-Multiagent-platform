@@ -177,7 +177,7 @@ Most existing open-source agent projects are primarily SDKs or frameworks, requi
 
 ### Validation set performance 75.15%
 
-| Agent                     | Score      | Score_level1 | Score_level2 | Score_level3 | 机构         |
+| Agent                     | Score      | Score_level1 | Score_level2 | Score_level3 | Organization         |
 |---------------------------|------------|--------------|--------------|--------------|------------|
 | Alita v2.1                | 0.8727     | 0.8868       | 0.8953       | 0.7692       | Princeton  |
 | Skywork                   | 0.8242     | 0.9245       | 0.8372       | 0.5769       | 天工         |
@@ -195,7 +195,8 @@ Most existing open-source agent projects are primarily SDKs or frameworks, requi
 
 ## System Architecture
 
-![archi](./docs/img/archi.png)
+<img width="1092" height="582" alt="ME1753788413469" src="https://github.com/user-attachments/assets/cf42bdb9-e62d-4e88-a29a-1777369665d7" />
+
 
 This open-source project is based on JoyAgent-JDGenie, publicly releasing the complete product interface, multiple core agent modes (React mode, Plan and Execute mode, etc.), multiple sub-agents (Report Agent, Search Agent, etc.), and multi-agent interaction protocols.
 ### Key Features and Advantages
