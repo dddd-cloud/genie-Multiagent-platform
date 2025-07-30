@@ -384,4 +384,5 @@ sh start_genie.sh
 
 欢迎沟通和联系我们  
 ![contact](./docs/img/wechat2.png)
+
 [//]: # (![contact]&#40;./docs/img/contact.jpg&#41;)
