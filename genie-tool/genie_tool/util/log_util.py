@@ -7,6 +7,7 @@
 # =====================
 import asyncio
 import functools
+import inspect
 import time
 import traceback
 from loguru import logger
@@ -54,6 +55,13 @@ def timer(key: str = ""):
                 async with AsyncTimer(f"{key} {func.__name__}"):
                     result = await func(*args, **kwargs)
                 return result
+            return wrapper
+        elif inspect.isasyncgenfunction(func):
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                async with AsyncTimer(f"{key} {func.__name__}"):
+                    async for element in func(*args, **kwargs):
+                        yield element
             return wrapper
         else:
             @functools.wraps(func)

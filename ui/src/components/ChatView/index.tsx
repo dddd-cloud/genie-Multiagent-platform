@@ -1,11 +1,17 @@
 import { useEffect, useState, useRef, useMemo } from "react";
-import { getUniqId, scrollToTop, ActionViewItemEnum, getSessionId } from "@/utils";
+import {
+  getUniqId,
+  scrollToTop,
+  ActionViewItemEnum,
+  getSessionId,
+} from "@/utils";
 import querySSE from "@/utils/querySSE";
-import {  handleTaskData, combineData } from "@/utils/chat";
+import { handleTaskData, combineData } from "@/utils/chat";
 import Dialogue from "@/components/Dialogue";
+import DataDialogue from "@/components/Dialogue/DataDialogue";
 import GeneralInput from "@/components/GeneralInput";
 import ActionView from "@/components/ActionView";
-import { RESULT_TYPES } from '@/utils/constants';
+import { RESULT_TYPES } from "@/utils/constants";
 import { useMemoizedFn } from "ahooks";
 import classNames from "classnames";
 import Logo from "../Logo";
@@ -17,11 +23,12 @@ type Props = {
 };
 
 const ChatView: GenieType.FC<Props> = (props) => {
-  const { inputInfo: inputInfoProp, product  } = props;
+  const { inputInfo: inputInfoProp, product } = props;
 
   const [chatTitle, setChatTitle] = useState("");
   const [taskList, setTaskList] = useState<MESSAGE.Task[]>([]);
   const chatList = useRef<CHAT.ChatItem[]>([]);
+  const [dataChatList, setDataChatList] = useState<Record<string, any>[]>([]);
   const [activeTask, setActiveTask] = useState<CHAT.Task>();
   const [plan, setPlan] = useState<CHAT.Plan>();
   const [showAction, setShowAction] = useState(false);
@@ -49,15 +56,15 @@ const ChatView: GenieType.FC<Props> = (props) => {
       response: "",
       taskStatus: 0,
       tip: "已接收到你的任务，将立即开始处理...",
-      multiAgent: {tasks: []},
+      multiAgent: { tasks: [] },
     };
   };
 
   const sendMessage = useMemoizedFn((inputInfo: CHAT.TInputInfo) => {
-    const {message, deepThink, outputStyle} = inputInfo;
+    const { message, deepThink, outputStyle } = inputInfo;
     const requestId = getUniqId();
     let currentChat = combineCurrentChat(inputInfo, sessionId, requestId);
-    chatList.current =  [...chatList.current, currentChat];
+    chatList.current = [...chatList.current, currentChat];
     if (!chatTitle) {
       setChatTitle(message!);
     }
@@ -67,14 +74,14 @@ const ChatView: GenieType.FC<Props> = (props) => {
       requestId: requestId,
       query: message,
       deepThink: deepThink ? 1 : 0,
-      outputStyle
+      outputStyle,
     };
     const handleMessage = (data: MESSAGE.Answer) => {
       const { finished, resultMap, packageType, status } = data;
       if (status === "tokenUseUp") {
         modal.info({
-          title: '您的试用次数已用尽',
-          content: '如需额外申请，请联系 liyang.1236@jd.com',
+          title: "您的试用次数已用尽",
+          content: "如需额外申请，请联系 liyang.1236@jd.com",
         });
         const taskData = handleTaskData(
           currentChat,
@@ -96,7 +103,9 @@ const ChatView: GenieType.FC<Props> = (props) => {
               deepThink,
               currentChat.multiAgent
             );
+            console.log("taskData", taskData);
             setTaskList(taskData.taskList);
+            temporaryChangeTask(taskData.taskList);
             updatePlan(taskData.plan!);
             openAction(taskData.taskList);
             if (finished) {
@@ -112,8 +121,10 @@ const ChatView: GenieType.FC<Props> = (props) => {
       }
     };
 
-    const openAction = (taskList:MESSAGE.Task[]) =>{
-      if (taskList.filter((t)=>!RESULT_TYPES.includes(t.messageType)).length) {
+    const openAction = (taskList: MESSAGE.Task[]) => {
+      if (
+        taskList.filter((t) => !RESULT_TYPES.includes(t.messageType)).length
+      ) {
         setShowAction(true);
       }
     };
@@ -123,16 +134,26 @@ const ChatView: GenieType.FC<Props> = (props) => {
     };
 
     const handleClose = () => {
-      console.log('🚀 ~ close');
+      console.log("🚀 ~ close");
     };
 
-    querySSE({
-      body: params,
-      handleMessage,
-      handleError,
-      handleClose,
-    });
+    querySSE(
+      {
+        body: params,
+        handleMessage,
+        handleError,
+        handleClose,
+      },
+      "//genie-data.jd.com/web/api/v1/gpt/queryAgentStreamIncr"
+    );
   });
+
+  const temporaryChangeTask = (taskList: MESSAGE.Task[]) => {
+    const task = taskList[taskList.length - 1] as CHAT.Task;
+    if (!["task_summary", "result"].includes(task?.messageType)) {
+      setActiveTask(task);
+    }
+  };
 
   const changeTask = (task: CHAT.Task) => {
     actionViewRef.current?.changeActionView(ActionViewItemEnum.follow);
@@ -158,17 +179,155 @@ const ChatView: GenieType.FC<Props> = (props) => {
     setShowAction(status);
   };
 
+  const sendDataMessage = (inputInfo: any) => {
+    const params = {
+      content: inputInfo.message,
+    };
+    const currentChat = {
+      query: inputInfo.message,
+      loading: true,
+      think: "",
+      chartData: undefined,
+      error: "",
+    };
+    setDataChatList([...dataChatList, currentChat]);
+    scrollToTop(chatRef.current!);
+
+    setChatTitle(inputInfo.message);
+    setLoading(true);
+
+    const handleMessage = (data: any) => {
+      // currentChat.loading = false;
+      switch (data.eventType) {
+        case "THINK":
+          currentChat.think = data.data;
+          break;
+        case "CHART_DATA":
+          currentChat.chartData = data.data;
+          break;
+        case "ERROR":
+          currentChat.error = data.data;
+          currentChat.loading = false;
+          setLoading(false);
+          break;
+        case "READY":
+          currentChat.loading = false;
+          setLoading(false);
+          break;
+      }
+      const newChatList = [...dataChatList];
+      newChatList.splice(newChatList.length, 1, currentChat);
+      setDataChatList(newChatList);
+      // 滚动到顶部
+      scrollToTop(chatRef.current!);
+    };
+    const handleError = (error: unknown) => {
+      throw error;
+    };
+
+    const handleClose = () => {
+      console.log("🚀 ~ close");
+    };
+    querySSE(
+      {
+        body: params,
+        handleMessage,
+        handleError,
+        handleClose,
+      },
+      "//genie-data.jd.com/data/chatQuery"
+    );
+  };
+
   useEffect(() => {
     if (inputInfoProp.message?.length !== 0) {
-      sendMessage(inputInfoProp);
+      product?.type === "dataAgent" && !inputInfoProp.deepThink
+        ? sendDataMessage(inputInfoProp)
+        : sendMessage(inputInfoProp);
     }
   }, [inputInfoProp, sendMessage]);
 
-  return (
-    <div className="h-full w-full flex justify-center">
+  const renderMultAgent = () => {
+    return (
+      <div className="h-full w-full flex justify-center">
+        <div
+          className={classNames("p-24 flex flex-col flex-1 w-0", {
+            "max-w-[1200px]": !showAction,
+          })}
+          id="chat-view"
+        >
+          <div className="w-full flex justify-between">
+            <div className="w-full flex items-center pb-8">
+              <Logo />
+              <div className="overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-[500] text-[#27272A] mr-8">
+                {chatTitle}
+              </div>
+              {inputInfoProp.deepThink && (
+                <div className="rounded-[4px] px-6 border-1 border-solid border-gray-300 flex items-center shrink-0">
+                  <i className="font_family icon-shendusikao mr-6 text-[12px]"></i>
+                  <span className="ml-[-4px]">深度研究</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div
+            className="w-full flex-1 overflow-auto no-scrollbar mb-[36px]"
+            ref={chatRef}
+          >
+            {chatList.current.map((chat) => {
+              return (
+                <div key={chat.requestId}>
+                  <Dialogue
+                    chat={chat}
+                    deepThink={inputInfoProp.deepThink}
+                    changeTask={changeTask}
+                    changeFile={changeFile}
+                    changePlan={changePlan}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <GeneralInput
+            placeholder={
+              loading ? "任务进行中" : "希望 Genie 为你做哪些任务呢？"
+            }
+            showBtn={false}
+            size="medium"
+            disabled={loading}
+            product={product}
+            // 多轮问答也不支持切换deepThink，使用传进来的
+            send={(info) =>
+              sendMessage({
+                ...info,
+                deepThink: inputInfoProp.deepThink,
+              })
+            }
+          />
+        </div>
+        {contextHolder}
+        <div
+          className={classNames("transition-all w-0", {
+            "opacity-0 overflow-hidden": !showAction,
+            "flex-1": showAction,
+          })}
+        >
+          <ActionView
+            activeTask={activeTask}
+            taskList={taskList}
+            plan={plan}
+            ref={actionViewRef}
+            onClose={() => changeActionStatus(false)}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderDataAgent = () => {
+    return (
       <div
-        className={classNames("p-24 flex flex-col flex-1 w-0", { 'max-w-[1200px]': !showAction })}
-        id="chat-view"
+        className={classNames("p-24 flex flex-col flex-1 w-0 max-w-[1200px]")}
       >
         <div className="w-full flex justify-between">
           <div className="w-full flex items-center pb-8">
@@ -176,26 +335,18 @@ const ChatView: GenieType.FC<Props> = (props) => {
             <div className="overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-[500] text-[#27272A] mr-8">
               {chatTitle}
             </div>
-            {inputInfoProp.deepThink && <div className="rounded-[4px] px-6 border-1 border-solid border-gray-300 flex items-center shrink-0">
-              <i className="font_family icon-shendusikao mr-6 text-[12px]"></i>
-              <span className="ml-[-4px]">深度研究</span>
-            </div>}
           </div>
         </div>
         <div
           className="w-full flex-1 overflow-auto no-scrollbar mb-[36px]"
           ref={chatRef}
         >
-          {chatList.current.map((chat) => {
-            return <div key={chat.requestId}>
-              <Dialogue
-                chat={chat}
-                deepThink={inputInfoProp.deepThink}
-                changeTask={changeTask}
-                changeFile={changeFile}
-                changePlan={changePlan}
-              />
-            </div>;
+          {dataChatList.map((chat, index) => {
+            return (
+              <div key={index}>
+                <DataDialogue chat={chat} />
+              </div>
+            );
           })}
         </div>
         <GeneralInput
@@ -204,26 +355,21 @@ const ChatView: GenieType.FC<Props> = (props) => {
           size="medium"
           disabled={loading}
           product={product}
-          // 多轮问答也不支持切换deepThink，使用传进来的
-          send={(info) => sendMessage({
-            ...info,
-            deepThink: inputInfoProp.deepThink
-          })}
+          send={(info) =>
+            sendDataMessage({
+              ...info,
+            })
+          }
         />
       </div>
-      {contextHolder}
-      <div className={classNames('transition-all w-0', {
-        'opacity-0 overflow-hidden': !showAction,
-        'flex-1': showAction,
-      })}>
-        <ActionView
-          activeTask={activeTask}
-          taskList={taskList}
-          plan={plan}
-          ref={actionViewRef}
-          onClose={() => changeActionStatus(false)}
-        />
-      </div>
+    );
+  };
+
+  return (
+    <div className="h-full w-full flex justify-center">
+      {product?.type === "dataAgent" && !inputInfoProp.deepThink
+        ? renderDataAgent()
+        : renderMultAgent()}
     </div>
   );
 };

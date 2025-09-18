@@ -64,15 +64,12 @@ public class ReportTool implements BaseTool {
 
     @Override
     public Object execute(Object input) {
-        long startTime = System.currentTimeMillis();
-
         try {
             Map<String, Object> params = (Map<String, Object>) input;
             String task = (String) params.get("task");
             String fileDescription = (String) params.get("fileDescription");
             String fileName = (String) params.get("fileName");
             String fileType = (String) params.get("fileType");
-
 
             if (fileName.isEmpty()) {
                 String errMessage = "文件名参数为空，无法生成报告。";
@@ -95,6 +92,7 @@ public class ReportTool implements BaseTool {
                     .contentStream(agentContext.getIsStream())
                     .streamMode(streamMode)
                     .fileType(fileType)
+                    .templateType(agentContext.getTemplateType())
                     .build();
             // 调用流式 API
             Future future = callCodeAgentStream(request);
@@ -103,7 +101,6 @@ public class ReportTool implements BaseTool {
             return object;
         } catch (Exception e) {
             log.error("{} report_tool error", agentContext.getRequestId(), e);
-
         }
         return null;
     }

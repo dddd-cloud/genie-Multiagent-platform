@@ -115,6 +115,7 @@ function handleTaskMessageByType(
     case "html":
     case "markdown":
     case "ppt":
+    case "data_analysis":
       handleContentMessage(eventData, currentChat, taskIndex, toolIndex);
       break;
     case "deep_search":
@@ -506,6 +507,7 @@ export const handleTaskData = (
     "task_summary",
     "markdown",
     "ppt",
+    "data_analysis",
   ];
 
   currentChat.thought = planThought || "";
@@ -665,7 +667,8 @@ export const buildAction = (task: CHAT.Task) => {
     FILE: "file",
     KNOWLEDGE: "knowledge",
     DEEP_SEARCH: "deep_search",
-    MARKDOWN: "markdown"
+    MARKDOWN: "markdown",
+    DATA_ANALYSIS: "data_analysis"
   };
 
   const TOOL_NAMES = {
@@ -724,6 +727,13 @@ export const buildAction = (task: CHAT.Task) => {
         action: "正在生成报告",
         tool: "markdown",
         name: ""
+      };
+
+    case MESSAGE_TYPES.DATA_ANALYSIS:
+      return {
+        action: "正在分析数据",
+        tool: "数据分析工具",
+        name: task.resultMap.task
       };
 
     default:

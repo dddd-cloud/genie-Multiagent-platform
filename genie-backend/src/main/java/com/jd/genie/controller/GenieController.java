@@ -7,10 +7,7 @@ import com.jd.genie.agent.agent.AgentContext;
 import com.jd.genie.agent.printer.Printer;
 import com.jd.genie.agent.printer.SSEPrinter;
 import com.jd.genie.agent.tool.ToolCollection;
-import com.jd.genie.agent.tool.common.CodeInterpreterTool;
-import com.jd.genie.agent.tool.common.DeepSearchTool;
-import com.jd.genie.agent.tool.common.FileTool;
-import com.jd.genie.agent.tool.common.ReportTool;
+import com.jd.genie.agent.tool.common.*;
 import com.jd.genie.agent.tool.mcp.McpTool;
 import com.jd.genie.agent.util.DateUtil;
 import com.jd.genie.agent.util.ThreadUtil;
@@ -137,8 +134,8 @@ public class GenieController {
                         .basePrompt(request.getBasePrompt())
                         .agentType(request.getAgentType())
                         .isStream(Objects.nonNull(request.getIsStream()) ? request.getIsStream() : false)
+                        .templateType("dataAgent".equals(request.getOutputStyle()) ? "fix" : "empty")
                         .build();
-
                 // 构建工具列表
                 agentContext.setToolCollection(buildToolCollection(agentContext, request));
                 // 根据数据类型获取对应的处理器
@@ -183,29 +180,45 @@ public class GenieController {
 
         ToolCollection toolCollection = new ToolCollection();
         toolCollection.setAgentContext(agentContext);
-        // file
-        FileTool fileTool = new FileTool();
-        fileTool.setAgentContext(agentContext);
-        toolCollection.addTool(fileTool);
 
-        // default tool
-        List<String> agentToolList = Arrays.asList(genieConfig.getMultiAgentToolListMap()
-                .getOrDefault("default", "search,code,report").split(","));
-        if (!agentToolList.isEmpty()) {
-            if (agentToolList.contains("code")) {
-                CodeInterpreterTool codeTool = new CodeInterpreterTool();
-                codeTool.setAgentContext(agentContext);
-                toolCollection.addTool(codeTool);
-            }
-            if (agentToolList.contains("report")) {
-                ReportTool htmlTool = new ReportTool();
-                htmlTool.setAgentContext(agentContext);
-                toolCollection.addTool(htmlTool);
-            }
-            if (agentToolList.contains("search")) {
-                DeepSearchTool deepSearchTool = new DeepSearchTool();
-                deepSearchTool.setAgentContext(agentContext);
-                toolCollection.addTool(deepSearchTool);
+        // data agent
+        if ("dataAgent".equals(request.getOutputStyle())) {
+            ReportTool htmlTool = new ReportTool();
+            htmlTool.setAgentContext(agentContext);
+            toolCollection.addTool(htmlTool);
+
+            DataAnalysisTool dataAnalysisTool = new DataAnalysisTool();
+            dataAnalysisTool.setAgentContext(agentContext);
+            toolCollection.addTool(dataAnalysisTool);
+        } else {
+            // file
+            FileTool fileTool = new FileTool();
+            fileTool.setAgentContext(agentContext);
+            toolCollection.addTool(fileTool);
+            // default tool
+            List<String> agentToolList = Arrays.asList(genieConfig.getMultiAgentToolListMap()
+                    .getOrDefault("default", "search,code,report").split(","));
+            if (!agentToolList.isEmpty()) {
+                if (agentToolList.contains("code")) {
+                    CodeInterpreterTool codeTool = new CodeInterpreterTool();
+                    codeTool.setAgentContext(agentContext);
+                    toolCollection.addTool(codeTool);
+                }
+                if (agentToolList.contains("report")) {
+                    ReportTool htmlTool = new ReportTool();
+                    htmlTool.setAgentContext(agentContext);
+                    toolCollection.addTool(htmlTool);
+                }
+                if (agentToolList.contains("search")) {
+                    DeepSearchTool deepSearchTool = new DeepSearchTool();
+                    deepSearchTool.setAgentContext(agentContext);
+                    toolCollection.addTool(deepSearchTool);
+                }
+                if (agentToolList.contains("data_analysis")) {
+                    DataAnalysisTool dataAnalysisTool = new DataAnalysisTool();
+                    dataAnalysisTool.setAgentContext(agentContext);
+                    toolCollection.addTool(dataAnalysisTool);
+                }
             }
         }
 

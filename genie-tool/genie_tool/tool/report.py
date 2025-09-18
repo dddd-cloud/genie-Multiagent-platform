@@ -28,6 +28,7 @@ async def report(
         file_names: Optional[List[str]] = tuple(),
         model: str = "gpt-4.1",
         file_type: Literal["markdown", "html", "ppt"] = "markdown",
+        template_type: str = "html",
 ) -> AsyncGenerator:
     report_factory = {
         "ppt": ppt_report,
@@ -35,8 +36,12 @@ async def report(
         "html": html_report,
     }
     model = os.getenv("REPORT_MODEL", "gpt-4.1")
-    async for chunk in report_factory[file_type](task, file_names, model):
-        yield chunk
+    if file_type.lower() == "html":
+        async for chunk in html_report(task, file_names, model, template_type=template_type):
+            yield chunk
+    else:
+        async for chunk in report_factory[file_type](task, file_names, model):
+            yield chunk
 
 
 @timer(key="enter")
@@ -102,6 +107,7 @@ async def html_report(
         model: str = "gpt-4.1",
         temperature: float = 0,
         top_p: float = 0.9,
+        template_type: str = "html",
 ) -> AsyncGenerator:
     files = await download_all_files(file_names)
     key_files = []
@@ -142,11 +148,18 @@ async def html_report(
     prompt = Template(report_prompts["html_task"]) \
         .render(task=task, key_files=key_files, files=flat_files, date=datetime.now().strftime('%Y年%m月%d日'))
 
-    async for chunk in ask_llm(
-            messages=[{"role": "system", "content": report_prompts["html_prompt"]},
-                      {"role": "user", "content": prompt}],
-            model=model, stream=True, temperature=temperature, top_p=top_p, only_content=True):
-        yield chunk
+    if template_type == "fix":
+        async for chunk in ask_llm(
+                messages=[{"role": "system", "content": report_prompts["fix_html_prompt"]},
+                          {"role": "user", "content": prompt}],
+                model=model, stream=True, temperature=temperature, top_p=top_p, only_content=True):
+            yield chunk
+    else:
+        async for chunk in ask_llm(
+                messages=[{"role": "system", "content": report_prompts["html_prompt"]},
+                          {"role": "user", "content": prompt}],
+                model=model, stream=True, temperature=temperature, top_p=top_p, only_content=True):
+            yield chunk
 
 
 if __name__ == "__main__":

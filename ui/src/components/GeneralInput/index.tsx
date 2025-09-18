@@ -13,10 +13,11 @@ type Props = {
   size: string;
   product?: CHAT.Product;
   send: (p: CHAT.TInputInfo) => void;
+  dbsShow?: (show: boolean) => void;
 };
 
 const GeneralInput: GenieType.FC<Props> = (props) => {
-  const { placeholder, showBtn, disabled, product, send } = props;
+  const { placeholder, showBtn, disabled, product, send, dbsShow } = props;
   const [question, setQuestion] = useState<string>("");
   const [deepThink, setDeepThink] = useState<boolean>(false);
   const textareaRef = useRef<TextAreaRef>(null);
@@ -46,7 +47,7 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
       const { selectionStart, selectionEnd } = textareaDom || {};
       const newValue =
         question.substring(0, selectionStart) +
-        '\n' + // 插入换行符
+        "\n" + // 插入换行符
         question.substring(selectionEnd!);
 
       setQuestion(newValue);
@@ -66,7 +67,10 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
       outputStyle: product?.type,
       deepThink,
     });
-    setQuestion("");
+
+    setTimeout(() => {
+      setQuestion("");
+    });
   };
 
   const sendMessage = () => {
@@ -79,27 +83,18 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
   };
 
   const enterTip = useMemo(() => {
-    return `⏎发送，${getOS() === 'Mac' ? '⌘' : '^'} + ⏎ 换行`;
+    return `⏎发送，${getOS() === "Mac" ? "⌘" : "^"} + ⏎ 换行`;
   }, []);
 
   return (
-    <div
-      className={
-        showBtn
-          ? "rounded-[12px] bg-[linear-gradient(to_bottom_right,#4040ff,#ff49fd,#d763fc,#3cc4fa)] p-1"
-          : ""
-      }
-    >
+    <div className={showBtn ? "rounded-[12px] bg-[linear-gradient(to_bottom_right,#4040ff,#ff49fd,#d763fc,#3cc4fa)] p-1" : ""}>
       <div className="rounded-[12px] border border-[#E9E9F0] overflow-hidden p-[12px] bg-[#fff]">
         <div className="relative">
           <TextArea
             ref={textareaRef}
             value={question}
             placeholder={placeholder}
-            className={classNames(
-              "h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-[#fff]",
-              showBtn && product ? "indent-86" : ""
-            )}
+            className={classNames("h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-[#fff]", showBtn && product ? "indent-86" : "")}
             onChange={questionChange}
             onPressEnter={pressEnter}
             onKeyDown={(event) => {
@@ -124,24 +119,32 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
         </div>
         <div className="h-30 flex justify-between items-center mt-[6px]">
           {showBtn ? (
-            <Button
-              color={deepThink ? "primary" : "default"}
-              variant="outlined"
-              className={classNames(
-                "text-[12px] p-[8px] h-[28px] transition-all hover:text-[#333] hover:bg-[rgba(64,64,255,0.02)] hover:border-[rgba(64,64,255,0.2)]",
+            <div>
+              <Button
+                color={deepThink ? "primary" : "default"}
+                variant="outlined"
+                className={classNames(
+                  `text-[12px] p-[8px] h-[28px] transition-all hover:bg-[rgba(64,64,255,0.02)] hover:border-[rgba(64,64,255,0.2)] ${deepThink ? "hover:text-#4040ffb2" : "hover:text-[#333]"}`
+                )}
+                onClick={changeThinkStatus}
+              >
+                <i className="font_family icon-shendusikao"></i>
+                <span className="ml-[-4px]">深度研究</span>
+              </Button>
+              {product?.type === "dataAgent" && (
+                <Tooltip placement="right" title="查看知识库">
+                <i
+                  className="font_family icon-zhishiku cursor-pointer text-[#4040ffb2] text-[18px] ml-[8px] border border-[#4040ffb2] rounded-tr-lg rounded-bl-lg p-[3px]"
+                  onClick={() => dbsShow && dbsShow(true)}
+                ></i>
+                </Tooltip>
               )}
-              onClick={changeThinkStatus}
-            >
-              <i className="font_family icon-shendusikao"></i>
-              <span className="ml-[-4px]">深度研究</span>
-            </Button>
+            </div>
           ) : (
             <div></div>
           )}
           <div className="flex items-center">
-            <span className="text-[12px] text-gray-300 mr-8 flex items-center">
-              {enterTip}
-            </span>
+            <span className="text-[12px] text-gray-300 mr-8 flex items-center">{enterTip}</span>
             <Tooltip title="发送">
               <i
                 className={`font_family icon-fasongtianchong ${!question || disabled ? "cursor-not-allowed text-[#ccc] pointer-events-none" : "cursor-pointer"}`}

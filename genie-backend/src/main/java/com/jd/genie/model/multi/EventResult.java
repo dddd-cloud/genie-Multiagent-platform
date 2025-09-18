@@ -74,6 +74,7 @@ public class EventResult {
         add("markdown");
         add("deep_search");
         add("tool_thought");
+        add("data_analysis");
     }};
 
     /**

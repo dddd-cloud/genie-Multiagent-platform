@@ -157,6 +157,7 @@ declare global {
       eventData?: EventData
       code?: string;
       tip?: string;
+      task?: string;
       refList?: {
         name: string
         pageContent: string

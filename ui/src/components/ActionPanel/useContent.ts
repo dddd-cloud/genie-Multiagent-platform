@@ -29,9 +29,15 @@ const useContent =  (taskItem?: PanelItemType) => {
     case 'html':
       markDownContent = resultMap?.codeOutput || '';
       break;
+    // case 'data_analysis':
+    //   markDownContent = resultMap?.data || '';
+    //   break;
     case 'deep_search':
     case 'report':
       markDownContent = resultMap.answer || '';
+      break;
+    case 'data_analysis':
+      markDownContent = resultMap?.codeOutput || '';
       break;
     // case 'file':
     //   fileUrl = fileInfo.domainUrl;

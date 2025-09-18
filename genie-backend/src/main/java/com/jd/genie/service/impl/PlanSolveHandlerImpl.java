@@ -11,8 +11,10 @@ import com.jd.genie.agent.enums.AgentState;
 import com.jd.genie.agent.enums.AgentType;
 import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.config.GenieConfig;
+import com.jd.genie.agent.dto.SopRecallResponse;
 import com.jd.genie.model.req.AgentRequest;
 import com.jd.genie.service.AgentHandlerService;
+import com.jd.genie.service.SopRecallService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -30,9 +32,15 @@ public class PlanSolveHandlerImpl implements AgentHandlerService {
     @Autowired
     private GenieConfig genieConfig;
 
+    @Autowired
+    private SopRecallService sopRecallService;
+
 
     @Override
     public String handle(AgentContext agentContext, AgentRequest request) {
+
+        // sop recall
+        handleSopRecall(agentContext, request);
 
         PlanningAgent planning = new PlanningAgent(agentContext);
         ExecutorAgent executor = new ExecutorAgent(agentContext);
@@ -118,5 +126,43 @@ public class PlanSolveHandlerImpl implements AgentHandlerService {
     @Override
     public Boolean support(AgentContext agentContext, AgentRequest request) {
         return AgentType.PLAN_SOLVE.getValue().equals(request.getAgentType());
+    }
+
+        /**
+     * 处理SOP召回逻辑
+     * 
+     * @param agentContext 代理上下文
+     * @param request 请求对象
+     */
+    private void handleSopRecall(AgentContext agentContext, AgentRequest request) {
+        try {
+            log.info("{} 开始执行SOP召回", request.getRequestId());
+            
+            // 调用SOP召回服务
+            SopRecallResponse sopResponse = sopRecallService.sopRecall(
+                    request.getRequestId(),
+                    request.getQuery()
+            );
+            
+            // 检查召回结果
+            if (sopRecallService.isValidSopResult(sopResponse)) {
+                String sopContent = sopResponse.getData().getChoosed_sop_string();
+                String sopMode = sopResponse.getData().getSop_mode();
+                
+                log.info("{} SOP召回成功，模式：{}，内容长度：{}", 
+                        request.getRequestId(), sopMode, sopContent.length());
+
+                // 注入sopPrompt
+                String sopPrompt = agentContext.getSopPrompt().replace("{{sop}}", sopContent);
+                agentContext.setSopPrompt(sopPrompt);
+
+            } else {
+                log.warn("{} SOP召回失败或结果无效", request.getRequestId());
+            }
+            
+        } catch (Exception e) {
+            log.error("{} SOP召回处理异常", request.getRequestId(), e);
+            // SOP召回失败不影响主流程，继续执行
+        }
     }
 }

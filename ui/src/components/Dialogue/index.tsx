@@ -101,7 +101,7 @@ const ToolItem: FC<{
       );
     }
     default: {
-      const loadingType = ["html", "markdown"];
+      const loadingType = ["html", "markdown", "data_analysis"];
       const loading =
         !tool.resultMap?.isFinal &&
         ((tool.messageType === "deep_search" &&

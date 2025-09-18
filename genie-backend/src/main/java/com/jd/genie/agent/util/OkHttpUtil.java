@@ -2,16 +2,56 @@ package com.jd.genie.agent.util;
 
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import okhttp3.sse.EventSource;
+import okhttp3.sse.EventSourceListener;
+import okhttp3.sse.EventSources;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
 public class OkHttpUtil {
+    private static volatile OkHttpClient okHttpClient;
+
+    public static OkHttpClient getOkHttpClient() {
+        if (okHttpClient == null) {
+            synchronized (OkHttpUtil.class) {
+                if (okHttpClient == null) {
+                    okHttpClient = new OkHttpClient.Builder()
+                            .connectTimeout(30, TimeUnit.SECONDS)
+                            .readTimeout(60, TimeUnit.SECONDS)
+                            .writeTimeout(10, TimeUnit.SECONDS)
+                            .connectionPool(new ConnectionPool(1000, 10, TimeUnit.MINUTES))
+                            .build();
+                }
+            }
+        }
+        return okHttpClient;
+    }
+
+
+    private static volatile OkHttpClient sseHttpClient;
+
+    public static OkHttpClient getSseOkHttpClient() {
+        if (sseHttpClient == null) {
+            synchronized (OkHttpClient.class) {
+                if (sseHttpClient == null) {
+                    sseHttpClient = new OkHttpClient.Builder()
+                            .connectTimeout(30, TimeUnit.SECONDS)
+                            .readTimeout(0, TimeUnit.SECONDS)
+                            .connectionPool(new ConnectionPool(1000, 10, TimeUnit.MINUTES))
+                            .build();
+                }
+            }
+        }
+        return sseHttpClient;
+    }
+
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     /**
@@ -28,6 +68,27 @@ public class OkHttpUtil {
                 .readTimeout(readTimeout, TimeUnit.SECONDS)
                 .writeTimeout(writeTimeout, TimeUnit.SECONDS)
                 .build();
+    }
+
+    public static Response postNew(String url, Map<String, String> header, String jsonBody) throws IOException {
+        OkHttpClient httpClient = getOkHttpClient();
+        RequestBody body = RequestBody.create(jsonBody, JSON);
+        Request.Builder builder = new Request.Builder().url(url).post(body);
+        if (!Objects.isNull(header)) {
+            header.forEach(builder::addHeader);
+        }
+
+        return httpClient.newCall(builder.build()).execute();
+    }
+
+    public static String postJsonBody(String url, Map<String, String> headers, String jsonBody) throws IOException {
+        log.info("post调用接口{}参数：{},{}", url, jsonBody, headers);
+        try (Response response = postNew(url, headers, jsonBody)) {
+            if (!response.isSuccessful()) {
+                throw new RuntimeException("调用接口" + url + "失败:" + response.message());
+            }
+            return Objects.requireNonNull(response.body()).string();
+        }
     }
 
     /**
@@ -56,6 +117,21 @@ public class OkHttpUtil {
             }
         }
         return null;
+    }
+
+    public static void requestSse(String url, Map<String, String> header, String jsonBody, EventSourceListener listener) {
+        log.info("调用sse接口{}参数：{},{}", url, jsonBody, header);
+        OkHttpClient sseClient = getSseOkHttpClient();
+        Request.Builder builder = new Request.Builder()
+                .url(url)
+                .header("Accept", "text/event-stream")
+                .post(RequestBody.create(jsonBody, JSON));
+        if (!Objects.isNull(header)) {
+            header.forEach(builder::addHeader);
+        }
+        EventSource.Factory factory = EventSources.createFactory(sseClient);
+        factory.newEventSource(builder.build(), listener);
+
     }
 
     /**

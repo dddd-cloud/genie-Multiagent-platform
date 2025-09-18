@@ -1,6 +1,6 @@
 import { copyText, downloadFile, formatTimestamp, showMessage } from "@/utils";
 import { keyBy } from "lodash";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import ActionViewFrame from "./ActionViewFrame";
 import classNames from "classnames";
 import { FileRenderer, HTMLRenderer, PanelItemType, TableRenderer } from "../ActionPanel";
@@ -16,7 +16,7 @@ type FileItem = {
   url: string;
 };
 
-const messageTypeEnum = ['file', 'code', 'html', 'markdown', 'result'];
+const messageTypeEnum = ['file', 'code', 'html', 'markdown', 'result', 'data_analysis'];
 
 const FileList: GenieType.FC<{
   taskList?: PanelItemType[];
@@ -32,6 +32,12 @@ const FileList: GenieType.FC<{
     clearActiveFile?.();
     setActiveItem(undefined);
   });
+
+  useEffect(() => {
+    // if (activeFile) {
+      console.log('activeFile', activeFile);
+    // }
+  }, [activeFile]);
 
   const {list: fileList, map: fileMap } = useMemo(() => {
     let map: Record<string, FileItem> = {};
@@ -148,7 +154,7 @@ const FileList: GenieType.FC<{
         </Tooltip>}
       </div>
     </>}
-    onClickTitle={() => setActiveItem(undefined)}
+    onClickTitle={() => clearActive()}
   >
     {content}
   </ActionViewFrame>;

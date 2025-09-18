@@ -87,6 +87,7 @@ public class SSEPrinter implements Printer {
                 case "file":
                 case "knowledge":
                 case "deep_search":
+                case "data_analysis":
                     response.setResultMap(JSON.parseObject(JSON.toJSONString(message)));
                     response.getResultMap().put("agentType", agentType);
                     break;

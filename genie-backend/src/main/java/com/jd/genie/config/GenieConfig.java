@@ -91,6 +91,9 @@ public class GenieConfig {
     @Value("${autobots.autoagent.tool.deep_search_tool.desc:}")
     private String deepSearchToolDesc;
 
+    @Value("${autobots.autoagent.tool.data_analysis_tool.desc:}")
+    private String dataAnalysisToolDesc;
+
     /**
      * planTool 配置
      */
@@ -134,6 +137,15 @@ public class GenieConfig {
     @Value("${autobots.autoagent.tool.deep_search.params:{}}")
     public void setDeepSearchToolPamras(String jsonStr) {
         this.deepSearchToolPamras = JSON.parseObject(jsonStr, Map.class);
+    }
+
+    /**
+     * DataAnalysisTool 配置
+     */
+    private Map<String, Object> dataAnalysisToolPamras = new HashMap<>();
+    @Value("${autobots.autoagent.tool.data_analysis_tool.params:{}}")
+    public void setDtaAnalysisToolPamras(String jsonStr) {
+        this.dataAnalysisToolPamras = JSON.parseObject(jsonStr, Map.class);
     }
 
     @Value("${autobots.autoagent.tool.file_tool.truncate_len:5000}")
@@ -200,6 +212,12 @@ public class GenieConfig {
 
     @Value("${autobots.autoagent.mcp_server_url:}")
     private String[] mcpServerUrlArr;
+
+    @Value("${autobots.autoagent.knowledge_url:}")
+    private String autoBotsKnowledgeUrl;
+
+    @Value("${autobots.autoagent.data_analysis_url:}")
+    private String dataAnalysisUrl;
 
     @Value("${autobots.autoagent.summary.system_prompt:}")
     private String summarySystemPrompt;
