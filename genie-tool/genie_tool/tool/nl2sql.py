@@ -44,6 +44,8 @@ class NL2SQLAgent:
         prompt = prompt_template.render(
             query=query
         )
+        logger.info(f"[NL2SQL] [REWRITE] request_id={request_id} {prompt=}")
+        logger.info(f"[NL2SQL] [REWRITE] request_id={request_id} rewrite模块执行完成。 model_name={model}")
         rewrite_llm_result = ""
         async for chunk in ask_llm(
             messages=prompt,
@@ -54,8 +56,6 @@ class NL2SQLAgent:
             only_content=True
         ):
             rewrite_llm_result = chunk
-        logger.info(f"[NL2SQL] [REWRITE] request_id={request_id} rewrite模块执行完成。 model_name={model}")
-        logger.info(f"[NL2SQL] [REWRITE] request_id={request_id} {prompt=}")
         logger.info(f"[NL2SQL] [REWRITE] request_id={request_id} {rewrite_llm_result=}")
         return rewrite_llm_result
 
@@ -86,6 +86,7 @@ class NL2SQLAgent:
             m_schema_formatted=m_schema_formatted,
             current_date_info=current_date_info
         )
+        logger.info(f"[NL2SQL] [THINK] request_id={request_id} {prompt=}")
         async for chunk in ask_llm(
             messages=prompt,
             model=model,
@@ -100,7 +101,6 @@ class NL2SQLAgent:
             think_full += chunk_content
             response["nl2sql_think"] = think_full
             response["status"] = "nl2sql_think"
-            # yield json.dumps(response, ensure_ascii=False)
             await self.queue.put(json.dumps(response, ensure_ascii=False))
         # 思考模型结束标识
         final_response = {
@@ -111,20 +111,14 @@ class NL2SQLAgent:
                 "data": [],
                 "request_id": request_id
             }
-        # yield json.dumps(final_response, ensure_ascii=False)
         await self.queue.put(json.dumps(final_response, ensure_ascii=False))
         logger.info(f"[NL2SQL] [THINK] request_id={request_id} think模块执行完成。 model_name={model}")
-        logger.info(f"[NL2SQL] [THINK] request_id={request_id} {prompt=}")
         logger.info(f"[NL2SQL] [THINK] request_id={request_id} final_response={json.dumps(final_response, ensure_ascii=False)}")
         return response["nl2sql_think"]
     
     def m_schema_trans(self,
-                    #    db_name: str,
                        table_id: str,
-                    #    table_name: str,
                        column_schema_lists: List[Dict],
-                    #    filter_column_list: List[str],
-                    #    dynamic_example: str,
                        business_prompt: str,
                        time_prompt: str,
                        use_prompt: str,
@@ -162,7 +156,6 @@ class NL2SQLAgent:
         if use_prompt and len(use_prompt)>0:
             output.append(f"### 数据表使用规范：\n{use_prompt}")
         m_schema_result = '\n'.join(output)
-
         return m_schema_result
 
     @timer(key="nl2sql_convert")
@@ -190,6 +183,7 @@ class NL2SQLAgent:
             dialect=dialect
         )
         nl2sql_response = ""
+        logger.info(f"[NL2SQL] [nl2sql_convert] {request_id=} {prompt=}")
         async for chunk in ask_llm(
                                 messages=prompt,
                                 model=model,
@@ -199,10 +193,7 @@ class NL2SQLAgent:
                                 only_content=True
                             ):
             nl2sql_response = chunk
-
-        logger.info(f"[NL2SQL] [nl2sql_convert] {request_id=} {prompt=}")
         logger.info(f"[NL2SQL] [nl2sql_convert] {request_id=} {nl2sql_response=}")
-
         llm_post_result =[]
         if nl2sql_response == "{}":
             return {}
@@ -245,19 +236,14 @@ class NL2SQLAgent:
         # 并行处理表结构转换
         m_schema_results = [
             self.m_schema_trans(
-                # db_name="data_analysis",
                 table_id=table_schema_info.get("modelCode", ""),
-                # table_name=table_schema_info.get("modelName", ""),
                 column_schema_lists=table_schema_info.get("schemaList", []),
-                # filter_column_list=[],
-                # dynamic_example=table_schema_info.get("nl2sqlExample", ""),
                 business_prompt=table_schema_info.get("businessPrompt", ""),
                 time_prompt=table_schema_info.get("timePrompt", ""),
-                use_prompt=table_schema_info.get("usePrompt", ""),
+                use_prompt=table_schema_info.get("usePrompt", "")
             )
             for table_schema_info in rank_result
         ]
-        # m_schema_results = await asyncio.gather(*m_schema_tasks)
         m_schema_info.append("\n".join(m_schema_results))
         return "\n".join(m_schema_info)
 
@@ -273,7 +259,6 @@ class NL2SQLAgent:
         column_info = body.column_info
         dialect = body.dialect
         try:
-
             logger.info(f"[NL2SQL] request_id={request_id}, {query=}")
             # 精排任务：rank
             rank_module = ColumnFilterModule(request_id=request_id,
@@ -302,6 +287,7 @@ class NL2SQLAgent:
                                             model=self.default_model if self.think_llm_name == "" else self.think_llm_name,
                                             temperature=self.temperature,
                                             top_p=self.top_p)
+            # SQL 生成器
             nl2sql_response = await self._nl2sql_convert(request_id=request_id,
                                                          rewritten_query=rewritten_query,
                                                          thinking_result=full_thinking,
