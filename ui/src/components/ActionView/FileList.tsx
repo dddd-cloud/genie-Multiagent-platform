@@ -33,12 +33,6 @@ const FileList: GenieType.FC<{
     setActiveItem(undefined);
   });
 
-  useEffect(() => {
-    // if (activeFile) {
-      console.log('activeFile', activeFile);
-    // }
-  }, [activeFile]);
-
   const {list: fileList, map: fileMap } = useMemo(() => {
     let map: Record<string, FileItem> = {};
     const list = (taskList || []).reduce<FileItem[]>((pre, task) => {
