@@ -44,7 +44,7 @@ export const defaultActiveActionView = actionViewOptions[0].value;
 
 export const chatQustions = [
   { label: "2024年各月销量变化趋势如何？", type: 1 },
-  { label: "采购的商品中成本最高的前十名是什么？", type: 1 },
+  { label: "采购成本最高的前十名商品是什么？", type: 1 },
   { label: "对销售数据进行综合分析", type: 2 },
   { label: "分析产品的销售表现", type: 2 },
 ];

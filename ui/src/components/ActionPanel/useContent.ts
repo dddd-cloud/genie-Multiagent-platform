@@ -30,7 +30,7 @@ const useContent =  (taskItem?: PanelItemType) => {
       markDownContent = resultMap?.codeOutput || '';
       break;
     case 'data_analysis':
-      markDownContent = resultMap?.data || '';
+      markDownContent = resultMap?.codeOutput || '';
       break;
     case 'deep_search':
     case 'report':
