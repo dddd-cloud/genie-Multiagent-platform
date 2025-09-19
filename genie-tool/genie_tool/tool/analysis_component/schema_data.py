@@ -27,7 +27,6 @@ def get_schema(modelCodeList: List[str], timeout: float = 5, request_id: str = N
     )
     if response.status_code != 200:
         response.raise_for_status()
-    # json.loads(response.text)["data"]
     return json.loads(response.text)
 
 
@@ -46,6 +45,5 @@ def get_data(query: str, modelCodeList: List[str], timeout: float = 90, request_
     )
     if response.status_code != 200:
         response.raise_for_status()
-    # json.loads(response.text)["data"]
     return json.loads(response.text)
 
