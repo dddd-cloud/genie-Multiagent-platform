@@ -1,6 +1,6 @@
 import { fetchEventSource, EventSourceMessage } from '@microsoft/fetch-event-source';
 
-const customHost = 'http://genie-ai.jd.com'; //|| SERVICE_BASE_URL || '';
+const customHost = SERVICE_BASE_URL || '';
 const DEFAULT_SSE_URL = `${customHost}/web/api/v1/gpt/queryAgentStreamIncr`;
 
 const SSE_HEADERS = {

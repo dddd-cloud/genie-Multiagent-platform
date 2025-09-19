@@ -103,7 +103,6 @@ const ChatView: GenieType.FC<Props> = (props) => {
               deepThink,
               currentChat.multiAgent
             );
-            console.log("taskData", taskData);
             setTaskList(taskData.taskList);
             temporaryChangeTask(taskData.taskList);
             updatePlan(taskData.plan!);
@@ -143,8 +142,7 @@ const ChatView: GenieType.FC<Props> = (props) => {
         handleMessage,
         handleError,
         handleClose,
-      },
-      "//genie-data.jd.com/web/api/v1/gpt/queryAgentStreamIncr"
+      }
     );
   });
 
@@ -235,7 +233,7 @@ const ChatView: GenieType.FC<Props> = (props) => {
         handleError,
         handleClose,
       },
-      "//genie-data.jd.com/data/chatQuery"
+      `${SERVICE_BASE_URL}/data/chatQuery`
     );
   };
 
