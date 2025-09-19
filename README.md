@@ -9,7 +9,7 @@
 此外对于不同模态的非结构化知识提供多模态RAG能力。
 
 [**<font color=red>JoyDataAgent：首个开源的包含数据治理DGP协议、智能问数和智能诊断分析的智能体</font>**](README_DataAgent.md)
-注意使用DataAgent分支
+（注意使用DataAgent分支）
 ![archi](./docs/img/dataagent.png)
 **多模态RAG：敬请期待**
 ## 简介
