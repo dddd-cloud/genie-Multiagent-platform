@@ -3,23 +3,22 @@ spring:
     name: genie-backend
   config:
     encoding: UTF-8
-  datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:genie;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;
-    username: sa
-    password:
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-      settings:
-        trace: false
-        web-allow-others: false
+  profiles:
+    default: local
   sql:
     init:
-      schema-locations: classpath:db/schema.sql
-      data-locations: classpath:db/data.sql
-      mode: always
+      mode: never
+  flyway:
+    enabled: true
+    validate-on-migrate: true
+    clean-disabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
+  session:
+    store-type: jdbc
+    timeout: ${GENIE_SESSION_TIMEOUT:12h}
+    jdbc:
+      initialize-schema: never
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
   configuration:
