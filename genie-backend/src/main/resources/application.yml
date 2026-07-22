@@ -19,6 +19,10 @@ spring:
     timeout: ${GENIE_SESSION_TIMEOUT:12h}
     jdbc:
       initialize-schema: never
+genie:
+  bootstrap:
+    admin-username: ${GENIE_BOOTSTRAP_ADMIN_USERNAME:}
+    admin-password: ${GENIE_BOOTSTRAP_ADMIN_PASSWORD:}
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
   configuration:
