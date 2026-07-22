@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.Instant;
+import java.util.List;
 
 @Mapper
 public interface ConversationMapper extends BaseMapper<ConversationEntity> {
@@ -36,6 +37,23 @@ public interface ConversationMapper extends BaseMapper<ConversationEntity> {
     ConversationEntity selectOwnedConversationForUpdate(@Param("tenantId") String tenantId,
                                                         @Param("ownerId") String ownerId,
                                                         @Param("conversationId") String conversationId);
+
+    @Select("""
+        SELECT *
+        FROM conversation
+        WHERE tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+        ORDER BY (last_message_at IS NULL) ASC,
+                 last_message_at DESC,
+                 created_at DESC,
+                 id DESC
+        LIMIT #{limit} OFFSET #{offset}
+        """)
+    List<ConversationEntity> selectOwnedConversationPage(@Param("tenantId") String tenantId,
+                                                         @Param("ownerId") String ownerId,
+                                                         @Param("limit") int limit,
+                                                         @Param("offset") int offset);
 
     @Update("""
         UPDATE conversation
