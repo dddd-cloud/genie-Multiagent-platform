@@ -13,6 +13,10 @@ public interface UserMapper {
         + "FROM app_user WHERE tenant_id = #{tenantId} AND username = #{username}")
     UserEntity findByTenantIdAndUsername(@Param("tenantId") String tenantId, @Param("username") String username);
 
+    @Select("SELECT id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version "
+        + "FROM app_user WHERE username = #{username} AND status = 'ACTIVE' LIMIT 1")
+    UserEntity findActiveByUsername(@Param("username") String username);
+
     @Select("SELECT COUNT(*) FROM app_user")
     long countAll();
 

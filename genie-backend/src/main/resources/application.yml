@@ -35,6 +35,12 @@ mybatis-plus:
       logic-not-delete-value: 1
 server:
   port: 8080
+  servlet:
+    session:
+      cookie:
+        name: GENIE_SESSION
+        http-only: true
+        same-site: Lax
 logging:
   level:
     root: INFO
