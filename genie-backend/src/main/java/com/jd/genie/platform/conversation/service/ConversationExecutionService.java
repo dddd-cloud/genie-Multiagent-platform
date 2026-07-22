@@ -29,12 +29,10 @@ import java.util.UUID;
 
 @Service
 public class ConversationExecutionService implements ConversationExecutionPort {
-    private static final String DEFAULT_TITLE = "\u65b0\u5bf9\u8bdd";
     private static final int MAX_QUERY_CODE_POINTS = 20_000;
     private static final int MAX_REQUEST_ID_LENGTH = 64;
     private static final int MAX_ERROR_CODE_LENGTH = 64;
     private static final int MAX_ERROR_MESSAGE_LENGTH = 1_000;
-    private static final int TITLE_CODE_POINTS = 30;
     private static final int PAYLOAD_VERSION = SnapshotValidator.PAYLOAD_VERSION;
     private static final List<String> OUTPUT_STYLES = List.of("dataAgent", "html", "docs", "ppt", "table");
     private static final ObjectMapper SNAPSHOT_OBJECT_MAPPER = new ObjectMapper();
@@ -42,6 +40,7 @@ public class ConversationExecutionService implements ConversationExecutionPort {
     private final ConversationMapper conversationMapper;
     private final ConversationMessageMapper conversationMessageMapper;
     private final ConversationHistoryService conversationHistoryService;
+    private final ConversationTitleService conversationTitleService;
     private final Clock clock = Clock.systemUTC();
 
     @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}")
@@ -50,18 +49,20 @@ public class ConversationExecutionService implements ConversationExecutionPort {
     @Autowired
     public ConversationExecutionService(ConversationMapper conversationMapper,
                                         ConversationMessageMapper conversationMessageMapper,
-                                        ConversationHistoryService conversationHistoryService) {
+                                        ConversationHistoryService conversationHistoryService,
+                                        ConversationTitleService conversationTitleService) {
         this.conversationMapper = conversationMapper;
         this.conversationMessageMapper = conversationMessageMapper;
         this.conversationHistoryService = conversationHistoryService;
+        this.conversationTitleService = conversationTitleService;
     }
 
     public ConversationExecutionService(ConversationMapper conversationMapper,
-                                 ConversationMessageMapper conversationMessageMapper) {
+                                        ConversationMessageMapper conversationMessageMapper) {
         this(conversationMapper, conversationMessageMapper,
-            new ConversationHistoryService(conversationMapper, conversationMessageMapper));
+            new ConversationHistoryService(conversationMapper, conversationMessageMapper),
+            new ConversationTitleService(conversationMapper));
     }
-
     @Override
     @Transactional
     public ConversationExecutionResult prepareExecution(CurrentUser currentUser, ConversationExecutionCommand command) {
@@ -98,11 +99,13 @@ public class ConversationExecutionService implements ConversationExecutionPort {
                 locked.getNextTurnNo(),
                 now,
                 now,
-                generatedTitle(locked, valid.query(), turnNo)
+                null
             );
             if (updated != 1) {
                 throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable");
             }
+            conversationTitleService.autoTitleFirstTurn(
+                currentUser.tenantId(), currentUser.userId(), valid.conversationId(), turnNo, valid.query(), now);
         } catch (DuplicateKeyException exception) {
             if (isRequestRoleDuplicate(exception)) {
                 throw error(MvpErrorCode.DUPLICATE_REQUEST, "Duplicate request", exception);
@@ -303,21 +306,6 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         message.setCreatedAt(now);
         message.setUpdatedAt(now);
         return message;
-    }
-
-    private String generatedTitle(ConversationEntity locked, String query, long turnNo) {
-        if (turnNo != 1 || !DEFAULT_TITLE.equals(locked.getTitle())) {
-            return null;
-        }
-        String normalized = query.trim().replaceAll("\\s+", " ");
-        if (normalized.isEmpty()) {
-            return DEFAULT_TITLE;
-        }
-        int codePoints = normalized.codePointCount(0, normalized.length());
-        if (codePoints <= TITLE_CODE_POINTS) {
-            return normalized;
-        }
-        return normalized.substring(0, normalized.offsetByCodePoints(0, TITLE_CODE_POINTS));
     }
 
     private SnapshotValidator snapshotValidator() {

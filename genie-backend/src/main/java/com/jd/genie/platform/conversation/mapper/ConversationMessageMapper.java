@@ -142,6 +142,24 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
                                                               @Param("excludeRequestId") String excludeRequestId,
                                                               @Param("limit") int limit);
 
+
+    @Update("""
+        UPDATE conversation_message
+        SET status = #{toStatus},
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            updated_at = #{updatedAt},
+            version = version + 1
+        WHERE role = #{assistantRole}
+          AND status IN (#{pendingStatus}, #{streamingStatus})
+        """)
+    int interruptAllActiveAssistantsOnStartup(@Param("assistantRole") String assistantRole,
+                                              @Param("pendingStatus") String pendingStatus,
+                                              @Param("streamingStatus") String streamingStatus,
+                                              @Param("toStatus") String toStatus,
+                                              @Param("errorCode") String errorCode,
+                                              @Param("errorMessage") String errorMessage,
+                                              @Param("updatedAt") Instant updatedAt);
     @Update("""
         UPDATE conversation_message m
         JOIN conversation c ON c.id = m.conversation_id
