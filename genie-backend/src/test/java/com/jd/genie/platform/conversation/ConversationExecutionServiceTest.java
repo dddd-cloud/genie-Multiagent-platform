@@ -308,6 +308,29 @@ class ConversationExecutionServiceTest {
         assertEquals(2L, conversationMapper.selectOwnedConversation("tenant-a", "owner-a", "conv-diff-req").getNextTurnNo());
     }
 
+    @Test
+    void prepareExecutionRejectsInvalidCurrentUserAndCommandBoundaries() {
+        insertConversation("conv-validation", "tenant-a", "owner-a", "Title", 1L, null);
+
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            null, command("conv-validation", "req-valid", "hello", 0, "docs")));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            new CurrentUser(" ", "owner-a", "owner-a", "owner-a", UserRole.USER),
+            command("conv-validation", "req-valid", "hello", 0, "docs")));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            user("tenant-a", "owner-a"), null));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            user("tenant-a", "owner-a"), command(" ", "req-valid", "hello", 0, "docs")));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            user("tenant-a", "owner-a"), command("conv-validation", "r".repeat(65), "hello", 0, "docs")));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            user("tenant-a", "owner-a"), command("conv-validation", "req-blank-query", "   ", 0, "docs")));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            user("tenant-a", "owner-a"), command("conv-validation", "req-deep-think", "hello", 2, "docs")));
+        assertConversationError(MvpErrorCode.VALIDATION_ERROR, () -> executionService.prepareExecution(
+            user("tenant-a", "owner-a"), command("conv-validation", "req-output-style", "hello", 0, "invalid")));
+    }
+
     private Object prepareOrCode(String conversationId, String requestId) {
         try {
             return executionService.prepareExecution(user("tenant-a", "owner-a"),
