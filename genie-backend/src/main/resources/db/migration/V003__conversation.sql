@@ -1,0 +1,42 @@
+CREATE TABLE conversation (
+    id                VARCHAR(36)  NOT NULL,
+    tenant_id         VARCHAR(36)  NOT NULL,
+    owner_id          VARCHAR(36)  NOT NULL,
+    title             VARCHAR(200) NOT NULL,
+    next_turn_no      BIGINT       NOT NULL DEFAULT 1,
+    last_message_at   DATETIME(6)  NULL,
+    created_at        DATETIME(6)  NOT NULL,
+    updated_at        DATETIME(6)  NOT NULL,
+    deleted_at        DATETIME(6)  NULL,
+    version           BIGINT       NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_conv_owner_last (tenant_id, owner_id, last_message_at, created_at, id),
+    KEY idx_conv_owner_deleted (tenant_id, owner_id, deleted_at),
+    CONSTRAINT fk_conv_tenant FOREIGN KEY (tenant_id) REFERENCES app_tenant(id),
+    CONSTRAINT fk_conv_owner FOREIGN KEY (owner_id) REFERENCES app_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE conversation_message (
+    id                 VARCHAR(36)   NOT NULL,
+    conversation_id    VARCHAR(36)   NOT NULL,
+    turn_no            BIGINT        NOT NULL,
+    role               VARCHAR(16)   NOT NULL,
+    status             VARCHAR(16)   NOT NULL,
+    request_id         VARCHAR(64)   NOT NULL,
+    content            MEDIUMTEXT    NULL,
+    stream_snapshot    LONGTEXT      NULL,
+    payload_version    INT           NOT NULL DEFAULT 1,
+    deep_think         TINYINT       NULL,
+    output_style       VARCHAR(32)   NULL,
+    error_code         VARCHAR(64)   NULL,
+    error_message      VARCHAR(1000) NULL,
+    created_at         DATETIME(6)   NOT NULL,
+    updated_at         DATETIME(6)   NOT NULL,
+    version            BIGINT        NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_msg_turn_role (conversation_id, turn_no, role),
+    UNIQUE KEY uk_msg_request_role (conversation_id, request_id, role),
+    KEY idx_msg_conv_turn (conversation_id, turn_no),
+    KEY idx_msg_conv_status (conversation_id, status),
+    CONSTRAINT fk_msg_conversation FOREIGN KEY (conversation_id) REFERENCES conversation(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
