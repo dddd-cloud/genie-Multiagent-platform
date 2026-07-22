@@ -98,4 +98,28 @@ public interface ConversationMapper extends BaseMapper<ConversationEntity> {
                                 @Param("conversationId") String conversationId,
                                 @Param("lastMessageAt") Instant lastMessageAt,
                                 @Param("updatedAt") Instant updatedAt);
+
+    @Update("""
+        UPDATE conversation
+        SET next_turn_no = next_turn_no + 1,
+            last_message_at = #{lastMessageAt},
+            updated_at = #{updatedAt},
+            title = CASE
+                WHEN #{generatedTitle} IS NULL THEN title
+                ELSE #{generatedTitle}
+            END,
+            version = version + 1
+        WHERE id = #{conversationId}
+          AND tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+          AND next_turn_no = #{expectedNextTurnNo}
+        """)
+    int completePrepareExecution(@Param("tenantId") String tenantId,
+                                 @Param("ownerId") String ownerId,
+                                 @Param("conversationId") String conversationId,
+                                 @Param("expectedNextTurnNo") Long expectedNextTurnNo,
+                                 @Param("lastMessageAt") Instant lastMessageAt,
+                                 @Param("updatedAt") Instant updatedAt,
+                                 @Param("generatedTitle") String generatedTitle);
 }

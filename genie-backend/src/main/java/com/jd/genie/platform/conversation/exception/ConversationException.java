@@ -10,6 +10,11 @@ public class ConversationException extends RuntimeException {
         this.code = code;
     }
 
+    public ConversationException(MvpErrorCode code, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+    }
+
     public MvpErrorCode code() {
         return code;
     }
