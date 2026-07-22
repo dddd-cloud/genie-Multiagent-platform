@@ -3,6 +3,7 @@ package com.jd.genie.platform.conversation.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.jd.genie.platform.conversation.dto.ConversationMessagePreviewRow;
 import com.jd.genie.platform.conversation.entity.ConversationMessageEntity;
+import com.jd.genie.platform.conversation.history.CompletedHistoryTurnRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -112,6 +113,34 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
     List<ConversationMessageEntity> selectRecentMessagesByOwnedConversation(@Param("tenantId") String tenantId,
                                                                             @Param("ownerId") String ownerId,
                                                                             @Param("conversationId") String conversationId);
+
+    @Select("""
+        SELECT u.turn_no AS turnNo,
+               u.request_id AS requestId,
+               u.content AS userContent,
+               a.content AS assistantContent
+        FROM conversation_message u
+        JOIN conversation c ON c.id = u.conversation_id
+        JOIN conversation_message a ON a.conversation_id = u.conversation_id
+                                   AND a.turn_no = u.turn_no
+                                   AND a.request_id = u.request_id
+                                   AND a.role = 'ASSISTANT'
+                                   AND a.status = 'COMPLETED'
+        WHERE c.tenant_id = #{tenantId}
+          AND c.owner_id = #{ownerId}
+          AND c.deleted_at IS NULL
+          AND u.conversation_id = #{conversationId}
+          AND u.role = 'USER'
+          AND u.status = 'COMPLETED'
+          AND (#{excludeRequestId} IS NULL OR u.request_id <> #{excludeRequestId})
+        ORDER BY u.turn_no DESC
+        LIMIT #{limit}
+        """)
+    List<CompletedHistoryTurnRow> selectCompletedHistoryTurns(@Param("tenantId") String tenantId,
+                                                              @Param("ownerId") String ownerId,
+                                                              @Param("conversationId") String conversationId,
+                                                              @Param("excludeRequestId") String excludeRequestId,
+                                                              @Param("limit") int limit);
 
     @Update("""
         UPDATE conversation_message m

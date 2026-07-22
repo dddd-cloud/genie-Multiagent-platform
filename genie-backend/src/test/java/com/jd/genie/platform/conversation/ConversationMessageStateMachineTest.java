@@ -12,6 +12,7 @@ import com.jd.genie.platform.conversation.exception.ConversationException;
 import com.jd.genie.platform.conversation.mapper.ConversationMapper;
 import com.jd.genie.platform.conversation.mapper.ConversationMessageMapper;
 import com.jd.genie.platform.conversation.service.ConversationExecutionService;
+import com.jd.genie.platform.conversation.service.ConversationHistoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
@@ -437,7 +438,7 @@ class ConversationMessageStateMachineTest {
     }
 
     @SpringBootConfiguration
-    @Import(ConversationExecutionService.class)
+    @Import({ConversationExecutionService.class, ConversationHistoryService.class})
     @ImportAutoConfiguration({
         DataSourceAutoConfiguration.class,
         DataSourceTransactionManagerAutoConfiguration.class,

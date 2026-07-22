@@ -15,7 +15,7 @@ import com.jd.genie.platform.conversation.exception.ConversationException;
 import com.jd.genie.platform.conversation.mapper.ConversationMapper;
 import com.jd.genie.platform.conversation.mapper.ConversationMessageMapper;
 import com.jd.genie.platform.conversation.snapshot.SnapshotValidator;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class ConversationExecutionService implements ConversationExecutionPort {
     private static final String DEFAULT_TITLE = "\u65b0\u5bf9\u8bdd";
     private static final int MAX_QUERY_CODE_POINTS = 20_000;
@@ -42,10 +41,26 @@ public class ConversationExecutionService implements ConversationExecutionPort {
 
     private final ConversationMapper conversationMapper;
     private final ConversationMessageMapper conversationMessageMapper;
+    private final ConversationHistoryService conversationHistoryService;
     private final Clock clock = Clock.systemUTC();
 
     @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}")
     private int snapshotMaxBytes = 8_388_608;
+
+    @Autowired
+    public ConversationExecutionService(ConversationMapper conversationMapper,
+                                        ConversationMessageMapper conversationMessageMapper,
+                                        ConversationHistoryService conversationHistoryService) {
+        this.conversationMapper = conversationMapper;
+        this.conversationMessageMapper = conversationMessageMapper;
+        this.conversationHistoryService = conversationHistoryService;
+    }
+
+    public ConversationExecutionService(ConversationMapper conversationMapper,
+                                 ConversationMessageMapper conversationMessageMapper) {
+        this(conversationMapper, conversationMessageMapper,
+            new ConversationHistoryService(conversationMapper, conversationMessageMapper));
+    }
 
     @Override
     @Transactional
@@ -143,7 +158,8 @@ public class ConversationExecutionService implements ConversationExecutionPort {
     public List<ConversationHistoryItem> loadCompletedHistory(CurrentUser currentUser, String conversationId,
                                                               String excludeRequestId, int maxTurns,
                                                               int maxCharacters) {
-        throw new UnsupportedOperationException("loadCompletedHistory is not implemented in MVP-B phase 4");
+        return conversationHistoryService.loadCompletedHistory(
+            currentUser, conversationId, excludeRequestId, maxTurns, maxCharacters);
     }
 
     private void finishActiveAssistant(CurrentUser currentUser, MessageFailureCommand command, String toStatus) {
