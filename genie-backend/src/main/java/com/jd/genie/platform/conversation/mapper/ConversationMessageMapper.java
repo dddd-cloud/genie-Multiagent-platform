@@ -116,7 +116,7 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
     @Update("""
         UPDATE conversation_message m
         JOIN conversation c ON c.id = m.conversation_id
-        SET m.status = #{toStatus},
+        SET m.status = 'STREAMING',
             m.updated_at = #{updatedAt},
             m.version = m.version + 1
         WHERE c.tenant_id = #{tenantId}
@@ -124,14 +124,12 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
           AND c.deleted_at IS NULL
           AND m.id = #{assistantMessageId}
           AND m.role = 'ASSISTANT'
-          AND m.status = #{fromStatus}
+          AND m.status = 'PENDING'
         """)
-    int updateAssistantStatusOwned(@Param("tenantId") String tenantId,
-                                   @Param("ownerId") String ownerId,
-                                   @Param("assistantMessageId") String assistantMessageId,
-                                   @Param("fromStatus") String fromStatus,
-                                   @Param("toStatus") String toStatus,
-                                   @Param("updatedAt") Instant updatedAt);
+    int markOwnedAssistantStreaming(@Param("tenantId") String tenantId,
+                                    @Param("ownerId") String ownerId,
+                                    @Param("assistantMessageId") String assistantMessageId,
+                                    @Param("updatedAt") Instant updatedAt);
 
     @Update("""
         UPDATE conversation_message m
@@ -151,13 +149,13 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
           AND m.role = 'ASSISTANT'
           AND m.status = 'STREAMING'
         """)
-    int completeAssistantOwned(@Param("tenantId") String tenantId,
-                               @Param("ownerId") String ownerId,
-                               @Param("assistantMessageId") String assistantMessageId,
-                               @Param("finalContent") String finalContent,
-                               @Param("snapshotJson") String snapshotJson,
-                               @Param("payloadVersion") Integer payloadVersion,
-                               @Param("updatedAt") Instant updatedAt);
+    int completeOwnedStreamingAssistant(@Param("tenantId") String tenantId,
+                                        @Param("ownerId") String ownerId,
+                                        @Param("assistantMessageId") String assistantMessageId,
+                                        @Param("finalContent") String finalContent,
+                                        @Param("snapshotJson") String snapshotJson,
+                                        @Param("payloadVersion") Integer payloadVersion,
+                                        @Param("updatedAt") Instant updatedAt);
 
     @Update("""
         UPDATE conversation_message m
@@ -174,16 +172,15 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
           AND c.deleted_at IS NULL
           AND m.id = #{assistantMessageId}
           AND m.role = 'ASSISTANT'
-          AND m.status = #{fromStatus}
+          AND m.status IN ('PENDING', 'STREAMING')
         """)
-    int failAssistantOwned(@Param("tenantId") String tenantId,
-                           @Param("ownerId") String ownerId,
-                           @Param("assistantMessageId") String assistantMessageId,
-                           @Param("fromStatus") String fromStatus,
-                           @Param("toStatus") String toStatus,
-                           @Param("errorCode") String errorCode,
-                           @Param("errorMessage") String errorMessage,
-                           @Param("partialSnapshotJson") String partialSnapshotJson,
-                           @Param("payloadVersion") Integer payloadVersion,
-                           @Param("updatedAt") Instant updatedAt);
+    int finishOwnedActiveAssistant(@Param("tenantId") String tenantId,
+                                   @Param("ownerId") String ownerId,
+                                   @Param("assistantMessageId") String assistantMessageId,
+                                   @Param("toStatus") String toStatus,
+                                   @Param("errorCode") String errorCode,
+                                   @Param("errorMessage") String errorMessage,
+                                   @Param("partialSnapshotJson") String partialSnapshotJson,
+                                   @Param("payloadVersion") Integer payloadVersion,
+                                   @Param("updatedAt") Instant updatedAt);
 }
