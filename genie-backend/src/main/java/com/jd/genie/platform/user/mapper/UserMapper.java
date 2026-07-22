@@ -5,6 +5,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+import java.util.List;
 
 @Mapper
 public interface UserMapper {
@@ -19,6 +21,24 @@ public interface UserMapper {
 
     @Select("SELECT COUNT(*) FROM app_user")
     long countAll();
+
+    @Select("SELECT id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version "
+        + "FROM app_user WHERE tenant_id = #{tenantId} ORDER BY created_at DESC, id DESC LIMIT #{limit} OFFSET #{offset}")
+    List<UserEntity> listByTenant(@Param("tenantId") String tenantId, @Param("offset") int offset, @Param("limit") int limit);
+
+    @Select("SELECT id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version "
+        + "FROM app_user WHERE id = #{userId} AND tenant_id = #{tenantId}")
+    UserEntity findByIdAndTenantId(@Param("userId") String userId, @Param("tenantId") String tenantId);
+
+    @Update("UPDATE app_user SET status = #{status}, updated_at = #{updatedAt}, version = version + 1 "
+        + "WHERE id = #{userId} AND tenant_id = #{tenantId}")
+    int updateStatusByIdAndTenantId(@Param("userId") String userId, @Param("tenantId") String tenantId,
+                                    @Param("status") String status, @Param("updatedAt") java.time.LocalDateTime updatedAt);
+
+    @Update("UPDATE app_user SET password_hash = #{passwordHash}, updated_at = #{updatedAt}, version = version + 1 "
+        + "WHERE id = #{userId} AND tenant_id = #{tenantId}")
+    int updatePasswordByIdAndTenantId(@Param("userId") String userId, @Param("tenantId") String tenantId,
+                                      @Param("passwordHash") String passwordHash, @Param("updatedAt") java.time.LocalDateTime updatedAt);
 
     @Insert("INSERT INTO app_user (id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version) "
         + "VALUES (#{id}, #{tenantId}, #{username}, #{displayName}, #{passwordHash}, #{role}, #{status}, "

@@ -83,7 +83,8 @@ public class SecurityConfig {
                 .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health", "/h2-console/**").permitAll()
-                .requestMatchers("/api/v1/auth/logout", "/api/v1/users/me", "/data/**", "/web/api/v1/gpt/**").authenticated()
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/auth/logout", "/api/v1/users/me", "/api/v1/conversations/**", "/data/**", "/web/api/v1/gpt/**").authenticated()
                 .anyRequest().authenticated())
             .logout(logout -> logout.logoutUrl("/api/v1/auth/logout")
                 .logoutSuccessHandler((request, response, authentication) -> JsonApiWriter.write(objectMapper, response, 200, "OK", "success", null)))
