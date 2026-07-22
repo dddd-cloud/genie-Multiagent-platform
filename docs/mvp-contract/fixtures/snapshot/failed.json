@@ -1,0 +1,48 @@
+{
+  "payloadVersion": 1,
+  "truncated": false,
+  "events": [
+    {
+      "status": "running",
+      "response": "",
+      "responseAll": "",
+      "finished": false,
+      "useTimes": 1,
+      "useTokens": 5,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-003:req-fail-001",
+      "reqId": "genieconv-003:req-fail-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    },
+    {
+      "status": "failed",
+      "response": "",
+      "responseAll": "",
+      "finished": true,
+      "useTimes": 2,
+      "useTokens": 10,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-003:req-fail-001",
+      "reqId": "genieconv-003:req-fail-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": "Agent downstream service unavailable"
+    }
+  ]
+}

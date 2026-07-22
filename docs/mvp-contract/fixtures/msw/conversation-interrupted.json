@@ -1,0 +1,45 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "id": "conv-interrupted-001",
+    "title": "中断对话",
+    "lastMessageAt": "2026-07-21T04:00:00Z",
+    "createdAt": "2026-07-21T04:00:00Z",
+    "updatedAt": "2026-07-21T04:00:03Z",
+    "messages": [
+      {
+        "id": "msg-user-004",
+        "turnNo": 1,
+        "role": "USER",
+        "status": "COMPLETED",
+        "requestId": "req-interrupt-001",
+        "content": "长时间任务",
+        "streamSnapshot": null,
+        "payloadVersion": 1,
+        "deepThink": 0,
+        "outputStyle": "docs",
+        "errorCode": null,
+        "errorMessage": null,
+        "createdAt": "2026-07-21T04:00:00Z",
+        "updatedAt": "2026-07-21T04:00:00Z"
+      },
+      {
+        "id": "msg-asst-004",
+        "turnNo": 1,
+        "role": "ASSISTANT",
+        "status": "INTERRUPTED",
+        "requestId": "req-interrupt-001",
+        "content": null,
+        "streamSnapshot": "{\"payloadVersion\":1,\"truncated\":false,\"events\":[]}",
+        "payloadVersion": 1,
+        "deepThink": null,
+        "outputStyle": null,
+        "errorCode": "CLIENT_DISCONNECTED",
+        "errorMessage": "Client disconnected during streaming",
+        "createdAt": "2026-07-21T04:00:01Z",
+        "updatedAt": "2026-07-21T04:00:03Z"
+      }
+    ]
+  }
+}

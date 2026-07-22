@@ -1,0 +1,27 @@
+{
+  "payloadVersion": 1,
+  "truncated": true,
+  "events": [
+    {
+      "status": "success",
+      "response": "最终回答仍可恢复。",
+      "responseAll": "最终回答仍可恢复。",
+      "finished": true,
+      "useTimes": 10,
+      "useTokens": 500,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-005:req-trunc-001",
+      "reqId": "genieconv-005:req-trunc-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    }
+  ]
+}

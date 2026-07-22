@@ -1,0 +1,48 @@
+{
+  "payloadVersion": 1,
+  "truncated": false,
+  "events": [
+    {
+      "status": "running",
+      "response": "正在",
+      "responseAll": "正在",
+      "finished": false,
+      "useTimes": 1,
+      "useTokens": 5,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-001:req-react-001",
+      "reqId": "genieconv-001:req-react-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    },
+    {
+      "status": "success",
+      "response": "分析完成，这是 ReAct 模式的最终回答。",
+      "responseAll": "分析完成，这是 ReAct 模式的最终回答。",
+      "finished": true,
+      "useTimes": 3,
+      "useTokens": 120,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-001:req-react-001",
+      "reqId": "genieconv-001:req-react-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    }
+  ]
+}

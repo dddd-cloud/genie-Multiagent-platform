@@ -1,0 +1,10 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "items": [],
+    "page": 1,
+    "pageSize": 20,
+    "hasMore": false
+  }
+}

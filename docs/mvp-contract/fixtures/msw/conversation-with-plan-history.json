@@ -1,0 +1,45 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "id": "conv-plan-001",
+    "title": "Plan 对话",
+    "lastMessageAt": "2026-07-21T02:10:00Z",
+    "createdAt": "2026-07-21T02:00:00Z",
+    "updatedAt": "2026-07-21T02:10:00Z",
+    "messages": [
+      {
+        "id": "msg-user-002",
+        "turnNo": 1,
+        "role": "USER",
+        "status": "COMPLETED",
+        "requestId": "req-plan-001",
+        "content": "制定分析计划",
+        "streamSnapshot": null,
+        "payloadVersion": 1,
+        "deepThink": 1,
+        "outputStyle": "docs",
+        "errorCode": null,
+        "errorMessage": null,
+        "createdAt": "2026-07-21T02:00:00Z",
+        "updatedAt": "2026-07-21T02:00:00Z"
+      },
+      {
+        "id": "msg-asst-002",
+        "turnNo": 1,
+        "role": "ASSISTANT",
+        "status": "COMPLETED",
+        "requestId": "req-plan-001",
+        "content": "Plan 模式分析完成，已生成完整报告。",
+        "streamSnapshot": "{\"payloadVersion\":1,\"truncated\":false,\"events\":[]}",
+        "payloadVersion": 1,
+        "deepThink": null,
+        "outputStyle": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "createdAt": "2026-07-21T02:00:05Z",
+        "updatedAt": "2026-07-21T02:10:00Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "id": "conv-failed-001",
+    "title": "失败对话",
+    "lastMessageAt": "2026-07-21T03:00:00Z",
+    "createdAt": "2026-07-21T03:00:00Z",
+    "updatedAt": "2026-07-21T03:00:05Z",
+    "messages": [
+      {
+        "id": "msg-user-003",
+        "turnNo": 1,
+        "role": "USER",
+        "status": "COMPLETED",
+        "requestId": "req-fail-001",
+        "content": "执行失败任务",
+        "streamSnapshot": null,
+        "payloadVersion": 1,
+        "deepThink": 0,
+        "outputStyle": "docs",
+        "errorCode": null,
+        "errorMessage": null,
+        "createdAt": "2026-07-21T03:00:00Z",
+        "updatedAt": "2026-07-21T03:00:00Z"
+      },
+      {
+        "id": "msg-asst-003",
+        "turnNo": 1,
+        "role": "ASSISTANT",
+        "status": "FAILED",
+        "requestId": "req-fail-001",
+        "content": null,
+        "streamSnapshot": "{\"payloadVersion\":1,\"truncated\":false,\"events\":[]}",
+        "payloadVersion": 1,
+        "deepThink": null,
+        "outputStyle": null,
+        "errorCode": "AGENT_DOWNSTREAM_ERROR",
+        "errorMessage": "Agent downstream service unavailable",
+        "createdAt": "2026-07-21T03:00:01Z",
+        "updatedAt": "2026-07-21T03:00:05Z"
+      }
+    ]
+  }
+}

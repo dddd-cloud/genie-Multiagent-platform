@@ -1,0 +1,48 @@
+{
+  "payloadVersion": 1,
+  "truncated": false,
+  "events": [
+    {
+      "status": "running",
+      "response": "部分",
+      "responseAll": "部分",
+      "finished": false,
+      "useTimes": 1,
+      "useTokens": 8,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-004:req-interrupt-001",
+      "reqId": "genieconv-004:req-interrupt-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    },
+    {
+      "status": "running",
+      "response": "回答",
+      "responseAll": "部分回答",
+      "finished": false,
+      "useTimes": 2,
+      "useTokens": 15,
+      "resultMap": {
+        "agentType": "5",
+        "multiAgent": {},
+        "eventData": {}
+      },
+      "responseType": "text",
+      "traceId": "genieconv-004:req-interrupt-001",
+      "reqId": "genieconv-004:req-interrupt-001",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    }
+  ]
+}

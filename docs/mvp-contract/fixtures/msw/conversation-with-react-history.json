@@ -1,0 +1,45 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "id": "conv-react-001",
+    "title": "ReAct 对话",
+    "lastMessageAt": "2026-07-21T01:10:00Z",
+    "createdAt": "2026-07-21T01:00:00Z",
+    "updatedAt": "2026-07-21T01:10:00Z",
+    "messages": [
+      {
+        "id": "msg-user-001",
+        "turnNo": 1,
+        "role": "USER",
+        "status": "COMPLETED",
+        "requestId": "req-react-001",
+        "content": "帮我分析这个项目",
+        "streamSnapshot": null,
+        "payloadVersion": 1,
+        "deepThink": 0,
+        "outputStyle": "docs",
+        "errorCode": null,
+        "errorMessage": null,
+        "createdAt": "2026-07-21T01:00:00Z",
+        "updatedAt": "2026-07-21T01:00:00Z"
+      },
+      {
+        "id": "msg-asst-001",
+        "turnNo": 1,
+        "role": "ASSISTANT",
+        "status": "COMPLETED",
+        "requestId": "req-react-001",
+        "content": "分析完成，这是 ReAct 模式的最终回答。",
+        "streamSnapshot": "{\"payloadVersion\":1,\"truncated\":false,\"events\":[]}",
+        "payloadVersion": 1,
+        "deepThink": null,
+        "outputStyle": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "createdAt": "2026-07-21T01:00:05Z",
+        "updatedAt": "2026-07-21T01:01:00Z"
+      }
+    ]
+  }
+}

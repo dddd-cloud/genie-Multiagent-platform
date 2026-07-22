@@ -1,0 +1,10 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "id": "user-a-id",
+    "username": "user-a",
+    "displayName": "User A",
+    "role": "USER"
+  }
+}
