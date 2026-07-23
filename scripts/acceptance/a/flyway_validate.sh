@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 command_name="mvn -q -Dtest=MySqlFlywayMigrationTest#validatesAppliedMigrationsWithoutSchemaInitializationFallback test"

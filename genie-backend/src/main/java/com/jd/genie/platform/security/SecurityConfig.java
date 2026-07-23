@@ -2,6 +2,7 @@ package com.jd.genie.platform.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.user.dto.AuthUserResponse;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -99,6 +100,7 @@ public class SecurityConfig {
             .exceptionHandling(errors -> errors.authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
                 .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health", "/h2-console/**").permitAll()
                 .requestMatchers("/AutoAgent").hasAuthority(InternalAgentAuthenticationToken.AUTHORITY)
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

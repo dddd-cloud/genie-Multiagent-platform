@@ -67,8 +67,9 @@ assert_invalid "$admin_jar"
 
 http="$(curl --silent --show-error --dump-header "$headers_file" --output "$response_file" --write-out '%{http_code}' \
   -X POST -H "X-Genie-Internal-Token: $GENIE_INTERNAL_AGENT_TOKEN" -H 'Content-Type: application/json' \
-  --data '{}' "$APP_BASE_URL/AutoAgent")"
-[[ "$http" != "401" ]]
+  --data '{' "$APP_BASE_URL/AutoAgent")"
+[[ "$http" == "400" ]]
 [[ "$(jq -r '.code // empty' "$response_file" 2>/dev/null || true)" != "INTERNAL_TOKEN_INVALID" ]]
+[[ "$(jq -r '.code // empty' "$response_file" 2>/dev/null || true)" != "CSRF_INVALID" ]]
 ! grep -qi '^Set-Cookie: *GENIE_SESSION=' "$headers_file"
 result="PASS"
