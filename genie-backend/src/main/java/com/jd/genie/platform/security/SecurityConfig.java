@@ -5,6 +5,7 @@ import com.jd.genie.platform.user.dto.AuthUserResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -15,6 +16,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -26,6 +28,19 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Bean
+    InternalAgentAuthFilter internalAgentAuthFilter(SecurityProperties securityProperties, ObjectMapper objectMapper) {
+        return new InternalAgentAuthFilter(securityProperties, objectMapper);
+    }
+
+    /** The filter belongs solely to Spring Security's chain, not the servlet container chain. */
+    @Bean
+    FilterRegistrationBean<InternalAgentAuthFilter> internalAgentAuthFilterRegistration(InternalAgentAuthFilter filter) {
+        FilterRegistrationBean<InternalAgentAuthFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
     @Bean
     SecurityContextRepository securityContextRepository() {
@@ -65,7 +80,8 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationConfiguration authenticationConfiguration,
                                             ObjectMapper objectMapper, SecurityContextRepository securityContextRepository,
                                             CookieCsrfTokenRepository csrfTokenRepository,
-                                            CorsConfigurationSource securityCorsConfigurationSource) throws Exception {
+                                            CorsConfigurationSource securityCorsConfigurationSource,
+                                            InternalAgentAuthFilter internalAgentAuthFilter) throws Exception {
         AuthenticationManager authenticationManager = authenticationConfiguration.getAuthenticationManager();
         JsonUsernamePasswordAuthenticationFilter loginFilter = new JsonUsernamePasswordAuthenticationFilter(authenticationManager, objectMapper);
         loginFilter.setSecurityContextRepository(securityContextRepository);
@@ -78,17 +94,20 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .sessionFixation(fixation -> fixation.changeSessionId()))
             .cors(cors -> cors.configurationSource(securityCorsConfigurationSource))
-            .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository))
+            .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
+                .ignoringRequestMatchers("/AutoAgent"))
             .exceptionHandling(errors -> errors.authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
                 .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health", "/h2-console/**").permitAll()
+                .requestMatchers("/AutoAgent").hasAuthority(InternalAgentAuthenticationToken.AUTHORITY)
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/auth/logout", "/api/v1/users/me", "/api/v1/conversations/**", "/data/**", "/web/api/v1/gpt/**").authenticated()
                 .anyRequest().authenticated())
             .logout(logout -> logout.logoutUrl("/api/v1/auth/logout")
                 .logoutSuccessHandler((request, response, authentication) -> JsonApiWriter.write(objectMapper, response, 200, "OK", "success", null)))
-            .addFilterAt(loginFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterAt(loginFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(internalAgentAuthFilter, AuthorizationFilter.class);
         return http.build();
     }
 }
