@@ -13,6 +13,7 @@ import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.config.GenieConfig;
 import com.jd.genie.agent.dto.SopRecallResponse;
 import com.jd.genie.model.req.AgentRequest;
+import com.jd.genie.platform.agentbridge.AgentHistoryMemoryBridge;
 import com.jd.genie.service.AgentHandlerService;
 import com.jd.genie.service.SopRecallService;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class PlanSolveHandlerImpl implements AgentHandlerService {
+    private static final AgentHistoryMemoryBridge HISTORY_MEMORY_BRIDGE = new AgentHistoryMemoryBridge();
 
     @Autowired
     private GenieConfig genieConfig;
@@ -43,6 +45,7 @@ public class PlanSolveHandlerImpl implements AgentHandlerService {
         handleSopRecall(agentContext, request);
 
         PlanningAgent planning = new PlanningAgent(agentContext);
+        HISTORY_MEMORY_BRIDGE.appendTo(planning.getMemory(), request.getMessages());
         ExecutorAgent executor = new ExecutorAgent(agentContext);
         SummaryAgent summary = new SummaryAgent(agentContext);
         summary.setSystemPrompt(summary.getSystemPrompt().replace("{{query}}", request.getQuery()));
