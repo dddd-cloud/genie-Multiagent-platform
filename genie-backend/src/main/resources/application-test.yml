@@ -1,0 +1,16 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: ${GENIE_DB_URL}
+    username: ${GENIE_DB_USERNAME}
+    password: ${GENIE_DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-init-sql: "SET time_zone = '+00:00'"
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
