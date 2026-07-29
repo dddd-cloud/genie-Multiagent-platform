@@ -67,6 +67,13 @@ class AdminUserManagementIntegrationTest {
         mockMvc.perform(get("/api/v1/admin/users").cookie(admin.session())).andExpect(status().isOk()).andExpect(jsonPath("$.data.page").value(1));
         mockMvc.perform(patch("/api/v1/admin/users/{id}/status", id).cookie(admin.session(), admin.csrf()).header("X-XSRF-TOKEN", admin.token()).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DISABLED\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("DISABLED"));
+        mockMvc.perform(patch("/api/v1/admin/users/{id}/status", id).cookie(admin.session(), admin.csrf()).header("X-XSRF-TOKEN", admin.token()).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ACTIVE\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("ACTIVE"));
+        mockMvc.perform(post("/api/v1/admin/users").cookie(admin.session(), admin.csrf()).header("X-XSRF-TOKEN", admin.token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"username\":\"newadminuser\",\"displayName\":\"Duplicate\",\"password\":\"MvpTest-Only-123\",\"role\":\"USER\"}"))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("USER_ALREADY_EXISTS"));
+        mockMvc.perform(patch("/api/v1/admin/users/{id}/status", "missing-user").cookie(admin.session(), admin.csrf()).header("X-XSRF-TOKEN", admin.token()).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DISABLED\"}"))
+            .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
         mockMvc.perform(post("/api/v1/admin/users/{id}/reset-password", id).cookie(admin.session(), admin.csrf()).header("X-XSRF-TOKEN", admin.token()).contentType(MediaType.APPLICATION_JSON).content("{\"newPassword\":\"MvpTest-Only-456\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data").doesNotExist());
         assertFalse(created.getResponse().getContentAsString().contains("passwordHash"));

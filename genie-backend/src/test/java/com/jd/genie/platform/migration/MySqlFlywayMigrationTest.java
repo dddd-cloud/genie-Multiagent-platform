@@ -1,6 +1,7 @@
 package com.jd.genie.platform.migration;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MySQLContainer;
@@ -10,7 +11,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -55,7 +58,18 @@ class MySqlFlywayMigrationTest {
     @Test
     void validatesAppliedMigrationsWithoutSchemaInitializationFallback() {
         assertEquals(0, flyway.validateWithResult().errorDetails == null ? 0 : 1);
-        assertEquals(2, flyway.info().applied().length);
+        Map<String, MigrationState> migrationStates = java.util.Arrays.stream(flyway.info().all())
+            .filter(migration -> migration.getVersion() != null)
+            .collect(Collectors.toMap(
+                migration -> migration.getVersion().getVersion(),
+                migration -> migration.getState()
+            ));
+
+        assertEquals(MigrationState.SUCCESS, migrationStates.get("001"));
+        assertEquals(MigrationState.SUCCESS, migrationStates.get("002"));
+        if (migrationStates.containsKey("003")) {
+            assertEquals(MigrationState.SUCCESS, migrationStates.get("003"));
+        }
     }
 
     private static boolean tableExists(Connection connection, String table) throws SQLException {

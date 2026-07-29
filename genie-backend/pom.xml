@@ -202,9 +202,16 @@
                         <goals><goal>report</goal></goals>
                         <configuration>
                             <includes>
-                                <include>com/jd/genie/platform/security/*</include>
-                                <include>com/jd/genie/platform/user/*</include>
+                                <include>com/jd/genie/platform/security/**</include>
+                                <include>com/jd/genie/platform/user/**</include>
                             </includes>
+                            <excludes>
+                                <exclude>com/jd/genie/platform/user/config/**</exclude>
+                                <exclude>com/jd/genie/platform/user/dto/**</exclude>
+                                <exclude>com/jd/genie/platform/user/entity/**</exclude>
+                                <exclude>com/jd/genie/platform/user/mapper/**</exclude>
+                                <exclude>com/jd/genie/platform/user/service/*Exception</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
                     <execution>
@@ -213,9 +220,16 @@
                         <goals><goal>check</goal></goals>
                         <configuration>
                             <includes>
-                                <include>com/jd/genie/platform/security/*</include>
-                                <include>com/jd/genie/platform/user/*</include>
+                                <include>com/jd/genie/platform/security/**</include>
+                                <include>com/jd/genie/platform/user/**</include>
                             </includes>
+                            <excludes>
+                                <exclude>com/jd/genie/platform/user/config/**</exclude>
+                                <exclude>com/jd/genie/platform/user/dto/**</exclude>
+                                <exclude>com/jd/genie/platform/user/entity/**</exclude>
+                                <exclude>com/jd/genie/platform/user/mapper/**</exclude>
+                                <exclude>com/jd/genie/platform/user/service/*Exception</exclude>
+                            </excludes>
                             <rules>
                                 <rule>
                                     <element>BUNDLE</element>
