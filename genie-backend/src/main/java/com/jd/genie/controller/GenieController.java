@@ -63,7 +63,7 @@ public class GenieController {
                 emitter.send("heartbeat");
             } catch (Exception e) {
                 // 发送心跳失败，关闭连接
-                log.error("{} heartbeat failed, closing connection", requestId, e);
+                log.error("{} heartbeat failed, closing connection", requestId);
                 emitter.completeWithError(e);
             }
         }, HEARTBEAT_INTERVAL, HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
@@ -91,7 +91,7 @@ public class GenieController {
 
         // 监听连接错误事件
         emitter.onError((ex) -> {
-            log.info("{} SSE connection error: ", requestId, ex);
+            log.info("{} SSE connection error", requestId);
             heartbeatFuture.cancel(true);
             emitter.completeWithError(ex);
         });
@@ -106,7 +106,12 @@ public class GenieController {
     @PostMapping("/AutoAgent")
     public SseEmitter AutoAgent(@RequestBody AgentRequest request) throws UnsupportedEncodingException {
 
-        log.info("{} auto agent request: {}", request.getRequestId(), JSON.toJSONString(request));
+        log.info(
+                "{} auto agent request accepted, agentType: {}, outputStyle: {}",
+                request.getRequestId(),
+                request.getAgentType(),
+                request.getOutputStyle()
+        );
 
         Long AUTO_AGENT_SSE_TIMEOUT = 60 * 60 * 1000L;
 
@@ -146,7 +151,7 @@ public class GenieController {
                 emitter.complete();
 
             } catch (Exception e) {
-                log.error("{} auto agent error", request.getRequestId(), e);
+                log.error("{} auto agent failed", request.getRequestId());
             }
         });
 

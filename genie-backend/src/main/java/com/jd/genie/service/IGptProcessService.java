@@ -6,7 +6,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public interface IGptProcessService {
 
     /**
-     * 单智能体，多智能体 Agent 增量接口.
+     * Starts one Agent execution from an untrusted browser request.
+     * Trusted user, trace ID and history are always resolved by the service.
      */
     SseEmitter queryMultiAgentIncrStream(GptQueryReq req);
 }

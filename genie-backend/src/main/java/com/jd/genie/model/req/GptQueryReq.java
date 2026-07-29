@@ -1,9 +1,12 @@
 package com.jd.genie.model.req;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Data
 @Builder
@@ -20,4 +23,6 @@ public class GptQueryReq {
     private String outputStyle;
     private String traceId;
     private String user;
+    @JsonIgnore
+    private List<AgentRequest.Message> historyMessages;
 }
