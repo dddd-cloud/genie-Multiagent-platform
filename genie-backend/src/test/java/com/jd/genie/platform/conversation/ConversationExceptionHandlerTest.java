@@ -5,7 +5,7 @@ import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.conversation.exception.ConversationException;
 import com.jd.genie.platform.conversation.exception.ConversationExceptionHandler;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
@@ -53,7 +53,7 @@ class ConversationExceptionHandlerTest {
             .andExpect(content().string(not(containsString("conversation_message"))));
     }
 
-    @SpringBootConfiguration
+    @Configuration
     @Import({ConversationExceptionHandler.class, ThrowingController.class})
     @ImportAutoConfiguration({
         DispatcherServletAutoConfiguration.class,

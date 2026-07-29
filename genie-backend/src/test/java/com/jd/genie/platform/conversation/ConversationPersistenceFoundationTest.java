@@ -11,7 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
@@ -415,7 +415,7 @@ class ConversationPersistenceFoundationTest {
         return value == null ? null : String.valueOf(value);
     }
 
-    @SpringBootConfiguration
+    @Configuration
     @ImportAutoConfiguration({
         DataSourceAutoConfiguration.class,
         DataSourceTransactionManagerAutoConfiguration.class,
