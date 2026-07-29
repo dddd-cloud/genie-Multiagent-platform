@@ -236,7 +236,7 @@ class ConversationExecutionServiceTest {
         insertConversation("conv-assistant-fail", "tenant-a", "owner-a", "Title", 1L, null);
         insertAssistantMessage("msg-existing-assistant", "conv-assistant-fail", 1L, "COMPLETED", "done", "req-existing");
 
-        assertThrows(DuplicateKeyException.class, () -> executionService.prepareExecution(
+        assertConversationError(MvpErrorCode.MESSAGE_STATE_CONFLICT, () -> executionService.prepareExecution(
             user("tenant-a", "owner-a"), command("conv-assistant-fail", "req-new", "hello", 0, "docs")));
 
         assertEquals(1, countMessages("conv-assistant-fail"));

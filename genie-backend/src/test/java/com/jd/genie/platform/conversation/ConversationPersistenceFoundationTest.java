@@ -1,8 +1,10 @@
 package com.jd.genie.platform.conversation;
 
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
+import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.conversation.entity.ConversationEntity;
 import com.jd.genie.platform.conversation.entity.ConversationMessageEntity;
+import com.jd.genie.platform.conversation.exception.DuplicateConstraintClassifier;
 import com.jd.genie.platform.conversation.mapper.ConversationMapper;
 import com.jd.genie.platform.conversation.mapper.ConversationMessageMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,7 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerA
 import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -217,7 +220,10 @@ class ConversationPersistenceFoundationTest {
             "tenant-a", "owner-a", "conv-msg").size());
 
         ConversationMessageEntity duplicateTurnRole = copyMessage(message, "msg-user-dup-turn", "req-2");
-        assertThrows(Exception.class, () -> conversationMessageMapper.insert(duplicateTurnRole));
+        Exception turnRoleException = assertThrows(Exception.class,
+            () -> conversationMessageMapper.insert(duplicateTurnRole));
+        assertEquals(MvpErrorCode.MESSAGE_STATE_CONFLICT,
+            DuplicateConstraintClassifier.classify(turnRoleException).orElseThrow());
 
         ConversationMessageEntity assistant = copyMessage(message, "msg-asst-1", "req-1");
         assistant.setRole("ASSISTANT");
@@ -228,9 +234,30 @@ class ConversationPersistenceFoundationTest {
 
         ConversationMessageEntity duplicateRequestRole = copyMessage(assistant, "msg-asst-dup-request", "req-1");
         duplicateRequestRole.setTurnNo(3L);
-        assertThrows(Exception.class, () -> conversationMessageMapper.insert(duplicateRequestRole));
+        Exception requestRoleException = assertThrows(Exception.class,
+            () -> conversationMessageMapper.insert(duplicateRequestRole));
+        assertEquals(MvpErrorCode.DUPLICATE_REQUEST,
+            DuplicateConstraintClassifier.classify(requestRoleException).orElseThrow());
     }
 
+
+    @Test
+    void duplicateConstraintClassifierMapsUnknownMysqlDuplicateToInternalError() {
+        jdbcTemplate.execute("""
+            CREATE TABLE duplicate_classifier_unknown (
+                id BIGINT NOT NULL AUTO_INCREMENT,
+                code VARCHAR(16) NOT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY uk_classifier_unknown (code)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+        jdbcTemplate.update("INSERT INTO duplicate_classifier_unknown(code) VALUES (?)", "same");
+
+        DataAccessException exception = assertThrows(DataAccessException.class,
+            () -> jdbcTemplate.update("INSERT INTO duplicate_classifier_unknown(code) VALUES (?)", "same"));
+
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, DuplicateConstraintClassifier.classify(exception).orElseThrow());
+    }
     @Test
     void selectOwnedConversationForUpdateExecutesOnMysql() {
         insertConversation("conv-lock", "tenant-a", "owner-a", null);
@@ -287,7 +314,7 @@ class ConversationPersistenceFoundationTest {
         conversation.setId(id);
         conversation.setTenantId(tenantId);
         conversation.setOwnerId(ownerId);
-        conversation.setTitle("新对话");
+        conversation.setTitle("New chat");
         conversation.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z"));
         conversation.setUpdatedAt(Instant.parse("2026-01-01T00:00:00Z"));
         conversation.setDeletedAt(deletedAt);
