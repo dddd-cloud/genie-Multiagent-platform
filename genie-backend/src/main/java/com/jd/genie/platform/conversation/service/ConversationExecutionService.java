@@ -88,10 +88,16 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         String assistantMessageId = UUID.randomUUID().toString();
 
         try {
-            conversationMessageMapper.insert(userMessage(
+            int insertedUser = conversationMessageMapper.insert(userMessage(
                 userMessageId, valid, turnNo, now));
-            conversationMessageMapper.insert(assistantMessage(
+            if (insertedUser != 1) {
+                throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable");
+            }
+            int insertedAssistant = conversationMessageMapper.insert(assistantMessage(
                 assistantMessageId, valid, turnNo, now));
+            if (insertedAssistant != 1) {
+                throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable");
+            }
             int updated = conversationMapper.completePrepareExecution(
                 currentUser.tenantId(),
                 currentUser.userId(),
@@ -284,6 +290,8 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         message.setRole("USER");
         message.setStatus("COMPLETED");
         message.setContent(command.query());
+        message.setDeepThink(command.deepThink());
+        message.setOutputStyle(command.outputStyle());
         return message;
     }
 
@@ -301,8 +309,6 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         message.setTurnNo(turnNo);
         message.setRequestId(command.requestId());
         message.setPayloadVersion(PAYLOAD_VERSION);
-        message.setDeepThink(command.deepThink());
-        message.setOutputStyle(command.outputStyle());
         message.setCreatedAt(now);
         message.setUpdatedAt(now);
         return message;

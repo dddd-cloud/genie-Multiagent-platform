@@ -59,6 +59,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -144,10 +145,10 @@ class ConversationExecutionServiceTest {
 
     @Test
     void prepareExecutionCreatesUserAndAssistantMessagesAndAdvancesConversation() {
-        insertConversation("conv-normal", "tenant-a", "owner-a", "新对话", 1L, null);
+        insertConversation("conv-normal", "tenant-a", "owner-a", "New chat", 1L, null);
 
         ConversationExecutionResult result = executionService.prepareExecution(user("tenant-a", "owner-a"),
-            command("conv-normal", "req-normal", "  第一行\n第二行  ", 1, "docs"));
+            command("conv-normal", "req-normal", "  first line\nsecond line  ", 1, "docs"));
 
         assertEquals("conv-normal", result.conversationId());
         assertEquals("req-normal", result.requestId());
@@ -167,19 +168,19 @@ class ConversationExecutionServiceTest {
         assertEquals(user.getRequestId(), assistant.getRequestId());
         assertEquals("COMPLETED", user.getStatus());
         assertEquals("PENDING", assistant.getStatus());
-        assertEquals("第一行\n第二行", user.getContent());
+        assertEquals("first line\nsecond line", user.getContent());
         assertNull(assistant.getContent());
         assertEquals(1, user.getDeepThink());
         assertEquals("docs", user.getOutputStyle());
-        assertEquals(1, assistant.getDeepThink());
-        assertEquals("docs", assistant.getOutputStyle());
+        assertNull(assistant.getDeepThink());
+        assertNull(assistant.getOutputStyle());
         assertEquals(1, user.getPayloadVersion());
         assertEquals(1, assistant.getPayloadVersion());
 
         ConversationEntity conversation = conversationMapper.selectOwnedConversation("tenant-a", "owner-a", "conv-normal");
         assertEquals(2L, conversation.getNextTurnNo());
         assertNotNull(conversation.getLastMessageAt());
-        assertEquals("第一行 第二行", conversation.getTitle());
+        assertEquals("New chat", conversation.getTitle());
     }
 
     @Test
@@ -245,6 +246,53 @@ class ConversationExecutionServiceTest {
         assertNull(conversation.getLastMessageAt());
     }
 
+
+    @Test
+    void rollsBackWhenUserInsertReturnsZero() {
+        insertConversation("conv-user-zero", "tenant-a", "owner-a", "Title", 1L, null);
+        ConversationMessageMapper failingMessageMapper = mock(ConversationMessageMapper.class,
+            delegatesTo(conversationMessageMapper));
+        doReturn(0).when(failingMessageMapper).insert(org.mockito.ArgumentMatchers.<ConversationMessageEntity>argThat(message -> message != null
+            && "conv-user-zero".equals(message.getConversationId())
+            && "USER".equals(message.getRole())));
+        ConversationExecutionService failingService = new ConversationExecutionService(conversationMapper, failingMessageMapper);
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+
+        assertConversationError(MvpErrorCode.DATABASE_UNAVAILABLE, () -> transactionTemplate.executeWithoutResult(
+            status -> failingService.prepareExecution(
+                user("tenant-a", "owner-a"),
+                command("conv-user-zero", "req-user-zero", "hello", 0, "docs")
+            )));
+
+        assertEquals(0, countMessages("conv-user-zero"));
+        ConversationEntity conversation = conversationMapper.selectOwnedConversation("tenant-a", "owner-a", "conv-user-zero");
+        assertEquals(1L, conversation.getNextTurnNo());
+        assertNull(conversation.getLastMessageAt());
+    }
+
+    @Test
+    void rollsBackWhenAssistantInsertReturnsZeroAfterUserInsert() {
+        insertConversation("conv-assistant-zero", "tenant-a", "owner-a", "Title", 1L, null);
+        ConversationMessageMapper failingMessageMapper = mock(ConversationMessageMapper.class,
+            delegatesTo(conversationMessageMapper));
+        doReturn(0).when(failingMessageMapper).insert(org.mockito.ArgumentMatchers.<ConversationMessageEntity>argThat(message -> message != null
+            && "conv-assistant-zero".equals(message.getConversationId())
+            && "ASSISTANT".equals(message.getRole())));
+        ConversationExecutionService failingService = new ConversationExecutionService(conversationMapper, failingMessageMapper);
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+
+        assertConversationError(MvpErrorCode.DATABASE_UNAVAILABLE, () -> transactionTemplate.executeWithoutResult(
+            status -> failingService.prepareExecution(
+                user("tenant-a", "owner-a"),
+                command("conv-assistant-zero", "req-assistant-zero", "hello", 0, "docs")
+            )));
+
+        assertEquals(0, countMessages("conv-assistant-zero"));
+        ConversationEntity conversation = conversationMapper.selectOwnedConversation(
+            "tenant-a", "owner-a", "conv-assistant-zero");
+        assertEquals(1L, conversation.getNextTurnNo());
+        assertNull(conversation.getLastMessageAt());
+    }
     @Test
     void rollsBackWhenConversationUpdateFailsAfterMessageInserts() {
         insertConversation("conv-update-fail", "tenant-a", "owner-a", "Title", 1L, null);
