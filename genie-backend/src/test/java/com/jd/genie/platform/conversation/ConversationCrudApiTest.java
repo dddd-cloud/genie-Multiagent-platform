@@ -58,7 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Testcontainers
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 @SpringBootTest(classes = ConversationCrudApiTest.TestConfig.class)
 class ConversationCrudApiTest {
 
@@ -360,6 +360,7 @@ class ConversationCrudApiTest {
     @SpringBootConfiguration
     @Import({
         ConversationController.class,
+        com.jd.genie.platform.conversation.exception.ConversationExceptionHandler.class,
         ConversationService.class
     })
     @ImportAutoConfiguration({
