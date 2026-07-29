@@ -8,13 +8,42 @@
 @config '../tailwind.config.js';
 
 @theme {
-  --spacing: 1px; 
+  --spacing: 1px;
   --default-transition-duration: 0.3s;
+
+  /* Semantic color tokens */
+  --color-brand: #4040FF;
+  --color-brand-hover: #3535E8;
+  --color-brand-soft: #F0F0FF;
+  --color-page: #F5F5F7;
+  --color-sidebar: #F7F7F8;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #FAFAFC;
+  --color-text-primary: #1D1D1F;
+  --color-text-secondary: #6E6E73;
+  --color-text-tertiary: #8E8E93;
+  --color-border: #E5E5EA;
+  --color-border-strong: #D2D2D7;
+  --color-danger: #D92D20;
+  --color-danger-soft: #FEF3F2;
+  --color-success: #15803D;
+  --color-warning: #B54708;
+
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  /* Light shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+
   @keyframes dot-pulse {
     0%,
     100% {
       transform: scale(1);
-      background-color: #acbdff;
+      background-color: #c7c7ff;
     }
     50% {
       transform: scale(1.5); /* 4px * 1.5 = 6px */
@@ -28,10 +57,20 @@ html,
 body {
   margin: 0;
   padding: 0;
-  font-family: Arial, sans-serif;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    Arial,
+    sans-serif;
   font-size: 14px;
-  line-height: 1.5;
-  color: #333;
+  line-height: 1.55;
+  color: #1D1D1F;
+  background-color: #F5F5F7;
   height: 100%;
 }
 
@@ -42,15 +81,16 @@ h4,
 h5,
 h6 {
   margin: 0;
-  font-weight: bold;
+  font-weight: 600;
+  color: #1D1D1F;
 }
 
 a {
-  color: #007bff;
+  color: #4040FF;
   text-decoration: none;
 
   &:hover {
-    color: #0056b3;
+    color: #3535E8;
   }
 }
 
@@ -65,15 +105,15 @@ ol {
   height: 100%;
 }
 
-.no-scrollbar::-webkit-scrollbar { 
-  display: none; 
-} 
- 
-/* 为 IE、Edge 和 Firefox 提供支持 */ 
-.no-scrollbar { 
-  -ms-overflow-style: none;  /* IE 和 Edge */ 
-  scrollbar-width: none;  /* Firefox */ 
-} 
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 为 IE、Edge 和 Firefox 提供支持 */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE 和 Edge */
+  scrollbar-width: none;  /* Firefox */
+}
 
 .delay-400ms {
   animation-delay: 0.4s !important;

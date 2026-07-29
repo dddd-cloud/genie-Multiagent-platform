@@ -64,12 +64,12 @@ const PlanView: GenieType.FC<{
 
   const generateItem = (show?: boolean) => {
     return <>
-      <div className="flex items-center h-32">
+      <div className="flex items-center h-32 text-text-primary font-medium">
         任务进度
-        <div className="ml-auto flex items-center text-[#848581]">
+        <div className="ml-auto flex items-center text-text-tertiary">
           <span className="mr-4 text-[12px]">{showStageIndex + 1} / {stages?.length}</span>
           {/* <UpOutlined   onClick={toggle} /> */}
-          <i className={classNames('transition-all font_family icon-shouqi size-16 flex items-center justify-center hover:bg-gray-300 rounded-[4px] cursor-pointer', { 'rotate-z-180': showComplete })} onClick={toggle} />
+          <i className={classNames('transition-all font_family icon-shouqi size-16 flex items-center justify-center hover:bg-surface-subtle rounded-sm cursor-pointer', { 'rotate-z-180': showComplete })} onClick={toggle} />
         </div>
       </div>
       <PlanItem title={showStage} status={showStageStatus} className={classNames({ 'hidden': !show })} />
@@ -103,13 +103,13 @@ const PlanView: GenieType.FC<{
     return null;
   }
 
-  return <div className="w-full border-[#e9e9f0] mt-[16px] p-[16px] relative">
+  return <div className="w-full border-border mt-[16px] p-[16px] relative">
     <div className="opacity-0">
       {generateItem(true)}
     </div>
     <div
       className={classNames(
-        'w-full rounded-[12px] border-solid border-1 border-[#e9e9f0] mt-[16px] p-[16px] bg-[#fff]',
+        'w-full rounded-md border-solid border border-border mt-[16px] p-[16px] bg-surface shadow-xs',
         'absolute bottom-0 left-0',
         'transition-all duration-300 overflow-hidden',
       )}
@@ -120,7 +120,7 @@ const PlanView: GenieType.FC<{
       </div>
       {showComplete && <Timeline
         className={classNames(
-          "px-12 pb-0 pt-32 bg-[#f9f9fc] rounded-[6px] transition-all duration-300",
+          "px-12 pb-0 pt-32 bg-surface-subtle rounded-sm transition-all duration-300",
         )}
         items={stages?.map((name, index) => {
           const status = stepStatus?.[index];
@@ -129,8 +129,8 @@ const PlanView: GenieType.FC<{
           return {
             dot: getStatusIcon(status),
             children: <div>
-              <div className="text-[#80d1ee6]">{name}</div>
-              <div className="text-gray text-[12px] text-[#2029459e]">{stepDesc}</div>
+              <div className="text-text-primary">{name}</div>
+              <div className="text-[12px] text-text-secondary">{stepDesc}</div>
             </div>,
             key: name,
           };
