@@ -1,0 +1,190 @@
+# JoyAgent MVP acceptance stack (D ownership).
+# Secrets MUST come from the environment / .env — never commit real values.
+# Required env vars (fail fast via ${VAR:?required}):
+#   GENIE_DB_USERNAME
+#   GENIE_DB_PASSWORD
+#   GENIE_BOOTSTRAP_ADMIN_USERNAME
+#   GENIE_BOOTSTRAP_ADMIN_PASSWORD
+#   GENIE_INTERNAL_AGENT_TOKEN
+#   MVP_ACCEPTANCE_USER_PASSWORD
+#   MVP_ACCEPTANCE_ADMIN_PASSWORD
+#
+# Optional overrides:
+#   SPRING_PROFILES_ACTIVE (default: mvp-acceptance)
+#   MVP_FAKE_AGENT_MODE / MVP_FAKE_AGENT_EVENT_COUNT / MVP_FAKE_AGENT_DELAY_MS
+#   GENIE_SESSION_TIMEOUT / GENIE_STREAM_SNAPSHOT_MAX_BYTES / …
+#
+# Ready checks (from genie-backend network namespace — tool/client use network_mode: service:genie-backend):
+#   curl -fsS http://127.0.0.1:1601/openapi.json
+#   curl -fsS http://127.0.0.1:8188/health
+# Host publish: ONLY ui :3000. MySQL/backend/tool/client stay on the compose network.
+
+name: joyagent-mvp
+
+services:
+  mysql:
+    # Pin digest at freeze/commit time, e.g. mysql:8.0@sha256:<digest>
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: genie
+      MYSQL_USER: ${GENIE_DB_USERNAME:?required}
+      MYSQL_PASSWORD: ${GENIE_DB_PASSWORD:?required}
+      MYSQL_ROOT_PASSWORD: ${GENIE_DB_PASSWORD:?required}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mvp_mysql_data:/var/lib/mysql
+    # No host ports — MySQL is internal-only.
+    healthcheck:
+      # $$ → container $MYSQL_ROOT_PASSWORD (set from GENIE_DB_PASSWORD above)
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - mvp
+
+  genie-backend:
+    image: maven:3.9.9-eclipse-temurin-17
+    working_dir: /workspace/genie-backend
+    volumes:
+      - ../genie-backend:/workspace/genie-backend
+      - mvp_m2_cache:/root/.m2
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-mvp-acceptance}
+      GENIE_DB_URL: jdbc:mysql://mysql:3306/genie?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+      GENIE_DB_USERNAME: ${GENIE_DB_USERNAME:?required}
+      GENIE_DB_PASSWORD: ${GENIE_DB_PASSWORD:?required}
+      GENIE_BOOTSTRAP_ADMIN_USERNAME: ${GENIE_BOOTSTRAP_ADMIN_USERNAME:?required}
+      GENIE_BOOTSTRAP_ADMIN_PASSWORD: ${GENIE_BOOTSTRAP_ADMIN_PASSWORD:?required}
+      GENIE_INTERNAL_AGENT_TOKEN: ${GENIE_INTERNAL_AGENT_TOKEN:?required}
+      MVP_ACCEPTANCE_USER_PASSWORD: ${MVP_ACCEPTANCE_USER_PASSWORD:?required}
+      MVP_ACCEPTANCE_ADMIN_PASSWORD: ${MVP_ACCEPTANCE_ADMIN_PASSWORD:?required}
+      MVP_FAKE_AGENT_MODE: ${MVP_FAKE_AGENT_MODE:-SUCCESS}
+      MVP_FAKE_AGENT_EVENT_COUNT: ${MVP_FAKE_AGENT_EVENT_COUNT:-5}
+      MVP_FAKE_AGENT_DELAY_MS: ${MVP_FAKE_AGENT_DELAY_MS:-50}
+      GENIE_SESSION_TIMEOUT: ${GENIE_SESSION_TIMEOUT:-12h}
+      GENIE_STREAM_SNAPSHOT_MAX_BYTES: ${GENIE_STREAM_SNAPSHOT_MAX_BYTES:-8388608}
+      GENIE_HISTORY_MAX_TURNS: ${GENIE_HISTORY_MAX_TURNS:-6}
+      GENIE_HISTORY_MAX_CHARACTERS: ${GENIE_HISTORY_MAX_CHARACTERS:-12000}
+      GENIE_SSE_TIMEOUT_MILLIS: ${GENIE_SSE_TIMEOUT_MILLIS:-3600000}
+    # Foreground Java only — do NOT use start.sh backgrounding.
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        mvn -DskipTests package
+        exec java \
+          -classpath "target/genie-backend/conf/:target/genie-backend/lib/*" \
+          -Dbasedir=target/genie-backend \
+          -Dfile.encoding=UTF-8 \
+          com.jd.genie.GenieApplication
+    # No host port publish in formal acceptance compose (UI proxies via compose DNS).
+    expose:
+      - "8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      # bash /dev/tcp avoids requiring curl in the maven image
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /web/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; timeout 5 cat <&3 | grep -Eqi \"(200 OK|ok)\"'",
+        ]
+      interval: 10s
+      timeout: 8s
+      retries: 36
+      start_period: 180s
+    networks:
+      - mvp
+
+  # Shares genie-backend netns → reachable as 127.0.0.1:1601 from backend.
+  genie-tool:
+    image: python:3.11
+    working_dir: /workspace/genie-tool
+    volumes:
+      - ../genie-tool:/workspace/genie-tool
+      - mvp_uv_tool_cache:/root/.cache/uv
+    network_mode: "service:genie-backend"
+    environment:
+      UV_LINK_MODE: copy
+    depends_on:
+      genie-backend:
+        condition: service_started
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        pip install --no-cache-dir 'uv==0.6.14'
+        uv sync --frozen
+        uv run python -m genie_tool.db.db_engine
+        exec uv run python server.py
+
+  # Shares genie-backend netns → reachable as 127.0.0.1:8188 from backend.
+  genie-client:
+    image: python:3.11
+    working_dir: /workspace/genie-client
+    volumes:
+      - ../genie-client:/workspace/genie-client
+      - mvp_uv_client_cache:/root/.cache/uv
+    network_mode: "service:genie-backend"
+    environment:
+      UV_LINK_MODE: copy
+    depends_on:
+      genie-backend:
+        condition: service_started
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        pip install --no-cache-dir 'uv==0.6.14'
+        uv sync --frozen
+        exec uv run python server.py
+
+  ui:
+    image: node:20
+    working_dir: /workspace/ui
+    volumes:
+      - ../ui:/workspace/ui
+      - mvp_pnpm_store:/root/.local/share/pnpm
+    environment:
+      SERVICE_BASE_URL: http://genie-backend:8080
+      CI: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      genie-backend:
+        condition: service_healthy
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        corepack enable
+        corepack prepare pnpm@9.15.0 --activate
+        pnpm install --frozen-lockfile
+        pnpm build
+        exec pnpm preview --host 0.0.0.0 --port 3000
+    networks:
+      - mvp
+
+volumes:
+  mvp_mysql_data:
+  mvp_m2_cache:
+  mvp_uv_tool_cache:
+  mvp_uv_client_cache:
+  mvp_pnpm_store:
+
+networks:
+  mvp:
+    driver: bridge

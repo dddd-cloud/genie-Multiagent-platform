@@ -86,72 +86,93 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     return `⏎发送，${getOS() === "Mac" ? "⌘" : "^"} + ⏎ 换行`;
   }, []);
 
+  const canSend = Boolean(question) && !disabled;
+
   return (
-    <div className={showBtn ? "rounded-[12px] bg-[linear-gradient(to_bottom_right,#4040ff,#ff49fd,#d763fc,#3cc4fa)] p-1" : ""}>
-      <div className="rounded-[12px] border border-[#E9E9F0] overflow-hidden p-[12px] bg-[#fff]">
-        <div className="relative">
-          <TextArea
-            ref={textareaRef}
-            value={question}
-            placeholder={placeholder}
-            className={classNames("h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-[#fff]", showBtn && product ? "indent-86" : "")}
-            onChange={questionChange}
-            onPressEnter={pressEnter}
-            onKeyDown={(event) => {
-              tempData.current.cmdPress = event.metaKey || event.ctrlKey;
-            }}
-            onKeyUp={() => {
-              tempData.current.cmdPress = false;
-            }}
-            onCompositionStart={() => {
-              tempData.current.compositing = true;
-            }}
-            onCompositionEnd={() => {
-              tempData.current.compositing = false;
-            }}
-          />
-          {showBtn && product ? (
-            <div className="h-[24px] w-[80px] absolute top-0 left-0 flex items-center justify-center rounded-[6px] bg-[#f4f4f9] text-[12px] ">
-              <i className={`font_family ${product.img} ${product.color} text-14`}></i>
-              <div className="ml-[6px]">{product.name}</div>
-            </div>
-          ) : null}
-        </div>
-        <div className="h-30 flex justify-between items-center mt-[6px]">
-          {showBtn ? (
-            <div>
-              <Button
-                color={deepThink ? "primary" : "default"}
-                variant="outlined"
-                className={classNames(
-                  `text-[12px] p-[8px] h-[28px] transition-all hover:bg-[rgba(64,64,255,0.02)] hover:border-[rgba(64,64,255,0.2)] ${deepThink ? "hover:text-#4040ffb2" : "hover:text-[#333]"}`
-                )}
-                onClick={changeThinkStatus}
-              >
-                <i className="font_family icon-shendusikao"></i>
-                <span className="ml-[-4px]">深度研究</span>
-              </Button>
-              {product?.type === "dataAgent" && (
-                <Tooltip placement="right" title="查看知识库">
+    <div
+      className={classNames(
+        "rounded-lg border border-border bg-surface overflow-hidden p-[12px] transition-[border-color,box-shadow] duration-150",
+        "focus-within:border-brand focus-within:shadow-[0_0_0_3px_rgba(64,64,255,0.12)]",
+      )}
+    >
+      <div className="relative">
+        <TextArea
+          ref={textareaRef}
+          value={question}
+          placeholder={placeholder}
+          className={classNames(
+            "h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-transparent text-text-primary",
+            showBtn && product ? "indent-86" : "",
+          )}
+          onChange={questionChange}
+          onPressEnter={pressEnter}
+          onKeyDown={(event) => {
+            tempData.current.cmdPress = event.metaKey || event.ctrlKey;
+          }}
+          onKeyUp={() => {
+            tempData.current.cmdPress = false;
+          }}
+          onCompositionStart={() => {
+            tempData.current.compositing = true;
+          }}
+          onCompositionEnd={() => {
+            tempData.current.compositing = false;
+          }}
+        />
+        {showBtn && product ? (
+          <div className="h-[24px] w-[80px] absolute top-0 left-0 flex items-center justify-center rounded-sm bg-brand-soft text-text-primary text-[12px]">
+            <i className={`font_family ${product.img} ${product.color} text-[14px]`}></i>
+            <div className="ml-[6px]">{product.name}</div>
+          </div>
+        ) : null}
+      </div>
+      <div className="h-30 flex justify-between items-center mt-[6px]">
+        {showBtn ? (
+          <div className="flex items-center">
+            <Button
+              color={deepThink ? "primary" : "default"}
+              variant="outlined"
+              className={classNames(
+                "text-[12px] p-[8px] h-[28px] transition-colors duration-150",
+                deepThink
+                  ? "hover:text-brand"
+                  : "hover:text-text-primary hover:border-border-strong",
+              )}
+              onClick={changeThinkStatus}
+            >
+              <i className="font_family icon-shendusikao"></i>
+              <span className="ml-[-4px]">深度研究</span>
+            </Button>
+            {product?.type === "dataAgent" && (
+              <Tooltip placement="right" title="查看知识库">
                 <i
-                  className="font_family icon-zhishiku cursor-pointer text-[#4040ffb2] text-[18px] ml-[8px] border border-[#4040ffb2] rounded-tr-lg rounded-bl-lg p-[3px]"
+                  className="font_family icon-zhishiku cursor-pointer text-brand text-[18px] ml-[8px] border border-brand rounded-tr-md rounded-bl-md p-[3px] hover:bg-brand-soft transition-colors duration-150"
                   onClick={() => dbsShow && dbsShow(true)}
                 ></i>
-                </Tooltip>
-              )}
-            </div>
-          ) : (
-            <div></div>
-          )}
-          <div className="flex items-center">
-            <span className="text-[12px] text-gray-300 mr-8 flex items-center">{enterTip}</span>
-            <Tooltip title="发送">
-              <i
-                className={`font_family icon-fasongtianchong ${!question || disabled ? "cursor-not-allowed text-[#ccc] pointer-events-none" : "cursor-pointer"}`}
-                onClick={sendMessage}
-              ></i>
-            </Tooltip>
+              </Tooltip>
+            )}
           </div>
+        ) : (
+          <div></div>
+        )}
+        <div className="flex items-center">
+          <span className="text-[12px] text-text-tertiary mr-8 flex items-center">
+            {enterTip}
+          </span>
+          <Tooltip title="发送">
+            <button
+              type="button"
+              aria-label="发送"
+              disabled={!canSend}
+              className={classNames(
+                "font_family icon-fasongtianchong border-0 bg-transparent p-0 leading-none transition-colors duration-150",
+                canSend
+                  ? "cursor-pointer text-brand hover:text-brand-hover"
+                  : "cursor-not-allowed text-text-tertiary",
+              )}
+              onClick={sendMessage}
+            />
+          </Tooltip>
         </div>
       </div>
     </div>

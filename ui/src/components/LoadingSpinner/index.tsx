@@ -8,9 +8,11 @@ const LoadingSpinner: GenieType.FC<{
   return (
     <>
       <div className={classNames('relative size-[1em] shrink-0', className)}>
-        <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#4040ff] to-transparent animate-spin bg-clip-padding p-2">
-          <div className="absolute inset-2 rounded-full" style={{ backgroundColor: color }}></div>
-        </div>
+        <div className="absolute inset-0 rounded-full border-2 border-brand/20 border-t-brand animate-spin box-border" />
+        <div
+          className="absolute inset-[3px] rounded-full"
+          style={{ backgroundColor: color }}
+        />
       </div>
       {children}
     </>

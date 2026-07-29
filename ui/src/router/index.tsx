@@ -2,46 +2,79 @@ import React, { Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import Layout from '@/layout/index';
 import { Loading } from '@/components';
+import AuthProvider from '@/features/auth/AuthProvider';
+import RequireAuth from '@/features/auth/RequireAuth';
 
-// 使用常量存储路由路径
-const ROUTES = {
-  HOME: '/',
-  NOT_FOUND: '*',
-};
-
-// 使用 React.lazy 懒加载组件
 const Home = React.lazy(() => import('@/pages/Home'));
+const LoginPage = React.lazy(() => import('@/pages/Login'));
 const NotFound = React.lazy(() => import('@/components/NotFound'));
+const ConversationLayout = React.lazy(
+  () => import('@/features/conversation/ConversationLayout'),
+);
+const ConversationPage = React.lazy(
+  () => import('@/features/conversation/ConversationPage'),
+);
 
-// 创建路由配置
 const router = createBrowserRouter([
   {
-    path: ROUTES.HOME,
-    element: <Layout />,
+    element: (
+      <AuthProvider>
+        <Layout />
+      </AuthProvider>
+    ),
     children: [
       {
         index: true,
+        element: <Navigate to="/app" replace />,
+      },
+      {
+        path: 'login',
         element: (
-          <Suspense fallback={<Loading loading={true} className="h-full"/>}>
-            <Home />
+          <Suspense fallback={<Loading loading className="h-full" />}>
+            <LoginPage />
           </Suspense>
         ),
       },
       {
-        path: ROUTES.NOT_FOUND,
+        element: <RequireAuth />,
+        children: [
+          {
+            path: 'app',
+            element: (
+              <Suspense fallback={<Loading loading className="h-full" />}>
+                <ConversationLayout />
+              </Suspense>
+            ),
+            children: [
+              {
+                index: true,
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <Home />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'chat/:conversationId',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <ConversationPage />
+                  </Suspense>
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        path: '*',
         element: (
-          <Suspense fallback={<Loading loading={true} className="h-full"/>}>
+          <Suspense fallback={<Loading loading className="h-full" />}>
             <NotFound />
           </Suspense>
         ),
       },
     ],
   },
-  // 重定向所有未匹配的路由到 404 页面
-  {
-    path: '*',
-    element: <Navigate to={ROUTES.NOT_FOUND} replace />,
-  },
 ]);
-
 export default router;

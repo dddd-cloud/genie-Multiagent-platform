@@ -49,18 +49,22 @@ const Tabs = <V extends string | number>(props: GenieType.ControlProps<V> & {
       return <React.Fragment key={item.value}>
         <div
           key={item.value}
-          className={classNames('pl-16 pr-16 h-32 rounded-[16px] cursor-pointer flex items-center', 'sed-item')}
+          className={classNames(
+            'pl-16 pr-16 h-32 rounded-md cursor-pointer flex items-center text-[13px] relative z-[1] transition-colors duration-150',
+            'sed-item',
+            value === item.value ? 'text-brand font-medium' : 'text-text-secondary',
+          )}
           item-key={item.value}
           onClick={() => onChange?.(item.value as V)}
         >
           <span>{item.label}</span>
         </div>
         {
-          item.split && <div className="m-[8px] mt-0 mb-0 bg-[#dcdfe6] w-1 h-[1em]"></div>
+          item.split && <div className="m-[8px] mt-0 mb-0 bg-border w-1 h-[1em]"></div>
         }
       </React.Fragment>;
     })}
-    <div ref={slideRef} className="h-full rounded-[16px] bg-[#f4f4f9] absolute left-0 top-0 transition-all -z-1"></div>
+    <div ref={slideRef} className="h-full rounded-md bg-brand-soft absolute left-0 top-0 transition-all -z-1"></div>
   </div>;
 };
 

@@ -14,14 +14,14 @@ type Props = {
 
 const PlanSection: FC<{ plan: CHAT.PlanItem[] }> = ({ plan }) => (
   <div>
-    <div className="text-[16px] font-[600] mb-[8px]">任务计划</div>
+    <div className="text-[16px] font-semibold text-text-primary mb-[8px]">任务计划</div>
     {plan.map((p, i) => (
       <div key={i} className="mb-[8px]">
-        <div className="h-[22px] text-[#2029459E] text-[15px] font-[500] flex items-center mb-[5px]">
-          <div className="w-[6px] h-[6px] rounded-[50%] bg-[#27272a] mx-8"></div>
+        <div className="h-[22px] text-text-secondary text-[15px] font-medium flex items-center mb-[5px]">
+          <div className="w-[6px] h-[6px] rounded-[50%] bg-text-primary mx-8"></div>
           {p.name}
         </div>
-        <div className="ml-[22px] text-[15px]">
+        <div className="ml-[22px] text-[15px] text-text-primary">
           {p.list.map((step, j) => (
             <div key={j} className="leading-[22px]">
               {j + 1}.{step}
@@ -45,13 +45,13 @@ const ToolItem: FC<{
       const completedIndex = tool.plan?.stepStatus.lastIndexOf("completed") || 0;
       return (
         <div
-          className="mt-[8px] flex items-center px-10 py-6 bg-[#F2F3F7] w-fit rounded-[16px] cursor-pointer overflow-hidden  max-w-full"
+          className="mt-[8px] flex items-center px-10 py-6 bg-surface-subtle w-fit rounded-lg cursor-pointer overflow-hidden max-w-full border border-border"
           onClick={() => changePlan?.()}
         >
           <i className={`font_family ${getIcon(tool.messageType)}`}></i>
           <div className="px-8 flex items-center overflow-hidden">
-            <div className="shrink-1">已完成</div>
-            <div className="text-[#2029459E] text-[13px] flex-1 overflow-hidden whitespace-nowrap text-ellipsis ml-[8px]">
+            <div className="shrink-1 text-text-primary">已完成</div>
+            <div className="text-text-secondary text-[13px] flex-1 overflow-hidden whitespace-nowrap text-ellipsis ml-[8px]">
               {tool.plan?.steps[completedIndex]}
             </div>
           </div>
@@ -60,12 +60,12 @@ const ToolItem: FC<{
     }
     case "tool_thought": {
       return (
-        <div className="rounded-[12px] bg-[#F2F3F7] px-12 py-8 mt-[8px]">
-          <div className="mb-[4px]">
+        <div className="rounded-md bg-surface-subtle px-12 py-8 mt-[8px] border border-border">
+          <div className="mb-[4px] text-text-primary">
             <i className="font_family icon-juli"></i>
             <span className="ml-[4px]">思考过程</span>
           </div>
-          <div className="text-[#2029459E] text-[13px] leading-[20px]">
+          <div className="text-text-secondary text-[13px] leading-[20px]">
             {tool.toolThought}
           </div>
         </div>
@@ -110,11 +110,11 @@ const ToolItem: FC<{
           loadingType.includes(tool.messageType));
       return (
         <div
-          className="mt-[8px] flex items-center px-10 py-6 bg-[#F2F3F7] w-fit rounded-[16px] cursor-pointer overflow-hidden max-w-full"
+          className="mt-[8px] flex items-center px-10 py-6 bg-surface-subtle w-fit rounded-lg cursor-pointer overflow-hidden max-w-full border border-border"
           onClick={() => changeActiveChat(tool)}
         >
           {loading ? (
-            <LoadingSpinner color="#F2F3F7"/>
+            <LoadingSpinner color="#FAFAFC"/>
           ) : (
             <i
               className={`font_family ${getIcon(
@@ -126,8 +126,8 @@ const ToolItem: FC<{
             ></i>
           )}
           <div className="px-8 flex items-center overflow-hidden">
-            <div className="shrink-0">{actionInfo.action}</div>
-            <div className="text-[#2029459E] text-[13px] overflow-hidden whitespace-nowrap text-ellipsis flex-1 ml-[8px]">
+            <div className="shrink-0 text-text-primary">{actionInfo.action}</div>
+            <div className="text-text-secondary text-[13px] overflow-hidden whitespace-nowrap text-ellipsis flex-1 ml-[8px]">
               {actionInfo.name}
             </div>
           </div>
@@ -147,7 +147,7 @@ const TimeLineContent: FC<{
   <>
     {tasks.map((t, i) => (
       <div key={i} className="overflow-hidden">
-        {!isReactType ? <div className="font-[500]">{t.task}</div> : null}
+        {!isReactType ? <div className="font-medium text-text-primary">{t.task}</div> : null}
         {(t.children || []).map((tool, j) => (
           <div key={j}>
             <ToolItem
@@ -180,9 +180,9 @@ const TimeLine: FC<{
               {lastTask && chat.loading ? (
                 <LoadingSpinner/>
               ) : (
-                <i className="font_family icon-yiwanchengtianchong text-[#4040ff] text-[16px] absolute top-[-4px] left-0"></i>
+                <i className="font_family icon-yiwanchengtianchong text-brand text-[16px] absolute top-[-4px] left-0"></i>
               )}
-              <div className="h-full w-[1px] border-dashed border-l-[1px] border-[#e0e0e9] ml-[7px] "></div>
+              <div className="h-full w-[1px] border-dashed border-l-[1px] border-border ml-[7px] "></div>
             </div>
           ) : null}
           <div className="flex-1 mb-[8px] overflow-hidden">
@@ -210,7 +210,7 @@ const ConclusionSection: FC<{
     "任务已完成";
   return (
     <div className="mb-[8px]">
-      <div className="mb-[8px]">{summary}</div>
+      <div className="mb-[8px] text-text-primary">{summary}</div>
       <AttachmentList
         files={buildAttachment(chat.conclusion?.resultMap.fileList || [])}
         preview={true}
@@ -229,7 +229,7 @@ const Dialogue: FC<Props> = (props) => {
   };
 
   return (
-    <div className="h-full text-[14px] font-normal flex flex-col text-[#27272a]">
+    <div className="h-full text-[14px] font-normal flex flex-col text-text-primary">
       {(chat.files || []).length ? (
         <div className="w-full mt-[24px] justify-end">
           <AttachmentList files={chat.files} preview={false} />
@@ -237,21 +237,21 @@ const Dialogue: FC<Props> = (props) => {
       ) : null}
       {chat.query ? (
         <div className="w-full mt-[24px] flex justify-end">
-          <div className="max-w-[80%] bg-[#4040FFB2] text-[#fff] px-12 py-8 rounded-[12px] rounded-tr-[12px] rounded-br-[4px] rounded-bl-[12px] ">
+          <div className="max-w-[80%] bg-brand text-white px-12 py-8 rounded-lg rounded-tr-lg rounded-br-sm rounded-bl-lg">
             {chat.query}
           </div>
         </div>
       ) : null}
       {chat.tip ? (
-        <div className="w-full rounded-[12px] mt-[24px]">{chat.tip}</div>
+        <div className="w-full rounded-md mt-[24px] text-text-secondary">{chat.tip}</div>
       ) : null}
       {!isReactType && chat.thought ? (
-        <div className="w-full px-12 py-8 bg-[#F2F3F7] rounded-[12px] mt-[24px]">
+        <div className="w-full px-12 py-8 bg-surface-subtle rounded-md mt-[24px] border border-border">
           <div>{chat.thought}</div>
         </div>
       ) : null}
       {!isReactType && chat.planList?.length ? (
-        <div className="w-full px-12 py-8 rounded-[12px] mt-[24px] bg-[#F2F3F7]">
+        <div className="w-full px-12 py-8 rounded-md mt-[24px] bg-surface-subtle border border-border">
           <PlanSection plan={chat.planList} />
         </div>
       ) : null}
@@ -269,6 +269,11 @@ const Dialogue: FC<Props> = (props) => {
       {chat.conclusion ? (
         <div className="w-full">
           <ConclusionSection chat={chat} changeFile={changeFile} />
+        </div>
+      ) : null}
+      {!chat.conclusion && chat.response ? (
+        <div className="w-full mt-[24px]">
+          <div className="mb-[8px]">{chat.response}</div>
         </div>
       ) : null}
       {chat.loading ? <LoadingDot /> : null}

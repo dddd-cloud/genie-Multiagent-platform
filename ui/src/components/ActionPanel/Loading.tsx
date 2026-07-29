@@ -8,8 +8,8 @@ interface LoadingProps {
   children?: React.ReactNode;
 }
 
-const LOADING_CONTAINER_CLASS = 'flex flex-col items-center justify-center w-full';
-const TEXT_CLASS = 'mt-6 text-lg text-gray-700';
+const LOADING_CONTAINER_CLASS = 'flex flex-col items-center justify-center w-full bg-page';
+const TEXT_CLASS = 'mt-6 text-[15px] text-text-secondary';
 
 /**
  * Loading 组件

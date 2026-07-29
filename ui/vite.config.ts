@@ -2,43 +2,72 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
+import { mvpMockApiPlugin } from './mocks/viteMockPlugin';
 
-export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+export default defineConfig(({ command, mode, isPreview }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const isMvpMock = mode === 'mvp-mock';
+
+  if (
+    (command === 'serve' || isPreview) &&
+    !isMvpMock &&
+    !env.SERVICE_BASE_URL
+  ) {
+    throw new Error(
+      'SERVICE_BASE_URL is required for vite serve/preview (proxy target). Set it in ui/.env or the environment.',
+    );
+  }
+
+  // mvp-mock serves APIs via mvpMockApiPlugin — do not proxy to a dead backend.
+  const proxy = isMvpMock
+    ? undefined
+    : {
+        '/api': {
+          target: env.SERVICE_BASE_URL,
+          changeOrigin: true,
+        },
+        '/web': {
+          target: env.SERVICE_BASE_URL,
+          changeOrigin: true,
+        },
+        '/data': {
+          target: env.SERVICE_BASE_URL,
+          changeOrigin: true,
+        },
+      };
+
   return {
-    plugins: [
-      react(),
-      tailwindcss()
-    ],
+    plugins: [react(), tailwindcss(), mvpMockApiPlugin(isMvpMock)],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, 'src'),
         crypto: 'crypto-browserify',
       },
     },
-    css: {preprocessorOptions: {less: {javascriptEnabled: true},},},
+    css: {
+      preprocessorOptions: {
+        less: { javascriptEnabled: true },
+      },
+    },
     server: {
-      // 修改为监听所有接口，而不是特定主机名
       host: '0.0.0.0',
       port: 3000,
       allowedHosts: true,
-      proxy: {
-        '/web': {
-          target: env.SERVICE_BASE_URL,
-          changeOrigin: true,
-        },
+      proxy,
+      fs: {
+        // Allow reading docs/mvp-contract at repo root (contract fixtures / MSW later).
+        allow: [path.resolve(__dirname, '..')],
       },
     },
-    define: {
-      // 一定要序列化，否则打包时会报错
-      SERVICE_BASE_URL: JSON.stringify(env.SERVICE_BASE_URL),
+    preview: {
+      proxy,
     },
     build: {
       outDir: 'dist',
       sourcemap: false,
       minify: 'terser' as const,
-      rollupOptions: {output: {inlineDynamicImports: true},},
+      rollupOptions: { output: { inlineDynamicImports: true } },
       cssCodeSplit: false,
     },
-  }
+  };
 });

@@ -4,7 +4,10 @@ import { RouterProvider } from 'react-router-dom';
 import zhCN from 'antd/locale/zh_CN';
 import router from './router';
 
-// App 组件：应用的根组件，设置全局配置和路由
+/**
+ * AuthProvider lives inside the router tree (root route element)
+ * so auth flows can use useNavigate / useLocation.
+ */
 const App: GenieType.FC = React.memo(() => {
   return (
     <ConfigProvider locale={zhCN}>

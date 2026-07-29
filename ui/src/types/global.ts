@@ -31,6 +31,4 @@ declare global {
 
     type Merge<T1, T2> = Omit<T1, keyof T2> & T2;
   }
-
-  const SERVICE_BASE_URL: string;
 }
