@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
@@ -29,6 +30,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -65,6 +67,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 
 @Testcontainers
+@ActiveProfiles("conversation-test")
 @SpringBootTest(classes = ConversationExecutionServiceTest.TestConfig.class)
 class ConversationExecutionServiceTest {
 
@@ -515,6 +518,7 @@ class ConversationExecutionServiceTest {
         void run();
     }
 
+    @Profile("conversation-test")
     @Configuration
     @Import({ConversationExecutionService.class, ConversationHistoryService.class, ConversationTitleService.class})
     @ImportAutoConfiguration({

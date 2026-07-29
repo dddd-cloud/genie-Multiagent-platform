@@ -6,6 +6,7 @@ import com.jd.genie.platform.conversation.exception.ConversationException;
 import com.jd.genie.platform.conversation.exception.ConversationExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc(addFilters = false)
+@ActiveProfiles("conversation-test")
 @SpringBootTest(classes = ConversationExceptionHandlerTest.TestConfig.class)
 class ConversationExceptionHandlerTest {
 
@@ -53,6 +56,7 @@ class ConversationExceptionHandlerTest {
             .andExpect(content().string(not(containsString("conversation_message"))));
     }
 
+    @Profile("conversation-test")
     @Configuration
     @Import({ConversationExceptionHandler.class, ThrowingController.class})
     @ImportAutoConfiguration({

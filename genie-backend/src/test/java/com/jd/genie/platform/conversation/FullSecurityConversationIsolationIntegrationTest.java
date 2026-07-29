@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -53,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Testcontainers
 @SpringBootTest(classes = FullSecurityConversationIsolationIntegrationTest.TestApplication.class)
 @AutoConfigureMockMvc
-@ActiveProfiles("test")
+@ActiveProfiles({"test", "conversation-test"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class FullSecurityConversationIsolationIntegrationTest {
     private static final String PASSWORD = "MvpTest-Only-123";
@@ -173,6 +174,7 @@ class FullSecurityConversationIsolationIntegrationTest {
     private record Login(Cookie session, Cookie csrf, String token) {
     }
 
+    @Profile("conversation-test")
     @Configuration
     @EnableAutoConfiguration
     @Import({

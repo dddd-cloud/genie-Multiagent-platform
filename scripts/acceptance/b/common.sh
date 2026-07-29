@@ -1,114 +1,92 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_NAME="$(basename "$0")"
-WORK_PACKAGE="MVP-B-CONVERSATION"
-CHECKS=()
-ERROR_CODE=""
-ERROR_MESSAGE=""
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+BACKEND_DIR="$REPO_ROOT/genie-backend"
+JAVA_HOME_WIN="${JAVA_HOME:-E:\\dev-tools\\jdk-17}"
+MAVEN_CMD_WIN="${MAVEN_CMD:-E:\\dev-tools\\apache-maven-3.9.16\\bin\\mvn.cmd}"
+JAVA_HOME_UNIX="$(cygpath -u "$JAVA_HOME_WIN" 2>/dev/null || printf '%s' "$JAVA_HOME_WIN")"
+MAVEN_CMD_UNIX="$(cygpath -u "$MAVEN_CMD_WIN" 2>/dev/null || printf '%s' "$MAVEN_CMD_WIN")"
 
 json_escape() {
-  local s=${1-}
-  s=${s//\\/\\\\}
-  s=${s//"/\\"}
-  s=${s//$'\n'/\\n}
-  s=${s//$'\r'/\\r}
-  s=${s//$'\t'/\\t}
-  printf '%s' "$s"
-}
-
-add_check() {
-  CHECKS+=("$1")
-}
-
-emit_result() {
-  local passed=$1
-  local error_json="null"
-  if [[ "$passed" != "true" ]]; then
-    error_json="{\"code\":\"$(json_escape "$ERROR_CODE")\",\"message\":\"$(json_escape "$ERROR_MESSAGE")\"}"
-  fi
-  local checks_json="["
-  local first=true
-  local check
-  for check in "${CHECKS[@]}"; do
-    if [[ "$first" == "true" ]]; then
-      first=false
-    else
-      checks_json+=","
-    fi
-    checks_json+="\"$(json_escape "$check")\""
-  done
-  checks_json+="]"
-  printf '{"workPackage":"%s","script":"%s","passed":%s,"checks":%s,"error":%s}\n' \
-    "$WORK_PACKAGE" "$SCRIPT_NAME" "$passed" "$checks_json" "$error_json"
+  local value=${1-}
+  value=${value//\\/\\\\}
+  value=${value//"/\\"}
+  value=${value//$'\n'/\\n}
+  value=${value//$'\r'/\\r}
+  value=${value//$'\t'/\\t}
+  printf '%s' "$value"
 }
 
 fail_json() {
-  ERROR_CODE=$1
-  ERROR_MESSAGE=$2
-  emit_result false
+  local gate=$1
+  local message=$2
+  local duration=${3:-0}
+  printf '{"gate":"%s","status":"FAIL","testsRun":0,"failures":0,"errors":1,"skipped":0,"durationMs":%s,"message":"%s"}\n' \
+    "$(json_escape "$gate")" "$duration" "$(json_escape "$message")"
   exit 1
 }
 
-require_env() {
-  local name=$1
-  if [[ -z "${!name:-}" ]]; then
-    fail_json "MISSING_ENV_${name}" "Required environment variable ${name} is not set."
-  fi
-}
-
-require_command() {
-  local name=$1
-  command -v "$name" >/dev/null 2>&1 || fail_json "MISSING_COMMAND_${name}" "Required command ${name} is not available."
-}
-
-http_json() {
-  local method=$1
+require_file() {
+  local gate=$1
   local path=$2
-  local body=${3-}
-  local url="${JOYAGENT_BASE_URL%/}${path}"
-  local tmp_body tmp_code
-  tmp_body=$(mktemp)
-  tmp_code=$(mktemp)
-  if [[ -n "$body" ]]; then
-    curl -sS --fail-with-body -X "$method" \
-      -H "Content-Type: application/json" \
-      ${JOYAGENT_AUTH_HEADER:+-H "$JOYAGENT_AUTH_HEADER"} \
-      --data-binary "$body" \
-      -o "$tmp_body" -w '%{http_code}' "$url" > "$tmp_code" || {
-        local code
-        code=$(cat "$tmp_code" 2>/dev/null || true)
-        rm -f "$tmp_body" "$tmp_code"
-        fail_json "HTTP_${method}_FAILED" "${method} ${path} failed with HTTP ${code:-unknown}."
+  [[ -f "$path" ]] || fail_json "$gate" "Required file not found: $path"
+}
+
+require_tooling() {
+  local gate=$1
+  require_file "$gate" "$BACKEND_DIR/pom.xml"
+  require_file "$gate" "$MAVEN_CMD_UNIX"
+  require_file "$gate" "$JAVA_HOME_UNIX/bin/java.exe"
+  docker version >/dev/null 2>&1 || fail_json "$gate" "Docker is not available. Start Docker Desktop and retry."
+  "$JAVA_HOME_UNIX/bin/java.exe" -version >&2
+  JAVA_HOME="$JAVA_HOME_WIN" PATH="$JAVA_HOME_UNIX/bin:$PATH" "$MAVEN_CMD_UNIX" -version >&2
+}
+
+sum_reports() {
+  local report_dir=$1
+  awk '
+    /<testsuite / {
+      tests = failures = errors = skipped = 0
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^tests=/) { gsub(/[^0-9]/, "", $i); tests = $i }
+        if ($i ~ /^failures=/) { gsub(/[^0-9]/, "", $i); failures = $i }
+        if ($i ~ /^errors=/) { gsub(/[^0-9]/, "", $i); errors = $i }
+        if ($i ~ /^skipped=/) { gsub(/[^0-9]/, "", $i); skipped = $i }
       }
+      run += tests
+      fail += failures
+      err += errors
+      skip += skipped
+    }
+    END { printf "%d %d %d %d", run, fail, err, skip }
+  ' "$report_dir"/TEST-*.xml 2>/dev/null || printf '0 0 0 0'
+}
+
+run_maven_gate() {
+  local gate=$1
+  local test_spec=$2
+  local start end duration status mvn_status counts tests failures errors skipped
+  start=$(date +%s%3N)
+  require_tooling "$gate"
+  rm -rf "$BACKEND_DIR/target/surefire-reports"
+  mkdir -p "$BACKEND_DIR/target"
+  set +e
+  (cd "$BACKEND_DIR" && \
+    JAVA_HOME="$JAVA_HOME_WIN" PATH="$JAVA_HOME_UNIX/bin:$PATH" \
+    "$MAVEN_CMD_UNIX" "-Dtest=$test_spec" -Dsurefire.useFile=false -DtrimStackTrace=false test >&2)
+  mvn_status=$?
+  set -e
+  end=$(date +%s%3N)
+  duration=$((end - start))
+  counts=$(sum_reports "$BACKEND_DIR/target/surefire-reports")
+  read -r tests failures errors skipped <<< "$counts"
+  if [[ "$mvn_status" -eq 0 && "$failures" -eq 0 && "$errors" -eq 0 ]]; then
+    status=PASS
   else
-    curl -sS --fail-with-body -X "$method" \
-      ${JOYAGENT_AUTH_HEADER:+-H "$JOYAGENT_AUTH_HEADER"} \
-      -o "$tmp_body" -w '%{http_code}' "$url" > "$tmp_code" || {
-        local code
-        code=$(cat "$tmp_code" 2>/dev/null || true)
-        rm -f "$tmp_body" "$tmp_code"
-        fail_json "HTTP_${method}_FAILED" "${method} ${path} failed with HTTP ${code:-unknown}."
-      }
+    status=FAIL
   fi
-  cat "$tmp_body"
-  rm -f "$tmp_body" "$tmp_code"
-}
-
-json_value() {
-  local expr=$1
-  python -c "import json,sys; data=json.load(sys.stdin); v=${expr}; print('' if v is None else v)"
-}
-
-require_rest_env() {
-  require_command curl
-  require_command python
-  require_env JOYAGENT_BASE_URL
-}
-
-require_probe_env() {
-  require_command curl
-  require_command python
-  require_env MVP_B_PROBE_BASE_URL
-  fail_json "PROBE_NOT_IMPLEMENTED" "This script requires the D/team acceptance harness at MVP_B_PROBE_BASE_URL; no production debug endpoint is created by MVP-B."
+  printf '{"gate":"%s","status":"%s","testsRun":%s,"failures":%s,"errors":%s,"skipped":%s,"durationMs":%s}\n' \
+    "$(json_escape "$gate")" "$status" "$tests" "$failures" "$errors" "$skipped" "$duration"
+  [[ "$status" == "PASS" ]] || exit 1
 }
