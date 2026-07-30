@@ -83,7 +83,9 @@ public class SecurityConfig {
             .exceptionHandling(errors -> errors.authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
                 .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))
             .authorizeHttpRequests(auth -> auth
-                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                // Initial requests are fully authenticated below. Servlet async/error redispatches
+                // must not be re-authorized after an SSE response has already been committed.
+                .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health").permitAll()
                 .requestMatchers("/AutoAgent").hasAuthority(InternalAgentAuthenticationToken.AUTHORITY)
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
