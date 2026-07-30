@@ -10,10 +10,17 @@ import com.jd.genie.service.QdrantService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
+@ConditionalOnProperty(
+    prefix = "autobots.data-agent",
+    name = "startup-init-enabled",
+    havingValue = "true",
+    matchIfMissing = true
+)
 public class DataAgentInitRunner implements CommandLineRunner {
 
     @Autowired
@@ -28,7 +35,6 @@ public class DataAgentInitRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        log.info("dataAgent config:{}", dataAgentConfig);
         QdrantConfig qdrantConfig = dataAgentConfig.getQdrantConfig();
         if (qdrantConfig.getEnable()) {
             qdrantService.createCosineCollection(DataAgentConstants.SCHEMA_COLLECTION_NAME, 1024);

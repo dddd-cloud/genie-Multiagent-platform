@@ -15,9 +15,15 @@ import org.springframework.context.annotation.FilterType;
 @SpringBootConfiguration
 @EnableAutoConfiguration
 @MapperScan("com.jd.genie.mapper")
-@ComponentScan(basePackages = "com.jd.genie", excludeFilters = @ComponentScan.Filter(
-    type = FilterType.ASSIGNABLE_TYPE,
-    classes = {GenieApplication.class, DataAgentInitRunner.class}
-))
+@ComponentScan(basePackages = "com.jd.genie", excludeFilters = {
+    @ComponentScan.Filter(
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = {GenieApplication.class, DataAgentInitRunner.class}
+    ),
+    @ComponentScan.Filter(
+        type = FilterType.CUSTOM,
+        classes = ConversationTestConfigurationExcludeFilter.class
+    )
+})
 class Phase3IntegrationTestApplication {
 }

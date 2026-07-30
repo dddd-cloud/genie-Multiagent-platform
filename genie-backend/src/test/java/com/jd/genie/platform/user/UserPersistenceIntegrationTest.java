@@ -129,6 +129,12 @@ class UserPersistenceIntegrationTest {
         assertThrows(UserValidationException.class, () -> userService.createUser(new CreateUserCommand(
             tenant.getId(), "ab", "User", "MvpTest-Only-123", UserRole.USER, UserStatus.ACTIVE
         )));
+        assertThrows(UserValidationException.class, () -> userService.createUser(new CreateUserCommand(
+            tenant.getId(), "valid-user", " ", "MvpTest-Only-123", UserRole.USER, UserStatus.ACTIVE
+        )));
+        assertThrows(UserValidationException.class, () -> userService.createUser(new CreateUserCommand(
+            tenant.getId(), "valid-user", "User", "short", UserRole.USER, UserStatus.ACTIVE
+        )));
 
         UserEntity first = userService.createUser(new CreateUserCommand(
             tenant.getId(), "User-A", "User A", "MvpTest-Only-123", UserRole.USER, UserStatus.ACTIVE

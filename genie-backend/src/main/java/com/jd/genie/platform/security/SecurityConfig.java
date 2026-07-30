@@ -22,9 +22,6 @@ import org.springframework.security.web.authentication.session.ChangeSessionIdAu
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
@@ -58,18 +55,6 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource securityCorsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowCredentials(true);
-        configuration.addAllowedOriginPattern("*");
-        configuration.addAllowedHeader("*");
-        configuration.addAllowedMethod("*");
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
-
-    @Bean
     DaoAuthenticationProvider daoAuthenticationProvider(CurrentUserDetailsService detailsService, PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(detailsService);
@@ -81,7 +66,6 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationConfiguration authenticationConfiguration,
                                             ObjectMapper objectMapper, SecurityContextRepository securityContextRepository,
                                             CookieCsrfTokenRepository csrfTokenRepository,
-                                            CorsConfigurationSource securityCorsConfigurationSource,
                                             InternalAgentAuthFilter internalAgentAuthFilter) throws Exception {
         AuthenticationManager authenticationManager = authenticationConfiguration.getAuthenticationManager();
         JsonUsernamePasswordAuthenticationFilter loginFilter = new JsonUsernamePasswordAuthenticationFilter(authenticationManager, objectMapper);
@@ -94,14 +78,13 @@ public class SecurityConfig {
             .securityContext(context -> context.securityContextRepository(securityContextRepository).requireExplicitSave(true))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .sessionFixation(fixation -> fixation.changeSessionId()))
-            .cors(cors -> cors.configurationSource(securityCorsConfigurationSource))
             .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
                 .ignoringRequestMatchers("/AutoAgent"))
             .exceptionHandling(errors -> errors.authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
                 .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health", "/h2-console/**").permitAll()
+                .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health").permitAll()
                 .requestMatchers("/AutoAgent").hasAuthority(InternalAgentAuthenticationToken.AUTHORITY)
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/auth/logout", "/api/v1/users/me", "/api/v1/conversations/**", "/data/**", "/web/api/v1/gpt/**").authenticated()
