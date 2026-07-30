@@ -5,6 +5,10 @@ const request: AxiosInstance = axios.create({
   baseURL: '',
   timeout: 10000,
   withCredentials: true,
+  // Spring returns an XOR-masked token from /api/v1/auth/csrf. Keep the
+  // explicit header applied by applyCsrfHeaders instead of letting Axios
+  // overwrite it with the raw XSRF-TOKEN cookie value.
+  withXSRFToken: false,
   headers: { 'Content-Type': 'application/json' },
 });
 
