@@ -1,0 +1,14 @@
+# Shared local-development adjustments. This file contains no secrets.
+# Use together with docker-compose.mvp.yml and a private root .env file.
+
+services:
+  genie-backend:
+    environment:
+      # Avoid initializing the optional Data Agent catalogue during the MVP stack startup.
+      AUTOBOTS_DATA_AGENT_STARTUP_INIT_ENABLED: "false"
+      # MySQL Connector/J accepts UTF-8 here; the database itself remains utf8mb4.
+      GENIE_DB_URL: jdbc:mysql://mysql:3306/genie?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+
+  ui:
+    volumes:
+      - ../docs:/workspace/docs:ro

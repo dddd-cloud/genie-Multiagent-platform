@@ -1,0 +1,12 @@
+# Optional real-model wiring. Do not put API keys in this tracked file.
+# DEFAULT_MODEL, OPENAI_BASE_URL and OPENAI_API_KEY must come from the private .env.
+
+services:
+  genie-backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      AUTOBOTS_AUTOAGENT_EXECUTOR_MODEL_NAME: ${DEFAULT_MODEL:?required}
+      AUTOBOTS_AUTOAGENT_PLANNER_MODEL_NAME: ${DEFAULT_MODEL:?required}
+      AUTOBOTS_AUTOAGENT_REACT_MODEL_NAME: ${DEFAULT_MODEL:?required}
+      LLM_SETTINGS: >-
+        {"${DEFAULT_MODEL:?required}":{"model":"${DEFAULT_MODEL:?required}","maxTokens":16384,"temperature":0,"baseUrl":"${OPENAI_BASE_URL:?required}","apiKey":"${OPENAI_API_KEY:?required}","interfaceUrl":"/chat/completions","maxInputTokens":128000}}
