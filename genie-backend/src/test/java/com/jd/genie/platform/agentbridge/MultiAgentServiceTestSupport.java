@@ -28,19 +28,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 final class MultiAgentServiceTestSupport {
     static final String INTERNAL_TOKEN = "test-internal-token";
+    static final String DEFAULT_AUTO_AGENT_URL = "http://127.0.0.1:8080/AutoAgent";
     static final MediaType EVENT_STREAM = MediaType.parse("text/event-stream");
 
     private MultiAgentServiceTestSupport() {
     }
 
     static Scenario scenario(Script script, AgentResponseHandler handler) {
-        return scenario(script, handler, INTERNAL_TOKEN, SnapshotPruner.DEFAULT_MAX_BYTES);
+        return scenario(
+                script,
+                handler,
+                INTERNAL_TOKEN,
+                DEFAULT_AUTO_AGENT_URL,
+                SnapshotPruner.DEFAULT_MAX_BYTES
+        );
     }
 
     static Scenario scenario(
             Script script,
             AgentResponseHandler handler,
             String internalToken,
+            long maxSnapshotBytes
+    ) {
+        return scenario(script, handler, internalToken, DEFAULT_AUTO_AGENT_URL, maxSnapshotBytes);
+    }
+
+    static Scenario scenario(
+            Script script,
+            AgentResponseHandler handler,
+            String internalToken,
+            String autoAgentUrl,
             long maxSnapshotBytes
     ) {
         ScriptedCallFactory calls = new ScriptedCallFactory(script);
@@ -58,7 +75,8 @@ final class MultiAgentServiceTestSupport {
                 new GenieConfig(),
                 handler == null ? Map.of() : Map.of(AgentType.REACT, handler),
                 calls,
-                internalToken
+                internalToken,
+                autoAgentUrl
         );
         return new Scenario(service, calls, port, channel, observer, cancellableCall);
     }

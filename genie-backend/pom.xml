@@ -205,6 +205,11 @@
                                 <include>com/jd/genie/platform/security/**</include>
                                 <include>com/jd/genie/platform/user/**</include>
                                 <include>com/jd/genie/platform/conversation/**/*</include>
+                                <include>com/jd/genie/platform/agentbridge/**</include>
+                                <include>com/jd/genie/service/impl/GptProcessServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/MultiAgentServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/ReactHandlerImpl*</include>
+                                <include>com/jd/genie/service/impl/PlanSolveHandlerImpl*</include>
                             </includes>
                             <excludes>
                                 <exclude>com/jd/genie/platform/user/config/**</exclude>
@@ -263,6 +268,37 @@
                                 <exclude>com/jd/genie/platform/user/mapper/**</exclude>
                                 <exclude>com/jd/genie/platform/user/service/*Exception</exclude>
                             </excludes>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.80</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.70</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>check-c-agent-bridge-coverage</id>
+                        <phase>verify</phase>
+                        <goals><goal>check</goal></goals>
+                        <configuration>
+                            <includes>
+                                <include>com/jd/genie/platform/agentbridge/**</include>
+                                <include>com/jd/genie/service/impl/GptProcessServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/MultiAgentServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/ReactHandlerImpl*</include>
+                                <include>com/jd/genie/service/impl/PlanSolveHandlerImpl*</include>
+                            </includes>
                             <rules>
                                 <rule>
                                     <element>BUNDLE</element>

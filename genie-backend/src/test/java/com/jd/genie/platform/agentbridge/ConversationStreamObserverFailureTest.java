@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.MessageFailureCommand;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.contract.StreamSnapshotEnvelope;
+import com.jd.genie.platform.conversation.exception.ConversationException;
 import com.jd.genie.platform.contract.support.FakeConversationExecutionPort;
 import org.junit.jupiter.api.Test;
 
@@ -56,6 +57,25 @@ class ConversationStreamObserverFailureTest {
     }
 
     @Test
+    void failureTerminalSignalIsSentExactlyOnceWhenCallbacksRaceAfterFailure() {
+        FakeConversationExecutionPort port = new FakeConversationExecutionPort();
+        ObserverTestSupport.RecordingClientChannel channel =
+                new ObserverTestSupport.RecordingClientChannel();
+        ConversationStreamObserver stream = observer(port, channel);
+
+        assertTrue(stream.onError(new IllegalStateException("downstream unavailable")));
+        assertFalse(stream.onError(new IllegalStateException("late downstream failure")));
+        assertFalse(stream.onClientDisconnected());
+        assertFalse(stream.onCompleted());
+
+        assertEquals(1, channel.failures().size());
+        assertEquals(1, channel.completionCount());
+        assertEquals(1, port.getCalls().stream()
+                .filter(call -> call.type() == FakeConversationExecutionPort.CallType.FAIL)
+                .count());
+    }
+
+    @Test
     void recognizableBridgeErrorsKeepTheirFrozenCodes() {
         List<MvpErrorCode> codes = List.of(
                 MvpErrorCode.AGENT_NO_FINAL_EVENT,
@@ -75,6 +95,40 @@ class ConversationStreamObserverFailureTest {
             assertEquals(code.name(), failureCommand(port).errorCode());
             assertEquals(code, channel.failures().get(0).errorCode());
             assertEquals(ConversationStreamObserver.TerminalState.FAILED, stream.state());
+        }
+    }
+
+    @Test
+    void completionRejectedByConversationServiceTransitionsToFailed() {
+        for (MvpErrorCode errorCode : List.of(
+                MvpErrorCode.SNAPSHOT_TOO_LARGE,
+                MvpErrorCode.SNAPSHOT_INVALID
+        )) {
+            FakeConversationExecutionPort port = new FakeConversationExecutionPort() {
+                @Override
+                public void complete(
+                        com.jd.genie.platform.contract.CurrentUser currentUser,
+                        com.jd.genie.platform.contract.MessageCompletionCommand command
+                ) {
+                    throw new ConversationException(errorCode, "snapshot rejected");
+                }
+            };
+            ObserverTestSupport.RecordingClientChannel channel =
+                    new ObserverTestSupport.RecordingClientChannel();
+            ConversationStreamObserver stream = observer(port, channel);
+
+            assertTrue(stream.markStreaming());
+            assertTrue(stream.onEvent(event("最终回答", true)));
+            assertTrue(stream.onCompleted());
+
+            assertEquals(ConversationStreamObserver.TerminalState.FAILED, stream.state());
+            assertEquals(List.of(
+                    FakeConversationExecutionPort.CallType.MARK_STREAMING,
+                    FakeConversationExecutionPort.CallType.FAIL
+            ), port.getCalls().stream().map(FakeConversationExecutionPort.CallRecord::type).toList());
+            assertEquals(errorCode.name(), port.getCalls().get(1).failureCommand().errorCode());
+            assertEquals(errorCode, channel.failures().get(0).errorCode());
+            assertEquals(1, channel.completionCount());
         }
     }
 

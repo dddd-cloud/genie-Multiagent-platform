@@ -5,8 +5,11 @@ import com.jd.genie.model.req.AgentRequest;
 import com.jd.genie.model.response.GptProcessResult;
 import com.jd.genie.platform.contract.MessageCompletionCommand;
 import com.jd.genie.platform.contract.support.FakeConversationExecutionPort;
+import com.jd.genie.service.impl.MultiAgentServiceImpl;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -18,6 +21,7 @@ import static com.jd.genie.platform.agentbridge.MultiAgentServiceTestSupport.sce
 import static com.jd.genie.platform.agentbridge.MultiAgentServiceTestSupport.stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MultiAgentServiceSuccessTest {
@@ -122,6 +126,78 @@ class MultiAgentServiceSuccessTest {
                 .toList());
         assertTrue(agentRequest.getIsStream());
         assertFalse(payload.contains("request-1"));
+    }
+
+    @Test
+    void configurableAutoAgentEndpointIsUsedForInternalLoopback() {
+        String configuredUrl = "http://agent-bridge.test:9090/AutoAgent";
+        MultiAgentServiceTestSupport.Scenario scenario = scenario(
+                MultiAgentServiceTestSupport.pending(),
+                returning(ObserverTestSupport.event("unused", true)),
+                INTERNAL_TOKEN,
+                configuredUrl,
+                SnapshotPruner.DEFAULT_MAX_BYTES
+        );
+
+        assertTrue(scenario.observer().markStreaming());
+        scenario.service().searchForAgentRequest(
+                MultiAgentServiceTestSupport.request(),
+                scenario.observer(),
+                scenario.cancellableCall()
+        );
+
+        assertEquals(configuredUrl, scenario.calls().lastCall().request().url().toString());
+    }
+
+    @Test
+    void internalHttpClientUsesIndependentConfiguredTimeouts() {
+        okhttp3.OkHttpClient client = buildHttpClient(1_000, 2_000, 3_000);
+
+        assertEquals(1_000, client.connectTimeoutMillis());
+        assertEquals(2_000, client.readTimeoutMillis());
+        assertEquals(3_000, client.callTimeoutMillis());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> buildHttpClient(0, 2_000, 3_000)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> buildHttpClient(1_000, 0, 3_000)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> buildHttpClient(1_000, 2_000, 0)
+        );
+    }
+
+    private okhttp3.OkHttpClient buildHttpClient(
+            long connectTimeoutMillis,
+            long readTimeoutMillis,
+            long callTimeoutMillis
+    ) {
+        try {
+            Method method = MultiAgentServiceImpl.class.getDeclaredMethod(
+                    "buildHttpClient",
+                    long.class,
+                    long.class,
+                    long.class
+            );
+            method.setAccessible(true);
+            return (okhttp3.OkHttpClient) method.invoke(
+                    null,
+                    connectTimeoutMillis,
+                    readTimeoutMillis,
+                    callTimeoutMillis
+            );
+        } catch (InvocationTargetException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof RuntimeException runtimeError) {
+                throw runtimeError;
+            }
+            throw new AssertionError(cause);
+        } catch (ReflectiveOperationException error) {
+            throw new AssertionError(error);
+        }
     }
 
     private List<FakeConversationExecutionPort.CallType> callTypes(

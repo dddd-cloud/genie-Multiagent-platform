@@ -5,6 +5,7 @@ import com.jd.genie.platform.contract.ConversationExecutionResult;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MessageCompletionCommand;
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.conversation.exception.ConversationException;
 import com.jd.genie.platform.contract.support.FakeConversationExecutionPort;
 import org.junit.jupiter.api.Test;
 
@@ -16,12 +17,13 @@ import static com.jd.genie.platform.agentbridge.ObserverTestSupport.event;
 import static com.jd.genie.platform.agentbridge.ObserverTestSupport.observer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConversationStreamObserverPersistenceBoundaryTest {
 
     @Test
-    void markStreamingFailureImmediatelyPersistsFailedTerminal() {
+    void markStreamingFailurePropagatesToThePreStreamOrchestrator() {
         FakeConversationExecutionPort port = new FakeConversationExecutionPort() {
             @Override
             public void markStreaming(CurrentUser currentUser, String assistantMessageId) {
@@ -32,12 +34,13 @@ class ConversationStreamObserverPersistenceBoundaryTest {
                 new ObserverTestSupport.RecordingClientChannel();
         ConversationStreamObserver stream = observer(port, channel);
 
-        assertFalse(stream.markStreaming());
+        assertThrows(IllegalStateException.class, stream::markStreaming);
 
-        assertEquals(ConversationStreamObserver.TerminalState.FAILED, stream.state());
-        assertEquals(List.of(FakeConversationExecutionPort.CallType.FAIL), callTypes(port));
-        assertEquals("INTERNAL_ERROR", port.getCalls().get(0).failureCommand().errorCode());
-        assertEquals(1, channel.completionCount());
+        assertEquals(ConversationStreamObserver.TerminalState.OPEN, stream.state());
+        assertTrue(port.getCalls().isEmpty());
+        assertTrue(channel.events().isEmpty());
+        assertTrue(channel.failures().isEmpty());
+        assertEquals(0, channel.completionCount());
     }
 
     @Test
@@ -72,29 +75,34 @@ class ConversationStreamObserverPersistenceBoundaryTest {
     }
 
     @Test
-    void rejectedCompletionFallsBackToSnapshotInvalidFailure() {
-        FakeConversationExecutionPort port = new FakeConversationExecutionPort() {
-            @Override
-            public void complete(CurrentUser currentUser, MessageCompletionCommand command) {
-                throw new AgentBridgeException(MvpErrorCode.SNAPSHOT_INVALID, "snapshot rejected");
-            }
-        };
-        ObserverTestSupport.RecordingClientChannel channel =
-                new ObserverTestSupport.RecordingClientChannel();
-        ConversationStreamObserver stream = observer(port, channel);
-        stream.markStreaming();
-        stream.onEvent(event("最终回答", true));
+    void rejectedCompletionPreservesSnapshotErrorCodesFromConversationService() {
+        for (MvpErrorCode errorCode : List.of(
+                MvpErrorCode.SNAPSHOT_TOO_LARGE,
+                MvpErrorCode.SNAPSHOT_INVALID
+        )) {
+            FakeConversationExecutionPort port = new FakeConversationExecutionPort() {
+                @Override
+                public void complete(CurrentUser currentUser, MessageCompletionCommand command) {
+                    throw new ConversationException(errorCode, "snapshot rejected");
+                }
+            };
+            ObserverTestSupport.RecordingClientChannel channel =
+                    new ObserverTestSupport.RecordingClientChannel();
+            ConversationStreamObserver stream = observer(port, channel);
+            stream.markStreaming();
+            stream.onEvent(event("最终回答", true));
 
-        assertTrue(stream.onCompleted());
+            assertTrue(stream.onCompleted());
 
-        assertEquals(ConversationStreamObserver.TerminalState.FAILED, stream.state());
-        assertEquals(List.of(
-                FakeConversationExecutionPort.CallType.MARK_STREAMING,
-                FakeConversationExecutionPort.CallType.FAIL
-        ), callTypes(port));
-        assertEquals("SNAPSHOT_INVALID", port.getCalls().get(1).failureCommand().errorCode());
-        assertEquals(MvpErrorCode.SNAPSHOT_INVALID, channel.failures().get(0).errorCode());
-        assertEquals(1, channel.completionCount());
+            assertEquals(ConversationStreamObserver.TerminalState.FAILED, stream.state());
+            assertEquals(List.of(
+                    FakeConversationExecutionPort.CallType.MARK_STREAMING,
+                    FakeConversationExecutionPort.CallType.FAIL
+            ), callTypes(port));
+            assertEquals(errorCode.name(), port.getCalls().get(1).failureCommand().errorCode());
+            assertEquals(errorCode, channel.failures().get(0).errorCode());
+            assertEquals(1, channel.completionCount());
+        }
     }
 
     private List<FakeConversationExecutionPort.CallType> callTypes(

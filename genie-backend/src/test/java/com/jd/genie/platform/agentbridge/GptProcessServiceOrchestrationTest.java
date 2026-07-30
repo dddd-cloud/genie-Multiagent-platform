@@ -7,12 +7,17 @@ import com.jd.genie.platform.contract.ConversationHistoryItem;
 import com.jd.genie.platform.contract.ConversationMessageRole;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MessageFailureCommand;
+import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.contract.UserRole;
 import com.jd.genie.platform.contract.support.FakeConversationExecutionPort;
 import com.jd.genie.platform.contract.support.FakeCurrentUserProvider;
 import com.jd.genie.service.IMultiAgentService;
 import com.jd.genie.service.impl.GptProcessServiceImpl;
+import com.jd.genie.util.SseUtil;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
@@ -97,7 +102,7 @@ class GptProcessServiceOrchestrationTest {
     }
 
     @Test
-    void prepareFailureReliesOnTransactionRollbackAndDoesNotCallFail() {
+    void prepareFailureReturnsFrozenErrorWithoutCallingFail() {
         List<String> order = new ArrayList<>();
         RuntimeException prepareError = new IllegalStateException("prepare rejected");
         RecordingPort port = new RecordingPort(order) {
@@ -113,19 +118,20 @@ class GptProcessServiceOrchestrationTest {
         RecordingAgentService agent = new RecordingAgentService(order);
         GptProcessServiceImpl service = service(port, agent, order);
 
-        RuntimeException thrown = assertThrows(
-                RuntimeException.class,
+        AgentBridgeException thrown = assertThrows(
+                AgentBridgeException.class,
                 () -> service.queryMultiAgentIncrStream(request())
         );
 
-        assertSame(prepareError, thrown);
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, thrown.getErrorCode());
+        assertSame(prepareError, thrown.getCause());
         assertEquals(List.of("USER", "PREPARE"), order);
         assertTrue(port.getCalls().isEmpty());
         assertEquals(0, agent.startCount);
     }
 
     @Test
-    void historyFailureMarksPreparedMessageFailedBeforeReturningError() {
+    void historyFailureMarksPreparedMessageFailedBeforeReturningFrozenError() {
         List<String> order = new ArrayList<>();
         RuntimeException historyError = new IllegalStateException("history unavailable");
         RecordingPort port = preparedPort(order);
@@ -133,12 +139,13 @@ class GptProcessServiceOrchestrationTest {
         RecordingAgentService agent = new RecordingAgentService(order);
         GptProcessServiceImpl service = service(port, agent, order);
 
-        RuntimeException thrown = assertThrows(
-                RuntimeException.class,
+        AgentBridgeException thrown = assertThrows(
+                AgentBridgeException.class,
                 () -> service.queryMultiAgentIncrStream(request())
         );
 
-        assertSame(historyError, thrown);
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, thrown.getErrorCode());
+        assertSame(historyError, thrown.getCause());
         assertEquals(List.of("USER", "PREPARE", "HISTORY", "FAIL"), order);
         assertEquals(List.of(
                 FakeConversationExecutionPort.CallType.PREPARE_EXECUTION,
@@ -151,16 +158,68 @@ class GptProcessServiceOrchestrationTest {
     }
 
     @Test
-    void markStreamingFailureWritesFailedTerminalAndSkipsAgent() {
+    void historyDatabaseFailurePersistsDatabaseUnavailableInsteadOfInternalError() {
+        List<String> order = new ArrayList<>();
+        RecordingPort port = preparedPort(order);
+        DataAccessResourceFailureException databaseError =
+                new DataAccessResourceFailureException("history database unavailable");
+        port.historyError = databaseError;
+        RecordingAgentService agent = new RecordingAgentService(order);
+        GptProcessServiceImpl service = service(port, agent, order);
+
+        AgentBridgeException thrown = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryMultiAgentIncrStream(request())
+        );
+
+        assertEquals(MvpErrorCode.DATABASE_UNAVAILABLE, thrown.getErrorCode());
+        assertEquals("DATABASE_UNAVAILABLE", port.getCalls().get(1).failureCommand().errorCode());
+        assertEquals(0, agent.startCount);
+    }
+    @Test
+    void emitterCreationFailureMarksPreparedMessageFailedWhileStillPending() {
+        List<String> order = new ArrayList<>();
+        RecordingPort port = preparedPort(order);
+        RecordingAgentService agent = new RecordingAgentService(order);
+        GptProcessServiceImpl service = service(port, agent, order);
+        RuntimeException emitterError = new IllegalStateException("emitter unavailable");
+
+        try (MockedStatic<SseUtil> sseUtil = Mockito.mockStatic(SseUtil.class)) {
+            sseUtil.when(() -> SseUtil.create(3_600_000L)).thenThrow(emitterError);
+
+            AgentBridgeException thrown = assertThrows(
+                    AgentBridgeException.class,
+                    () -> service.queryMultiAgentIncrStream(request())
+            );
+
+            assertEquals(MvpErrorCode.INTERNAL_ERROR, thrown.getErrorCode());
+            assertSame(emitterError, thrown.getCause());
+        }
+
+        assertEquals(List.of("USER", "PREPARE", "HISTORY", "FAIL"), order);
+        assertEquals(List.of(
+                FakeConversationExecutionPort.CallType.PREPARE_EXECUTION,
+                FakeConversationExecutionPort.CallType.LOAD_COMPLETED_HISTORY,
+                FakeConversationExecutionPort.CallType.FAIL
+        ), callTypes(port));
+        assertEquals("INTERNAL_ERROR", port.getCalls().get(2).failureCommand().errorCode());
+        assertEquals(0, agent.startCount);
+    }
+
+    @Test
+    void markStreamingFailureWritesOneFailedTerminalBeforeReturningFrozenError() {
         List<String> order = new ArrayList<>();
         RecordingPort port = preparedPort(order);
         port.markStreamingError = new IllegalStateException("streaming rejected");
         RecordingAgentService agent = new RecordingAgentService(order);
         GptProcessServiceImpl service = service(port, agent, order);
 
-        SseEmitter emitter = service.queryMultiAgentIncrStream(request());
+        AgentBridgeException thrown = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryMultiAgentIncrStream(request())
+        );
 
-        assertNotNull(emitter);
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, thrown.getErrorCode());
         assertEquals(List.of("USER", "PREPARE", "HISTORY", "STREAMING", "FAIL"), order);
         assertEquals(List.of(
                 FakeConversationExecutionPort.CallType.PREPARE_EXECUTION,
@@ -171,16 +230,19 @@ class GptProcessServiceOrchestrationTest {
     }
 
     @Test
-    void synchronousAgentStartFailureFailsStreamingMessageExactlyOnce() {
+    void synchronousAgentStartFailureFailsStreamingMessageExactlyOnceBeforeReturningFrozenError() {
         List<String> order = new ArrayList<>();
         RecordingPort port = preparedPort(order);
         RecordingAgentService agent = new RecordingAgentService(order);
         agent.startError = new IllegalStateException("agent start failed");
         GptProcessServiceImpl service = service(port, agent, order);
 
-        SseEmitter emitter = service.queryMultiAgentIncrStream(request());
+        AgentBridgeException thrown = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryMultiAgentIncrStream(request())
+        );
 
-        assertNotNull(emitter);
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, thrown.getErrorCode());
         assertEquals(List.of(
                 "USER",
                 "PREPARE",

@@ -43,25 +43,30 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class MultiAgentServiceImpl implements IMultiAgentService {
     static final String INTERNAL_TOKEN_HEADER = "X-Genie-Internal-Token";
-    private static final String AUTO_AGENT_URL = "http://127.0.0.1:8080/AutoAgent";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.parse("application/json");
 
     private final GenieConfig genieConfig;
     private final Map<AgentType, AgentResponseHandler> handlerMap;
     private final Call.Factory callFactory;
     private final String internalAgentToken;
+    private final String autoAgentUrl;
 
     @Autowired
     public MultiAgentServiceImpl(
             GenieConfig genieConfig,
             Map<AgentType, AgentResponseHandler> handlerMap,
-            @Value("${GENIE_INTERNAL_AGENT_TOKEN:}") String internalAgentToken
+            @Value("${GENIE_INTERNAL_AGENT_TOKEN:}") String internalAgentToken,
+            @Value("${genie.agent-bridge.auto-agent-url}") String autoAgentUrl,
+            @Value("${genie.agent-bridge.connect-timeout-millis}") long connectTimeoutMillis,
+            @Value("${genie.agent-bridge.read-timeout-millis}") long readTimeoutMillis,
+            @Value("${genie.agent-bridge.call-timeout-millis}") long callTimeoutMillis
     ) {
         this(
                 genieConfig,
                 handlerMap,
-                buildHttpClient(genieConfig),
-                internalAgentToken
+                buildHttpClient(connectTimeoutMillis, readTimeoutMillis, callTimeoutMillis),
+                internalAgentToken,
+                autoAgentUrl
         );
     }
 
@@ -69,12 +74,14 @@ public class MultiAgentServiceImpl implements IMultiAgentService {
             GenieConfig genieConfig,
             Map<AgentType, AgentResponseHandler> handlerMap,
             Call.Factory callFactory,
-            String internalAgentToken
+            String internalAgentToken,
+            String autoAgentUrl
     ) {
         this.genieConfig = Objects.requireNonNull(genieConfig, "genieConfig");
         this.handlerMap = Map.copyOf(Objects.requireNonNull(handlerMap, "handlerMap"));
         this.callFactory = Objects.requireNonNull(callFactory, "callFactory");
         this.internalAgentToken = internalAgentToken;
+        this.autoAgentUrl = requireText(autoAgentUrl, "autoAgentUrl");
     }
 
     @Override
@@ -344,7 +351,7 @@ public class MultiAgentServiceImpl implements IMultiAgentService {
                 JSONObject.toJSONString(request)
         );
         return new Request.Builder()
-                .url(AUTO_AGENT_URL)
+                .url(autoAgentUrl)
                 .header(INTERNAL_TOKEN_HEADER, internalAgentToken)
                 .post(body)
                 .build();
@@ -399,13 +406,30 @@ public class MultiAgentServiceImpl implements IMultiAgentService {
                 : new IllegalStateException(message, cause);
     }
 
-    private static OkHttpClient buildHttpClient(GenieConfig config) {
-        Objects.requireNonNull(config, "genieConfig");
+    static OkHttpClient buildHttpClient(
+            long connectTimeoutMillis,
+            long readTimeoutMillis,
+            long callTimeoutMillis
+    ) {
         return new OkHttpClient.Builder()
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(config.getSseClientReadTimeout(), TimeUnit.SECONDS)
-                .writeTimeout(1_800, TimeUnit.SECONDS)
-                .callTimeout(config.getSseClientConnectTimeout(), TimeUnit.SECONDS)
+                .connectTimeout(requirePositive(connectTimeoutMillis, "connectTimeoutMillis"), TimeUnit.MILLISECONDS)
+                .readTimeout(requirePositive(readTimeoutMillis, "readTimeoutMillis"), TimeUnit.MILLISECONDS)
+                .writeTimeout(callTimeoutMillis, TimeUnit.MILLISECONDS)
+                .callTimeout(requirePositive(callTimeoutMillis, "callTimeoutMillis"), TimeUnit.MILLISECONDS)
                 .build();
+    }
+
+    private static long requirePositive(long value, String name) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
+    }
+
+    private static String requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value;
     }
 }

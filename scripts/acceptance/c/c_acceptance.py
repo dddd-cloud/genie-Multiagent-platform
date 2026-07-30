@@ -42,6 +42,11 @@ DEFAULT_POLL_SECONDS = 20
 MAX_STREAM_BYTES = 16 * 1024 * 1024
 FROZEN_ACCEPTANCE_USERNAME = "user-a"
 REQUIRED_REGRESSION_SCENARIOS = frozenset({"react", "plan", "search", "code", "report", "dataAgent"})
+REAL_AGENT_KEY_ENVIRONMENTS = (
+    "MVP_REAL_LLM_API_KEY",
+    "OPENAI_API_KEY",
+    "LLM_API_KEY",
+)
 
 
 def normalize_base_url(value: str) -> str:
@@ -301,12 +306,11 @@ class AcceptanceRun:
     def messages(self, conversation_id: str) -> list[dict[str, Any]]:
         status, node = self.json_request("GET", f"/api/v1/conversations/{conversation_id}/messages")
         data = self.require_ok(status, node, "message history lookup")
-        if not isinstance(data, dict) or not isinstance(data.get("messages"), list):
+        if not isinstance(data, list):
             self.fail("CONTRACT_RESPONSE_INVALID", "message history data does not match the frozen conversation shape")
-        messages = data["messages"]
-        if not all(isinstance(item, dict) for item in messages):
+        if not all(isinstance(item, dict) for item in data):
             self.fail("CONTRACT_RESPONSE_INVALID", "message history contains a non-object item")
-        return messages
+        return data
 
     def wait_assistant(self, conversation_id: str, request_id: str, status: str, error_code: str | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         deadline = time.monotonic() + self.poll_seconds
@@ -358,6 +362,12 @@ class AcceptanceRun:
     def ensure_real_agent(self) -> None:
         if not self.real_agent_enabled:
             self.fail("PREREQUISITE_UNAVAILABLE", "--real-agent is required for real-Agent regression")
+        if not any(os.getenv(name, "").strip() for name in REAL_AGENT_KEY_ENVIRONMENTS):
+            self.fail(
+                "MISSING_ENVIRONMENT",
+                "a real-Agent API key is required",
+                acceptedEnvironmentNames=list(REAL_AGENT_KEY_ENVIRONMENTS),
+            )
         self.check("real-Agent regression was explicitly enabled")
 
     def run_fake(self, terminal: str, persisted_status: str, error_code: str | None = None,
