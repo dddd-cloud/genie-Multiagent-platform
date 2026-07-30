@@ -49,17 +49,48 @@ class AgentExecutionRequestFactoryTest {
     }
 
     @Test
-    void normalizesQueryAndAppliesFrozenDefaults() {
+    void normalizesWhitespaceAndAppliesFrozenDefaults() {
         GptQueryReq external = validRequest();
-        external.setQuery("  问题  ");
+        external.setSessionId("  " + CONVERSATION_ID.toUpperCase() + "  ");
+        external.setRequestId("  request-1  ");
+        external.setQuery("  中文 😀  ");
         external.setDeepThink(null);
-        external.setOutputStyle(null);
+        external.setOutputStyle("   ");
 
         GptQueryReq trusted = factory.trustedRequest(external, USER);
 
-        assertEquals("问题", trusted.getQuery());
+        assertEquals(CONVERSATION_ID, trusted.getSessionId());
+        assertEquals("request-1", trusted.getRequestId());
+        assertEquals("中文 😀", trusted.getQuery());
         assertEquals(0, trusted.getDeepThink());
         assertEquals("docs", trusted.getOutputStyle());
+        assertEquals("alice" + CONVERSATION_ID + ":request-1", trusted.getTraceId());
+    }
+
+    @Test
+    void acceptsFrozenRequestIdAndUnicodeQueryBoundariesAfterTrim() {
+        GptQueryReq exactRequestId = validRequest();
+        exactRequestId.setRequestId(" " + "x".repeat(64) + " ");
+        assertEquals("x".repeat(64), factory.trustedRequest(exactRequestId, USER).getRequestId());
+
+        GptQueryReq exactChineseQuery = validRequest();
+        exactChineseQuery.setQuery(" " + "中".repeat(20_000) + " ");
+        assertEquals(20_000, factory.trustedRequest(exactChineseQuery, USER)
+                .getQuery()
+                .codePointCount(0, 20_000));
+
+        GptQueryReq exactEmojiQuery = validRequest();
+        exactEmojiQuery.setQuery(" " + "😀".repeat(20_000) + " ");
+        String emojiQuery = factory.trustedRequest(exactEmojiQuery, USER).getQuery();
+        assertEquals(20_000, emojiQuery.codePointCount(0, emojiQuery.length()));
+
+        GptQueryReq oversizedRequestId = validRequest();
+        oversizedRequestId.setRequestId(" " + "x".repeat(65) + " ");
+        assertValidation(oversizedRequestId);
+
+        GptQueryReq oversizedEmojiQuery = validRequest();
+        oversizedEmojiQuery.setQuery(" " + "😀".repeat(20_001) + " ");
+        assertValidation(oversizedEmojiQuery);
     }
 
     @Test
@@ -69,6 +100,10 @@ class AgentExecutionRequestFactoryTest {
         GptQueryReq invalidSession = validRequest();
         invalidSession.setSessionId("not-a-uuid");
         assertValidation(invalidSession);
+
+        GptQueryReq nullSession = validRequest();
+        nullSession.setSessionId(null);
+        assertValidation(nullSession);
 
         GptQueryReq invalidRequestId = validRequest();
         invalidRequestId.setRequestId("x".repeat(65));

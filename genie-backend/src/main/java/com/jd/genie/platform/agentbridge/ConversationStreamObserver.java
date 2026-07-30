@@ -63,9 +63,9 @@ public final class ConversationStreamObserver {
             try {
                 persistence.markStreaming();
                 return true;
-            } catch (Throwable error) {
-                transitionToFailure(failureOf(error, MvpErrorCode.INTERNAL_ERROR));
-                return false;
+            } catch (RuntimeException | Error error) {
+                streamingMarked.set(false);
+                throw error;
             }
         }
     }
@@ -216,9 +216,7 @@ public final class ConversationStreamObserver {
     }
 
     private Failure failureOf(Throwable error, MvpErrorCode fallbackCode) {
-        MvpErrorCode errorCode = error instanceof AgentBridgeException bridgeException
-                ? bridgeException.getErrorCode()
-                : fallbackCode;
+        MvpErrorCode errorCode = AgentBridgeErrorMapper.errorCode(error, fallbackCode);
         return new Failure(errorCode, messageOf(error, defaultMessage(errorCode)));
     }
 

@@ -20,6 +20,11 @@ spring:
     jdbc:
       initialize-schema: never
 genie:
+  agent-bridge:
+    auto-agent-url: ${GENIE_AUTO_AGENT_URL:http://127.0.0.1:${server.port:8080}/AutoAgent}
+    connect-timeout-millis: ${GENIE_INTERNAL_AGENT_CONNECT_TIMEOUT_MILLIS:60000}
+    read-timeout-millis: ${GENIE_INTERNAL_AGENT_READ_TIMEOUT_MILLIS:${GENIE_SSE_TIMEOUT_MILLIS:3600000}}
+    call-timeout-millis: ${GENIE_INTERNAL_AGENT_CALL_TIMEOUT_MILLIS:${GENIE_SSE_TIMEOUT_MILLIS:3600000}}
   bootstrap:
     admin-username: ${GENIE_BOOTSTRAP_ADMIN_USERNAME:}
     admin-password: ${GENIE_BOOTSTRAP_ADMIN_PASSWORD:}

@@ -166,6 +166,40 @@ class SnapshotPrunerTest {
         assertThrows(IllegalArgumentException.class, () -> pruner.prune(envelope(List.of()), 0));
     }
 
+    @Test
+    void truncatesDirectArrayStringsWhenNoFinalEventExists() {
+        GptProcessResult running = event("tool", "partial", false, "short");
+        running.getResultMap().put("logEntries", List.of("x".repeat(SnapshotPruner.LONG_STRING_THRESHOLD + 1)));
+        StreamSnapshotEnvelope source = envelope(List.of(running));
+
+        StreamSnapshotEnvelope pruned = pruner.prune(source, pruner.utf8Size(source) - 1);
+
+        assertTrue(pruned.truncated());
+        assertEquals(
+                SnapshotPruner.TRUNCATED_VALUE,
+                ((List<?>) pruned.events().get(0).getResultMap().get("logEntries")).get(0)
+        );
+        assertEquals("partial", pruned.events().get(0).getResponse());
+    }
+
+    @Test
+    void preservesTaskEventsBeforeRemovingLaterNonCriticalEvents() {
+        GptProcessResult task = event("task", "执行任务", false, "short");
+        GptProcessResult oldTool = event("tool", "x".repeat(3_000), false, "short");
+        GptProcessResult finalEvent = event("result", "完成", true, "short");
+        StreamSnapshotEnvelope source = envelope(List.of(task, oldTool, finalEvent));
+        long maxBytes = pruner.utf8Size(envelope(List.of(task, finalEvent)));
+
+        StreamSnapshotEnvelope pruned = pruner.prune(source, maxBytes);
+
+        assertTrue(pruned.truncated());
+        assertEquals(List.of("执行任务", "完成"), pruned.events().stream()
+                .map(GptProcessResult::getResponse)
+                .toList());
+        assertEquals("task", messageType(pruned.events().get(0)));
+        assertTrue(pruned.events().get(1).isFinished());
+    }
+
     private StreamSnapshotEnvelope envelope(List<GptProcessResult> events) {
         return new StreamSnapshotEnvelope(1, false, events);
     }

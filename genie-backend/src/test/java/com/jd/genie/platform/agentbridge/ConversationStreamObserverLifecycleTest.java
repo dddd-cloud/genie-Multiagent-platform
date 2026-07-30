@@ -64,6 +64,38 @@ class ConversationStreamObserverLifecycleTest {
     }
 
     @Test
+    void eachReceivedEventIsForwardedOnceInOrderWhileHeartbeatsStayOutOfSnapshot() throws Exception {
+        FakeConversationExecutionPort port = preparedPort();
+        ObserverTestSupport.RecordingClientChannel channel =
+                new ObserverTestSupport.RecordingClientChannel();
+        ConversationStreamObserver stream = observer(port, channel);
+        List<com.jd.genie.model.response.GptProcessResult> received = List.of(
+                event("第一段", false),
+                heartbeat(),
+                event("第二段", false),
+                heartbeat(),
+                event("最终回答", true)
+        );
+
+        assertTrue(stream.markStreaming());
+        for (com.jd.genie.model.response.GptProcessResult event : received) {
+            assertTrue(stream.onEvent(event));
+        }
+        assertTrue(stream.onCompleted());
+
+        assertEquals(received, channel.events());
+        assertEquals(5, channel.events().size());
+        assertEquals(3, stream.bufferedEventCount());
+        StreamSnapshotEnvelope snapshot = objectMapper.readValue(
+                port.getCalls().get(1).completionCommand().snapshotJson(),
+                StreamSnapshotEnvelope.class
+        );
+        assertEquals(List.of("第一段", "第二段", "最终回答"), snapshot.events().stream()
+                .map(event -> event.getResponse())
+                .toList());
+    }
+
+    @Test
     void terminalCallbacksAndDuplicateStreamingMarksAreIgnored() {
         FakeConversationExecutionPort port = preparedPort();
         ObserverTestSupport.RecordingClientChannel channel =

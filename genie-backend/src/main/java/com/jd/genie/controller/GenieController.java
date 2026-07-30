@@ -281,7 +281,10 @@ public class GenieController {
      * @param params 查询请求参数对象，包含GPT查询所需信息
      * @return 返回SSE事件发射器，用于流式传输增量响应结果
      */
-    @RequestMapping(value = "/web/api/v1/gpt/queryAgentStreamIncr", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(
+            value = "/web/api/v1/gpt/queryAgentStreamIncr",
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE
+    )
     public SseEmitter queryAgentStreamIncr(@RequestBody GptQueryReq params) {
         return gptProcessService.queryMultiAgentIncrStream(params);
     }

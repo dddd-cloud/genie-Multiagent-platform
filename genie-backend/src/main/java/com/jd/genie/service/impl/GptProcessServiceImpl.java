@@ -1,6 +1,7 @@
 package com.jd.genie.service.impl;
 
 import com.jd.genie.model.req.GptQueryReq;
+import com.jd.genie.platform.agentbridge.AgentBridgeErrorMapper;
 import com.jd.genie.platform.agentbridge.AgentBridgeException;
 import com.jd.genie.platform.agentbridge.AgentExecutionRequestFactory;
 import com.jd.genie.platform.agentbridge.AgentHistoryMessageMapper;
@@ -25,8 +26,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Slf4j
 @Service
 public class GptProcessServiceImpl implements IGptProcessService {
-    private static final int MAX_ERROR_MESSAGE_LENGTH = 1_000;
-
     private final IMultiAgentService multiAgentService;
     private final CurrentUserProvider currentUserProvider;
     private final ConversationExecutionPort executionPort;
@@ -61,39 +60,49 @@ public class GptProcessServiceImpl implements IGptProcessService {
     public SseEmitter queryMultiAgentIncrStream(GptQueryReq externalRequest) {
         CurrentUser currentUser = currentUserProvider.requireCurrentUser();
         GptQueryReq request = requestFactory.trustedRequest(externalRequest, currentUser);
-        ConversationExecutionResult execution = prepareExecution(currentUser, request);
+        ConversationExecutionResult execution;
+        try {
+            execution = prepareExecution(currentUser, request);
+        } catch (RuntimeException error) {
+            throw AgentBridgeErrorMapper.asAgentBridgeException(error, MvpErrorCode.INTERNAL_ERROR);
+        }
         StreamPersistenceObserver persistence = new StreamPersistenceObserver(
                 executionPort,
                 currentUser,
                 execution.assistantMessageId()
         );
 
-        loadHistory(currentUser, request, persistence);
-        SseEmitter emitter = createEmitter(persistence);
-        CancellableAgentCall cancellableCall = new CancellableAgentCall();
-        ConversationStreamObserver observer = new ConversationStreamObserver(
-                persistence,
-                new SseEmitterClientChannel(emitter, request.getTraceId()),
-                maxSnapshotBytes,
-                cancellableCall
-        );
-        if (!registerLifecycle(emitter, request.getTraceId(), observer)) {
-            return emitter;
-        }
-        if (!observer.markStreaming()) {
-            return emitter;
-        }
-        if (!startAgent(request, observer, cancellableCall)) {
-            return emitter;
-        }
+        try {
+            loadHistory(currentUser, request, persistence);
+            SseEmitter emitter = createEmitter(persistence);
+            CancellableAgentCall cancellableCall = new CancellableAgentCall();
+            ConversationStreamObserver observer = new ConversationStreamObserver(
+                    persistence,
+                    new SseEmitterClientChannel(emitter, request.getTraceId()),
+                    maxSnapshotBytes,
+                    cancellableCall
+            );
+            registerLifecycle(emitter, request.getTraceId(), persistence, observer);
+            try {
+                if (!observer.markStreaming()) {
+                    return emitter;
+                }
+            } catch (RuntimeException error) {
+                failPreparedExecution(persistence, error);
+                throw error;
+            }
+            startAgent(request, persistence, observer, cancellableCall);
 
-        log.info(
-                "Agent execution started, conversationId: {}, requestId: {}, traceId: {}, status: STREAMING",
-                request.getSessionId(),
-                request.getRequestId(),
-                request.getTraceId()
-        );
-        return emitter;
+            log.info(
+                    "Agent execution started, conversationId: {}, requestId: {}, traceId: {}, status: STREAMING",
+                    request.getSessionId(),
+                    request.getRequestId(),
+                    request.getTraceId()
+            );
+            return emitter;
+        } catch (RuntimeException error) {
+            throw AgentBridgeErrorMapper.asAgentBridgeException(error, MvpErrorCode.INTERNAL_ERROR);
+        }
     }
 
     private ConversationExecutionResult prepareExecution(
@@ -146,9 +155,10 @@ public class GptProcessServiceImpl implements IGptProcessService {
         }
     }
 
-    private boolean registerLifecycle(
+    private void registerLifecycle(
             SseEmitter emitter,
             String traceId,
+            StreamPersistenceObserver persistence,
             ConversationStreamObserver observer
     ) {
         try {
@@ -157,24 +167,23 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     traceId,
                     ignored -> observer.onClientDisconnected()
             );
-            return true;
         } catch (RuntimeException error) {
-            observer.onError(internalError("Failed to register SSE lifecycle", error));
-            return false;
+            failPreparedExecution(persistence, error);
+            throw error;
         }
     }
 
-    private boolean startAgent(
+    private void startAgent(
             GptQueryReq request,
+            StreamPersistenceObserver persistence,
             ConversationStreamObserver observer,
             CancellableAgentCall cancellableCall
     ) {
         try {
             multiAgentService.searchForAgentRequest(request, observer, cancellableCall);
-            return true;
         } catch (RuntimeException error) {
-            observer.onError(error);
-            return false;
+            failPreparedExecution(persistence, error);
+            throw error;
         }
     }
 
@@ -182,10 +191,11 @@ public class GptProcessServiceImpl implements IGptProcessService {
             StreamPersistenceObserver persistence,
             RuntimeException originalError
     ) {
+        MvpErrorCode errorCode = errorCodeOf(originalError);
         try {
             persistence.fail(
-                    errorCodeOf(originalError),
-                    safeMessage(originalError),
+                    errorCode,
+                    safeMessage(originalError, errorCode),
                     null,
                     null
             );
@@ -195,17 +205,11 @@ public class GptProcessServiceImpl implements IGptProcessService {
     }
 
     private MvpErrorCode errorCodeOf(RuntimeException error) {
-        return error instanceof AgentBridgeException bridgeException
-                ? bridgeException.getErrorCode()
-                : MvpErrorCode.INTERNAL_ERROR;
+        return AgentBridgeErrorMapper.errorCode(error, MvpErrorCode.INTERNAL_ERROR);
     }
 
-    private String safeMessage(RuntimeException error) {
-        String message = error.getMessage();
-        String safe = hasText(message) ? message : MvpErrorCode.INTERNAL_ERROR.name();
-        return safe.length() <= MAX_ERROR_MESSAGE_LENGTH
-                ? safe
-                : safe.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+    private String safeMessage(RuntimeException error, MvpErrorCode errorCode) {
+        return AgentBridgeErrorMapper.message(error, errorCode);
     }
 
     private AgentBridgeException internalError(String message, Throwable cause) {

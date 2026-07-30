@@ -202,8 +202,11 @@
                         <goals><goal>report</goal></goals>
                         <configuration>
                             <includes>
-                                <include>com/jd/genie/platform/security/*</include>
-                                <include>com/jd/genie/platform/user/*</include>
+                                <include>com/jd/genie/platform/agentbridge/**</include>
+                                <include>com/jd/genie/service/impl/GptProcessServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/MultiAgentServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/ReactHandlerImpl*</include>
+                                <include>com/jd/genie/service/impl/PlanSolveHandlerImpl*</include>
                             </includes>
                         </configuration>
                     </execution>
@@ -213,8 +216,11 @@
                         <goals><goal>check</goal></goals>
                         <configuration>
                             <includes>
-                                <include>com/jd/genie/platform/security/*</include>
-                                <include>com/jd/genie/platform/user/*</include>
+                                <include>com/jd/genie/platform/agentbridge/**</include>
+                                <include>com/jd/genie/service/impl/GptProcessServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/MultiAgentServiceImpl*</include>
+                                <include>com/jd/genie/service/impl/ReactHandlerImpl*</include>
+                                <include>com/jd/genie/service/impl/PlanSolveHandlerImpl*</include>
                             </includes>
                             <rules>
                                 <rule>
