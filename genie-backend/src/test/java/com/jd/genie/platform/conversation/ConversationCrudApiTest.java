@@ -17,7 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
@@ -32,6 +33,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -58,7 +60,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Testcontainers
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
+@ActiveProfiles("conversation-test")
 @SpringBootTest(classes = ConversationCrudApiTest.TestConfig.class)
 class ConversationCrudApiTest {
 
@@ -238,7 +241,10 @@ class ConversationCrudApiTest {
             .andReturn()
             .getResponse()
             .getContentAsString(StandardCharsets.UTF_8);
-        assertEquals(55, objectMapper.readTree(historyResponse).get("data").get(99).get("turnNo").asInt());
+        JsonNode history = objectMapper.readTree(historyResponse).get("data");
+        assertEquals(55, history.get(99).get("turnNo").asInt());
+        assertTrue(history.get(1).get("deepThink").isNull());
+        assertTrue(history.get(1).get("outputStyle").isNull());
 
         mockMvc.perform(patch("/api/v1/conversations/conv-owned")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -273,12 +279,20 @@ class ConversationCrudApiTest {
 
         assertEquals(1, jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM conversation_message WHERE conversation_id = 'conv-done'", Integer.class));
+        assertNotNull(jdbcTemplate.queryForObject(
+            "SELECT deleted_at FROM conversation WHERE id = 'conv-done'", Object.class));
         mockMvc.perform(get("/api/v1/conversations/conv-done"))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
         mockMvc.perform(patch("/api/v1/conversations/conv-done")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"after delete\"}"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        mockMvc.perform(delete("/api/v1/conversations/conv-done"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        mockMvc.perform(get("/api/v1/conversations/conv-done/messages"))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
@@ -357,9 +371,11 @@ class ConversationCrudApiTest {
         assertEquals(1, conversationMessageMapper.insert(message));
     }
 
-    @SpringBootConfiguration
+    @Profile("conversation-test")
+    @Configuration
     @Import({
         ConversationController.class,
+        com.jd.genie.platform.conversation.exception.ConversationExceptionHandler.class,
         ConversationService.class
     })
     @ImportAutoConfiguration({

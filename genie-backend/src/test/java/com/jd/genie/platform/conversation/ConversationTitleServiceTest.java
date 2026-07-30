@@ -18,7 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
@@ -28,6 +29,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -52,6 +54,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @Testcontainers
+@ActiveProfiles("conversation-test")
 @SpringBootTest(classes = ConversationTitleServiceTest.TestConfig.class)
 class ConversationTitleServiceTest {
     private static final String DEFAULT_TITLE = ConversationTitleService.DEFAULT_TITLE;
@@ -315,7 +318,8 @@ class ConversationTitleServiceTest {
         void run();
     }
 
-    @SpringBootConfiguration
+    @Profile("conversation-test")
+    @Configuration
     @Import({ConversationExecutionService.class, ConversationHistoryService.class, ConversationTitleService.class})
     @ImportAutoConfiguration({
         DataSourceAutoConfiguration.class,

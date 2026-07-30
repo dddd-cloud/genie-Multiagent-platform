@@ -12,6 +12,7 @@ import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.conversation.entity.ConversationEntity;
 import com.jd.genie.platform.conversation.entity.ConversationMessageEntity;
 import com.jd.genie.platform.conversation.exception.ConversationException;
+import com.jd.genie.platform.conversation.exception.DuplicateConstraintClassifier;
 import com.jd.genie.platform.conversation.mapper.ConversationMapper;
 import com.jd.genie.platform.conversation.mapper.ConversationMessageMapper;
 import com.jd.genie.platform.conversation.snapshot.SnapshotValidator;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -88,10 +90,16 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         String assistantMessageId = UUID.randomUUID().toString();
 
         try {
-            conversationMessageMapper.insert(userMessage(
+            int insertedUser = conversationMessageMapper.insert(userMessage(
                 userMessageId, valid, turnNo, now));
-            conversationMessageMapper.insert(assistantMessage(
+            if (insertedUser != 1) {
+                throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable");
+            }
+            int insertedAssistant = conversationMessageMapper.insert(assistantMessage(
                 assistantMessageId, valid, turnNo, now));
+            if (insertedAssistant != 1) {
+                throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable");
+            }
             int updated = conversationMapper.completePrepareExecution(
                 currentUser.tenantId(),
                 currentUser.userId(),
@@ -107,10 +115,11 @@ public class ConversationExecutionService implements ConversationExecutionPort {
             conversationTitleService.autoTitleFirstTurn(
                 currentUser.tenantId(), currentUser.userId(), valid.conversationId(), turnNo, valid.query(), now);
         } catch (DuplicateKeyException exception) {
-            if (isRequestRoleDuplicate(exception)) {
-                throw error(MvpErrorCode.DUPLICATE_REQUEST, "Duplicate request", exception);
+            Optional<MvpErrorCode> duplicateCode = DuplicateConstraintClassifier.classify(exception);
+            if (duplicateCode.isPresent()) {
+                throw error(duplicateCode.get(), duplicateMessage(duplicateCode.get()), exception);
             }
-            throw exception;
+            throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable", exception);
         } catch (DataAccessException exception) {
             throw error(MvpErrorCode.DATABASE_UNAVAILABLE, "Database unavailable", exception);
         }
@@ -284,6 +293,8 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         message.setRole("USER");
         message.setStatus("COMPLETED");
         message.setContent(command.query());
+        message.setDeepThink(command.deepThink());
+        message.setOutputStyle(command.outputStyle());
         return message;
     }
 
@@ -301,8 +312,6 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         message.setTurnNo(turnNo);
         message.setRequestId(command.requestId());
         message.setPayloadVersion(PAYLOAD_VERSION);
-        message.setDeepThink(command.deepThink());
-        message.setOutputStyle(command.outputStyle());
         message.setCreatedAt(now);
         message.setUpdatedAt(now);
         return message;
@@ -312,11 +321,12 @@ public class ConversationExecutionService implements ConversationExecutionPort {
         return new SnapshotValidator(SNAPSHOT_OBJECT_MAPPER, snapshotMaxBytes);
     }
 
-    private boolean isRequestRoleDuplicate(DuplicateKeyException exception) {
-        String message = exception.getMostSpecificCause() == null
-            ? exception.getMessage()
-            : exception.getMostSpecificCause().getMessage();
-        return message != null && message.contains("uk_msg_request_role");
+    private String duplicateMessage(MvpErrorCode code) {
+        return switch (code) {
+            case DUPLICATE_REQUEST -> "Duplicate request";
+            case MESSAGE_STATE_CONFLICT -> "Message state conflict";
+            default -> "Internal error";
+        };
     }
 
     private String trim(String value) {
