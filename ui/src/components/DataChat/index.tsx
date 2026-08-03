@@ -12,11 +12,26 @@ import { useState, useMemo } from "react";
  */
 const TypeBar: GenieType.FC<{ currentType: string; chartCfg: Record<string, any>; onChange?: (val: string) => void }> = (props) => {
   const _chartTypes: Record<string, any>[] = [
-    { type: "line", icon: "icon-zhexian" },
-    { type: "bar", icon: "icon-zhuzhuang" },
-    { type: "hbar", icon: "icon-tiaoxing" },
-    { type: "pie", icon: "icon-shanxing" },
-    { type: "table", icon: "icon-biaoge" },
+    {
+      type: "line",
+      icon: "icon-zhexian"
+    },
+    {
+      type: "bar",
+      icon: "icon-zhuzhuang"
+    },
+    {
+      type: "hbar",
+      icon: "icon-tiaoxing"
+    },
+    {
+      type: "pie",
+      icon: "icon-shanxing"
+    },
+    {
+      type: "table",
+      icon: "icon-biaoge"
+    },
   ];
 
   const { currentType, chartCfg, onChange } = props;
@@ -52,11 +67,11 @@ const TypeBar: GenieType.FC<{ currentType: string; chartCfg: Record<string, any>
     return (filters || []).map((f: Record<string, any>) => {
       if (f.operator === "OR") {
         const _subList = (f.subFilters || []).map((s: Record<string, any>) => {
-          return `${s.name}(${s.optName}${s.val?.replace(/^\%+/g, "").replace(/\%+$/g, "") || ""})`;
+          return `${s.name}(${s.optName}${s.val?.replace(/^%+/g, "").replace(/%+$/g, "") || ""})`;
         });
         return _subList.join(" 或 ");
       }
-      return `${f.name}(${f.optName}${f.val?.replace(/^\%+/g, "").replace(/\%+$/g, "") || ""})`;
+      return `${f.name}(${f.optName}${f.val?.replace(/^%+/g, "").replace(/%+$/g, "") || ""})`;
     });
   }, [chartCfg]);
 
@@ -105,7 +120,10 @@ const TypeBar: GenieType.FC<{ currentType: string; chartCfg: Record<string, any>
             onClick={() => setShowQueryArgs(!showQueryArgs)}
           >
             <span>分析参数</span>
-            <i className={classNames("font_family", { "icon-zhankai": showQueryArgs, "icon-shouqi": !showQueryArgs })}></i>
+            <i className={classNames("font_family", {
+              "icon-zhankai": showQueryArgs,
+              "icon-shouqi": !showQueryArgs
+            })}></i>
           </div>
         }
       </div>

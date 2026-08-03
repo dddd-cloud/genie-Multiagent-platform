@@ -59,7 +59,10 @@ export function createInitialMockState(): MockSessionState {
 export let mockState: MockSessionState = createInitialMockState();
 
 export function resetMockState(partial?: Partial<MockSessionState>): void {
-  mockState = { ...createInitialMockState(), ...partial };
+  mockState = {
+    ...createInitialMockState(),
+    ...partial
+  };
   if (partial?.conversations) {
     mockState.conversations = partial.conversations;
   }
@@ -69,11 +72,19 @@ export function resetMockState(partial?: Partial<MockSessionState>): void {
 }
 
 function ok<T>(data: T): ApiResponse<T> {
-  return { code: 'OK', message: 'success', data };
+  return {
+    code: 'OK',
+    message: 'success',
+    data
+  };
 }
 
 function errorBody(code: string, message: string, data: unknown = null) {
-  return { code, message, data };
+  return {
+    code,
+    message,
+    data
+  };
 }
 
 function requireCsrf(request: Request): Response | null {
@@ -114,7 +125,8 @@ function requireAuth(): Response | null {
 function seedHistoryListItems(): void {
   for (const [id, fixture] of Object.entries(HISTORY_FIXTURES)) {
     if (mockState.conversations.has(id)) continue;
-    const { messages: _messages, ...rest } = fixture.data;
+    const rest = { ...fixture.data };
+    delete (rest as { messages?: unknown }).messages;
     mockState.conversations.set(id, {
       ...rest,
       lastMessagePreview: null,
@@ -226,8 +238,9 @@ export const handlers: HttpHandler[] = [
       lastMessagePreview: null,
     };
     mockState.conversations.set(id, item);
-    const { lastMessagePreview: _preview, ...response } = item;
-    return HttpResponse.json(ok(response));
+    const createResponse = { ...item };
+    delete (createResponse as { lastMessagePreview?: unknown }).lastMessagePreview;
+    return HttpResponse.json(ok(createResponse));
   }),
 
   http.get('/api/v1/conversations/:id', ({ params }) => {
@@ -237,7 +250,8 @@ export const handlers: HttpHandler[] = [
     const id = String(params.id);
     const history = HISTORY_FIXTURES[id];
     if (history) {
-      const { messages: _messages, ...rest } = history.data;
+      const rest = { ...history.data };
+      delete (rest as { messages?: unknown }).messages;
       return HttpResponse.json(ok(rest));
     }
 
@@ -245,8 +259,9 @@ export const handlers: HttpHandler[] = [
     if (!item) {
       return HttpResponse.json(userIsolation404, { status: 404 });
     }
-    const { lastMessagePreview: _preview, ...response } = item;
-    return HttpResponse.json(ok(response));
+    const detailResponse = { ...item };
+    delete (detailResponse as { lastMessagePreview?: unknown }).lastMessagePreview;
+    return HttpResponse.json(ok(detailResponse));
   }),
 
   http.get('/api/v1/conversations/:id/messages', ({ params }) => {
@@ -296,8 +311,9 @@ export const handlers: HttpHandler[] = [
       updatedAt: now,
     };
     mockState.conversations.set(id, updated);
-    const { lastMessagePreview: _preview, ...response } = updated;
-    return HttpResponse.json(ok(response));
+    const patchResponse = { ...updated };
+    delete (patchResponse as { lastMessagePreview?: unknown }).lastMessagePreview;
+    return HttpResponse.json(ok(patchResponse));
   }),
 
   http.delete('/api/v1/conversations/:id', ({ params, request }) => {

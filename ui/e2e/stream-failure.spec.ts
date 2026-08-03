@@ -18,9 +18,7 @@ const fakeMode = process.env.MVP_FAKE_AGENT_MODE || 'SUCCESS';
 test.describe('stream-failure', () => {
   test.skip(!e2eReady, 'Set MVP_E2E_READY=1 with mvp-acceptance Fake stack');
 
-  test(`fake mode ${fakeMode} ends without permanent loading`, async ({
-    page,
-  }) => {
+  test(`fake mode ${fakeMode} ends without permanent loading`, async ({page,}) => {
     await loginAs(page, 'user-a');
     await expect(page).toHaveURL(/\/app/);
 

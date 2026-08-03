@@ -3,10 +3,102 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/genie-backend"
-JAVA_HOME_WIN="${JAVA_HOME:-E:\\dev-tools\\jdk-17}"
-MAVEN_CMD_WIN="${MAVEN_CMD:-E:\\dev-tools\\apache-maven-3.9.16\\bin\\mvn.cmd}"
-JAVA_HOME_UNIX="$(cygpath -u "$JAVA_HOME_WIN" 2>/dev/null || printf '%s' "$JAVA_HOME_WIN")"
-MAVEN_CMD_UNIX="$(cygpath -u "$MAVEN_CMD_WIN" 2>/dev/null || printf '%s' "$MAVEN_CMD_WIN")"
+
+to_unix_path() {
+  local path=$1
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$path" 2>/dev/null || printf '%s' "$path"
+  else
+    printf '%s' "$path"
+  fi
+}
+
+to_win_path() {
+  local path=$1
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path" 2>/dev/null || printf '%s' "$path"
+  else
+    printf '%s' "$path"
+  fi
+}
+
+java_bin_for_home() {
+  local home=$1
+  if [[ -x "$home/bin/java" ]]; then
+    printf '%s' "$home/bin/java"
+    return 0
+  fi
+  if [[ -x "$home/bin/java.exe" ]]; then
+    printf '%s' "$home/bin/java.exe"
+    return 0
+  fi
+  return 1
+}
+
+resolve_java_home() {
+  local candidate home bin
+  for candidate in \
+    "${JAVA_HOME:-}" \
+    "E:\\dev-tools\\jdk-17" \
+    "/c/Program Files/Java/jdk-21" \
+    "/c/Program Files/Java/jdk-17"; do
+    [[ -n "$candidate" ]] || continue
+    home="$(to_unix_path "$candidate")"
+    if bin="$(java_bin_for_home "$home")"; then
+      JAVA_HOME_UNIX="$home"
+      JAVA_HOME_WIN="$(to_win_path "$home")"
+      JAVA_BIN="$bin"
+      return 0
+    fi
+  done
+
+  if command -v java >/dev/null 2>&1; then
+    bin="$(command -v java)"
+    # Prefer JAVA_HOME derived from a real java binary when possible.
+    if [[ -x "$(dirname "$bin")/../bin/java" ]] || [[ -x "$(dirname "$bin")/java" ]]; then
+      home="$(cd "$(dirname "$bin")/.." && pwd)"
+      if java_bin_for_home "$home" >/dev/null 2>&1; then
+        JAVA_HOME_UNIX="$home"
+        JAVA_HOME_WIN="$(to_win_path "$home")"
+        JAVA_BIN="$(java_bin_for_home "$home")"
+        return 0
+      fi
+    fi
+    JAVA_BIN="$bin"
+    JAVA_HOME_UNIX="${JAVA_HOME:-}"
+    JAVA_HOME_WIN="${JAVA_HOME:-}"
+    return 0
+  fi
+  return 1
+}
+
+resolve_maven_cmd() {
+  local candidate unix_path
+  for candidate in \
+    "${MAVEN_CMD:-}" \
+    "E:\\dev-tools\\apache-maven-3.9.16\\bin\\mvn.cmd"; do
+    [[ -n "$candidate" ]] || continue
+    unix_path="$(to_unix_path "$candidate")"
+    if [[ -f "$unix_path" || -x "$unix_path" ]]; then
+      MAVEN_CMD_UNIX="$unix_path"
+      MAVEN_CMD_WIN="$(to_win_path "$unix_path")"
+      return 0
+    fi
+  done
+
+  if command -v mvn >/dev/null 2>&1; then
+    MAVEN_CMD_UNIX="$(command -v mvn)"
+    MAVEN_CMD_WIN="$(to_win_path "$MAVEN_CMD_UNIX")"
+    return 0
+  fi
+  return 1
+}
+
+JAVA_HOME_UNIX=""
+JAVA_HOME_WIN=""
+JAVA_BIN=""
+MAVEN_CMD_UNIX=""
+MAVEN_CMD_WIN=""
 
 json_escape() {
   local value=${1-}
@@ -36,11 +128,11 @@ require_file() {
 require_tooling() {
   local gate=$1
   require_file "$gate" "$BACKEND_DIR/pom.xml"
-  require_file "$gate" "$MAVEN_CMD_UNIX"
-  require_file "$gate" "$JAVA_HOME_UNIX/bin/java.exe"
+  resolve_java_home || fail_json "$gate" "Java runtime not found. Set JAVA_HOME or put java on PATH."
+  resolve_maven_cmd || fail_json "$gate" "Maven not found. Set MAVEN_CMD or put mvn on PATH."
   docker version >/dev/null 2>&1 || fail_json "$gate" "Docker is not available. Start Docker Desktop and retry."
-  "$JAVA_HOME_UNIX/bin/java.exe" -version >&2
-  JAVA_HOME="$JAVA_HOME_WIN" PATH="$JAVA_HOME_UNIX/bin:$PATH" "$MAVEN_CMD_UNIX" -version >&2
+  "$JAVA_BIN" -version >&2
+  JAVA_HOME="$JAVA_HOME_WIN" PATH="$(dirname "$JAVA_BIN"):$PATH" "$MAVEN_CMD_UNIX" -version >&2
 }
 
 sum_reports() {
@@ -67,17 +159,17 @@ run_maven_gate() {
   local gate=$1
   local test_spec=$2
   local start end duration status mvn_status counts tests failures errors skipped
-  start=$(date +%s%3N)
+  start=$(date +%s%3N 2>/dev/null || python -c 'import time; print(int(time.time()*1000))')
   require_tooling "$gate"
   rm -rf "$BACKEND_DIR/target/surefire-reports"
   mkdir -p "$BACKEND_DIR/target"
   set +e
   (cd "$BACKEND_DIR" && \
-    JAVA_HOME="$JAVA_HOME_WIN" PATH="$JAVA_HOME_UNIX/bin:$PATH" \
+    JAVA_HOME="$JAVA_HOME_WIN" PATH="$(dirname "$JAVA_BIN"):$PATH" \
     "$MAVEN_CMD_UNIX" "-Dtest=$test_spec" -Dsurefire.useFile=false -DtrimStackTrace=false test >&2)
   mvn_status=$?
   set -e
-  end=$(date +%s%3N)
+  end=$(date +%s%3N 2>/dev/null || python -c 'import time; print(int(time.time()*1000))')
   duration=$((end - start))
   counts=$(sum_reports "$BACKEND_DIR/target/surefire-reports")
   read -r tests failures errors skipped <<< "$counts"

@@ -249,7 +249,10 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
     if (consumedDraftIdsRef.current.has(state.requestId)) {
       if (location.state != null) {
-        navigate(location.pathname, { replace: true, state: null });
+        navigate(location.pathname, {
+          replace: true,
+          state: null
+        });
       }
       return;
     }
@@ -258,12 +261,18 @@ const ConversationPage: GenieType.FC = memo(() => {
 
     // Already persisted for this requestId → do not resend; only clear state.
     if (chats.some((chat) => chat.requestId === state.requestId)) {
-      navigate(location.pathname, { replace: true, state: null });
+      navigate(location.pathname, {
+        replace: true,
+        state: null
+      });
       return;
     }
 
     setPendingDraft(state);
-    navigate(location.pathname, { replace: true, state: null });
+    navigate(location.pathname, {
+      replace: true,
+      state: null
+    });
   }, [
     historyReady,
     loading,
@@ -302,9 +311,9 @@ const ConversationPage: GenieType.FC = memo(() => {
       initialDraft={
         pendingDraft
           ? {
-              requestId: pendingDraft.requestId,
-              inputInfo: pendingDraft.inputInfo,
-            }
+            requestId: pendingDraft.requestId,
+            inputInfo: pendingDraft.inputInfo,
+          }
           : undefined
       }
       detachedRunning={detachedRunning}

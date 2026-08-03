@@ -4,13 +4,19 @@ import { setCsrf } from './csrf';
 
 export async function fetchCsrf(): Promise<CsrfTokenResponse> {
   const data = await requestMvp<CsrfTokenResponse>(
-    { method: 'GET', url: '/api/v1/auth/csrf' },
+    {
+      method: 'GET',
+      url: '/api/v1/auth/csrf'
+    },
     { skipCsrf: true },
   );
   if (!data) {
     throw new Error('Empty CSRF response');
   }
-  setCsrf({ headerName: data.headerName, token: data.token });
+  setCsrf({
+    headerName: data.headerName,
+    token: data.token
+  });
   return data;
 }
 
@@ -31,7 +37,10 @@ export async function logout(): Promise<null> {
 
 export async function fetchMe(): Promise<UserResponse | null> {
   return requestMvp<UserResponse>(
-    { method: 'GET', url: '/api/v1/users/me' },
+    {
+      method: 'GET',
+      url: '/api/v1/users/me'
+    },
     { skipCsrf: true },
   );
 }

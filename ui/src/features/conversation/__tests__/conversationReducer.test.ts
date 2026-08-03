@@ -85,7 +85,10 @@ describe('conversationReducer', () => {
       ...initialConversationListState,
       items: [item('a'), item('b'), item('c')],
     };
-    const next = conversationReducer(prev, { type: 'REMOVE', id: 'b' });
+    const next = conversationReducer(prev, {
+      type: 'REMOVE',
+      id: 'b'
+    });
     expect(next.items.map((i) => i.id)).toEqual(['a', 'c']);
   });
 });

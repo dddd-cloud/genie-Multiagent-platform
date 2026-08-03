@@ -96,7 +96,10 @@ export function createFakeSseResponse(
   const delayMs =
     options.delayMs ?? (scenario === 'slow-stream' ? 50 : 0);
 
-  return new Response(streamNdjsonAsSse(raw, { ...options, delayMs }), {
+  return new Response(streamNdjsonAsSse(raw, {
+    ...options,
+    delayMs
+  }), {
     status: 200,
     headers: {
       'Content-Type': 'text/event-stream',

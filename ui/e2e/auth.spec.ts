@@ -18,9 +18,7 @@ test.describe('auth', () => {
     await expect(page.getByText(/当前用户|User A|user-a/i).first()).toBeVisible();
   });
 
-  test('unauthenticated /app redirects to login with returnTo', async ({
-    page,
-  }) => {
+  test('unauthenticated /app redirects to login with returnTo', async ({page,}) => {
     await page.goto('/app');
     await expect(page).toHaveURL(/\/login/);
     expect(page.url()).toContain('returnTo');

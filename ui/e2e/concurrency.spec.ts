@@ -49,7 +49,10 @@ async function apiLogin(
       [csrf.headerName]: csrf.token,
       'Content-Type': 'application/json',
     },
-    data: { username, password },
+    data: {
+      username,
+      password
+    },
   });
   expect(res.ok(), `login ${username} → ${res.status()}`).toBeTruthy();
   const body = (await res.json()) as ApiEnvelope<unknown>;
@@ -110,7 +113,10 @@ async function createAcceptanceUsers(
       const body = (await res.json()) as ApiEnvelope<{ username: string }>;
       expect(body.code).toBe('OK');
     }
-    users.push({ username, password });
+    users.push({
+      username,
+      password
+    });
     csrf = await fetchCsrf(request);
   }
 
@@ -218,7 +224,10 @@ async function runUserWorkload(
   }
 
   await context.close();
-  return { conversationIds, requestIds };
+  return {
+    conversationIds,
+    requestIds
+  };
 }
 
 test.describe('concurrency', () => {
@@ -324,12 +333,8 @@ test.describe('concurrency', () => {
     );
     await composer.fill('busy follow-up after 409');
     // May still be busy while first stream runs; wait until input enabled.
-    await expect(page.getByRole('button', { name: /发送/i })).toBeEnabled({
-      timeout: 120_000,
-    });
+    await expect(page.getByRole('button', { name: /发送/i })).toBeEnabled({timeout: 120_000,});
     await clickSend(page);
-    await expect(page.getByText('busy follow-up after 409').first()).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByText('busy follow-up after 409').first()).toBeVisible({timeout: 30_000,});
   });
 });

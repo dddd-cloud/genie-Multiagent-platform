@@ -23,7 +23,10 @@ export function listConversations(page: number, pageSize: number) {
   return requestMvp<PageResponse<ConversationListItem>>({
     method: 'GET',
     url: BASE,
-    params: { page, pageSize },
+    params: {
+      page,
+      pageSize
+    },
   });
 }
 

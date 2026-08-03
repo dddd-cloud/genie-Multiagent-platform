@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 IMAGE="${GENIE_MAVEN_IMAGE:-maven:3.9.9-eclipse-temurin-21}"
+CACHE_VOLUME="${GENIE_MAVEN_CACHE_VOLUME:-genie-maven-cache}"
 
 # Git Bash on Windows needs //var/run/docker.sock; Linux uses /var/run/docker.sock.
 DOCKER_SOCK="${GENIE_DOCKER_SOCK:-}"
@@ -28,8 +29,11 @@ fi
 export MSYS_NO_PATHCONV=1
 export MSYS2_ARG_CONV_EXCL='*'
 
+docker volume inspect "${CACHE_VOLUME}" >/dev/null 2>&1 || docker volume create "${CACHE_VOLUME}" >/dev/null
+
 docker run --rm \
   -v "${MOUNT_ROOT}:/workspace" \
+  -v "${CACHE_VOLUME}:/root/.m2" \
   -v "${DOCKER_SOCK}:/var/run/docker.sock" \
   -w "/workspace/genie-backend" \
   -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \

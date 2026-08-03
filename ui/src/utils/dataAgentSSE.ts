@@ -105,11 +105,18 @@ export function dataAgentSSE(
       };
     }
     if (abortReason === 'ABORT' || controller.signal.aborted) {
-      return { kind: 'INTERRUPTED', reason: 'ABORT' };
+      return {
+        kind: 'INTERRUPTED',
+        reason: 'ABORT'
+      };
     }
     const message =
       error instanceof Error ? error.message : 'SSE connection error';
-    return { kind: 'INTERRUPTED', reason: 'FATAL', message };
+    return {
+      kind: 'INTERRUPTED',
+      reason: 'FATAL',
+      message
+    };
   };
 
   void fetchEventSource(url, {
@@ -186,7 +193,10 @@ export function dataAgentSSE(
             : data.data != null
               ? String(data.data)
               : null;
-        settle({ kind: 'FAILED', errorMsg });
+        settle({
+          kind: 'FAILED',
+          errorMsg
+        });
       }
     },
     onerror(error: unknown) {
@@ -207,17 +217,26 @@ export function dataAgentSSE(
         return;
       }
       if (abortReason === 'ABORT' || controller.signal.aborted) {
-        settle({ kind: 'INTERRUPTED', reason: 'ABORT' });
+        settle({
+          kind: 'INTERRUPTED',
+          reason: 'ABORT'
+        });
         return;
       }
-      settle({ kind: 'INTERRUPTED', reason: 'EOF' });
+      settle({
+        kind: 'INTERRUPTED',
+        reason: 'EOF'
+      });
     },
   }).catch((error: unknown) => {
     if (settled) {
       return;
     }
     if (abortReason === 'ABORT' || controller.signal.aborted) {
-      settle({ kind: 'INTERRUPTED', reason: 'ABORT' });
+      settle({
+        kind: 'INTERRUPTED',
+        reason: 'ABORT'
+      });
       return;
     }
     settle(mapErrorToResult(error));
@@ -226,7 +245,10 @@ export function dataAgentSSE(
   const abort = () => {
     abortReason = 'ABORT';
     if (!settled) {
-      settle({ kind: 'INTERRUPTED', reason: 'ABORT' });
+      settle({
+        kind: 'INTERRUPTED',
+        reason: 'ABORT'
+      });
     }
     controller.abort();
   };

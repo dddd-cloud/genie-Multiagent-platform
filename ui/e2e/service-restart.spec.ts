@@ -47,9 +47,7 @@ async function waitBackendHealth(page: import('@playwright/test').Page): Promise
 test.describe('service-restart', () => {
   test.skip(!e2eReady, 'Set MVP_E2E_READY=1 with mvp-acceptance Fake stack');
 
-  test('backend restart during stream → INTERRUPTED, session kept', async ({
-    page,
-  }) => {
+  test('backend restart during stream → INTERRUPTED, session kept', async ({page,}) => {
     test.setTimeout(300_000);
 
     await loginAs(page, 'user-a');

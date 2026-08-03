@@ -19,7 +19,7 @@ const Card: GenieType.FC<{ data: Record<string, any> }> = (props) => {
           <div className="text-[16px] font-medium leading-[26px] whitespace-nowrap text-ellipsis overflow-hidden">
             {item.label || "未命名"}
           </div>
-          <div>{item.showValue ?? "-"}</div> 
+          <div>{item.showValue ?? "-"}</div>
         </div>
       );
     });

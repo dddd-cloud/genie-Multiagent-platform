@@ -129,9 +129,7 @@ export function mvpMockApiPlugin(enabled: boolean): Plugin {
 
           const request = new Request(url, init);
           // Relative handler paths need baseUrl (same as @mswjs/http-middleware).
-          const response = await getResponse(handlers, request, {
-            baseUrl: url.origin,
-          });
+          const response = await getResponse(handlers, request, {baseUrl: url.origin,});
 
           if (!response) {
             const body = JSON.stringify({

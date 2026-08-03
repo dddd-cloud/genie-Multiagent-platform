@@ -85,9 +85,7 @@ const DataAgentChatView: GenieType.FC<Props> = (props) => {
     }
 
     const sendGen = ++sendGenRef.current;
-    const params = {
-      content: inputInfo.message,
-    };
+    const params = {content: inputInfo.message,};
     const currentChat: Record<string, any> = {
       query: inputInfo.message,
       loading: true,

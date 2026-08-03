@@ -10,9 +10,7 @@ const e2eReady = process.env.MVP_E2E_READY === '1';
 test.describe('isolation', () => {
   test.skip(!e2eReady, 'Set MVP_E2E_READY=1 with mvp-acceptance Fake stack');
 
-  test('user B cannot open user A conversation — 404 → /app', async ({
-    browser,
-  }) => {
+  test('user B cannot open user A conversation — 404 → /app', async ({browser,}) => {
     // Plan §15.5: two independent BrowserContexts (not clearCookies on one page).
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();

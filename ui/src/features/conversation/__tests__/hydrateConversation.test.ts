@@ -189,7 +189,10 @@ describe('hydrateConversation', () => {
       streamSnapshot: JSON.stringify(reactSuccess),
       content: 'message version fallback',
     }).map((m) =>
-      m.role === 'ASSISTANT' ? { ...m, payloadVersion: 2 } : m,
+      m.role === 'ASSISTANT' ? {
+        ...m,
+        payloadVersion: 2
+      } : m,
     );
     const items = hydrateConversation(messages, CONV_ID);
     expect(items[0].loading).toBe(false);
@@ -228,7 +231,10 @@ describe('hydrateConversation', () => {
         streamSnapshot: null,
         content: 'a2',
         deepThink: 1,
-      }).map((m) => ({ ...m, turnNo: 2 })),
+      }).map((m) => ({
+        ...m,
+        turnNo: 2
+      })),
     ];
     const items = hydrateConversation(messages, CONV_ID);
     expect(items).toHaveLength(2);

@@ -131,9 +131,7 @@ describe('auth (MSW)', () => {
     const tokenBefore = getCsrf()?.token;
     expect(tokenBefore).toBeTruthy();
 
-    await expect(authApi.fetchMe()).rejects.toMatchObject({
-      code: 'AUTH_REQUIRED',
-    });
+    await expect(authApi.fetchMe()).rejects.toMatchObject({code: 'AUTH_REQUIRED',});
 
     expect(getCsrf()?.token).toBe(tokenBefore);
   });
@@ -141,7 +139,10 @@ describe('auth (MSW)', () => {
   it('login rejects invalid credentials', async () => {
     await authApi.fetchCsrf();
     await expect(
-      authApi.login({ username: 'user-a', password: 'wrong' }),
+      authApi.login({
+        username: 'user-a',
+        password: 'wrong'
+      }),
     ).rejects.toMatchObject({
       code: 'AUTH_INVALID_CREDENTIALS',
       httpStatus: 401,
@@ -154,7 +155,14 @@ describe('auth (MSW)', () => {
     const csrf = getCsrf()?.token;
 
     await expect(
-      requestMvp({ method: 'GET', url: '/api/v1/conversations', params: { page: 1, pageSize: 20 } }),
+      requestMvp({
+        method: 'GET',
+        url: '/api/v1/conversations',
+        params: {
+          page: 1,
+          pageSize: 20
+        }
+      }),
     ).rejects.toBeInstanceOf(MvpApiError);
 
     expect(getCsrf()?.token).toBe(csrf);
@@ -179,7 +187,14 @@ describe('auth (MSW)', () => {
 
     mockState.forceAccessDenied = true;
     await expect(
-      requestMvp({ method: 'GET', url: '/api/v1/conversations', params: { page: 1, pageSize: 20 } }),
+      requestMvp({
+        method: 'GET',
+        url: '/api/v1/conversations',
+        params: {
+          page: 1,
+          pageSize: 20
+        }
+      }),
     ).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
 
     expect(screen.getByTestId('status').textContent).toBe('authenticated');
@@ -203,7 +218,11 @@ describe('auth (MSW)', () => {
       http.post('/api/v1/conversations', () => {
         createCount += 1;
         return HttpResponse.json(
-          { code: 'CSRF_INVALID', message: 'CSRF token invalid or missing', data: null },
+          {
+            code: 'CSRF_INVALID',
+            message: 'CSRF token invalid or missing',
+            data: null
+          },
           { status: 403 },
         );
       }),

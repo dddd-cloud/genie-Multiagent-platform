@@ -39,9 +39,7 @@ export async function requestMvp<T>(
   config: AxiosRequestConfig,
   options?: RequestMvpOptions,
 ): Promise<T | null> {
-  const headers: Record<string, string> = {
-    ...(config.headers as Record<string, string> | undefined),
-  };
+  const headers: Record<string, string> = {...(config.headers as Record<string, string> | undefined),};
   if (!options?.skipCsrf) {
     applyCsrfHeaders(headers);
   }

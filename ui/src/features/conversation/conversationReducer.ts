@@ -93,7 +93,10 @@ export function conversationReducer(
       }
       const next = state.items.slice();
       next[index] = action.item;
-      return { ...state, items: next };
+      return {
+        ...state,
+        items: next
+      };
     }
     case 'REMOVE':
       return {

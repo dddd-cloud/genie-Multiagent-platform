@@ -26,9 +26,7 @@ test.describe('react-history-refresh', () => {
     );
     await composer.fill('E2E ReAct history probe');
     await clickSend(page);
-    await expect(page.getByText('E2E ReAct history probe').first()).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByText('E2E ReAct history probe').first()).toBeVisible({timeout: 30_000,});
     await expect(page.locator('#chat-view').getByText(/加载中|loading/i)).toHaveCount(
       0,
       { timeout: 90_000 },

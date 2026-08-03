@@ -4,11 +4,7 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
-  },
+  resolve: {alias: {'@': path.resolve(__dirname, 'src'),},},
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
@@ -17,9 +13,5 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'e2e/**'],
   },
-  server: {
-    fs: {
-      allow: [path.resolve(__dirname, '..')],
-    },
-  },
+  server: {fs: {allow: [path.resolve(__dirname, '..')],},},
 });

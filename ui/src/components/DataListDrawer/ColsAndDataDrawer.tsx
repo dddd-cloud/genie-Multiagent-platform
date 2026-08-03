@@ -83,7 +83,10 @@ const ColsAndDataDrawer: FC<Props> = (props) => {
         <Search placeholder="请输入内容搜索" style={{ width: 200 }} onSearch={(value) => setSearchValue(value)} />
       </div>
       {segType === "字段详情" && <Table size="middle" dataSource={dataSource} columns={colColumns} scroll={{ y: "calc(100vh - 200px)" }} pagination={false} />}
-      {segType === "数据预览" && <Table size="middle" dataSource={viewShowData} columns={dataColumns} scroll={{ y: "calc(100vh - 200px)", x: "max-content" }} pagination={false} />}
+      {segType === "数据预览" && <Table size="middle" dataSource={viewShowData} columns={dataColumns} scroll={{
+        y: "calc(100vh - 200px)",
+        x: "max-content"
+      }} pagination={false} />}
     </Drawer>
   );
 };

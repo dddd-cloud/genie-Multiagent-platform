@@ -22,19 +22,19 @@ export default defineConfig(({ command, mode, isPreview }) => {
   const proxy = isMvpMock
     ? undefined
     : {
-        '/api': {
-          target: env.SERVICE_BASE_URL,
-          changeOrigin: true,
-        },
-        '/web': {
-          target: env.SERVICE_BASE_URL,
-          changeOrigin: true,
-        },
-        '/data': {
-          target: env.SERVICE_BASE_URL,
-          changeOrigin: true,
-        },
-      };
+      '/api': {
+        target: env.SERVICE_BASE_URL,
+        changeOrigin: true,
+      },
+      '/web': {
+        target: env.SERVICE_BASE_URL,
+        changeOrigin: true,
+      },
+      '/data': {
+        target: env.SERVICE_BASE_URL,
+        changeOrigin: true,
+      },
+    };
 
   return {
     plugins: [react(), tailwindcss(), mvpMockApiPlugin(isMvpMock)],
@@ -44,11 +44,7 @@ export default defineConfig(({ command, mode, isPreview }) => {
         crypto: 'crypto-browserify',
       },
     },
-    css: {
-      preprocessorOptions: {
-        less: { javascriptEnabled: true },
-      },
-    },
+    css: {preprocessorOptions: {less: { javascriptEnabled: true },},},
     server: {
       host: '0.0.0.0',
       port: 3000,
@@ -59,9 +55,7 @@ export default defineConfig(({ command, mode, isPreview }) => {
         allow: [path.resolve(__dirname, '..')],
       },
     },
-    preview: {
-      proxy,
-    },
+    preview: {proxy,},
     build: {
       outDir: 'dist',
       sourcemap: false,

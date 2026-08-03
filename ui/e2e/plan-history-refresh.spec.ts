@@ -25,9 +25,7 @@ test.describe('plan-history-refresh', () => {
     await clickSend(page);
 
     await expect(page).toHaveURL(/\/app\/chat\//, { timeout: 30_000 });
-    await expect(page.getByText('E2E Plan history probe').first()).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByText('E2E Plan history probe').first()).toBeVisible({timeout: 30_000,});
     await expect(page.getByText(/深度研究/i).first()).toBeVisible();
     await expect(page.locator('#chat-view').getByText(/加载中|loading/i)).toHaveCount(
       0,

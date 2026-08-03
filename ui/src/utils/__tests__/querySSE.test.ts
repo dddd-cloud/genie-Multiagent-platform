@@ -5,12 +5,13 @@ import {
   parseNdjsonLines,
 } from '../../../mocks/fakeSse';
 
-vi.mock('@microsoft/fetch-event-source', () => ({
-  fetchEventSource: vi.fn(),
-}));
+vi.mock('@microsoft/fetch-event-source', () => ({fetchEventSource: vi.fn(),}));
 
 vi.mock('@/features/auth/csrf', () => ({
-  getCsrf: () => ({ headerName: 'X-XSRF-TOKEN', token: 'test-csrf' }),
+  getCsrf: () => ({
+    headerName: 'X-XSRF-TOKEN',
+    token: 'test-csrf'
+  }),
 }));
 
 import { fetchEventSource } from '@microsoft/fetch-event-source';
@@ -58,12 +59,19 @@ describe('querySSE (plan §11 / §13.8)', () => {
       options.onmessage?.({
         id: '',
         event: '',
-        data: JSON.stringify({ finished: true, status: 'success' }),
+        data: JSON.stringify({
+          finished: true,
+          status: 'success'
+        }),
       });
     });
 
     const handle = querySSE({
-      body: { sessionId: 'c1', requestId: 'r1', query: 'hi' },
+      body: {
+        sessionId: 'c1',
+        requestId: 'r1',
+        query: 'hi'
+      },
       handleMessage: () => undefined,
     });
 
@@ -90,7 +98,11 @@ describe('querySSE (plan §11 / §13.8)', () => {
       );
       const lines = parseNdjsonLines(getNdjsonFixture('success-react'));
       for (const line of lines) {
-        options.onmessage?.({ id: '', event: '', data: line });
+        options.onmessage?.({
+          id: '',
+          event: '',
+          data: line
+        });
       }
       options.onclose?.();
     });
@@ -116,12 +128,18 @@ describe('querySSE (plan §11 / §13.8)', () => {
       options.onmessage?.({
         id: '',
         event: '',
-        data: JSON.stringify({ packageType: 'heartbeat', finished: false }),
+        data: JSON.stringify({
+          packageType: 'heartbeat',
+          finished: false
+        }),
       });
       options.onmessage?.({
         id: '',
         event: '',
-        data: JSON.stringify({ finished: true, status: 'success' }),
+        data: JSON.stringify({
+          finished: true,
+          status: 'success'
+        }),
       });
     });
 
@@ -248,7 +266,11 @@ describe('querySSE (plan §11 / §13.8)', () => {
         }),
       );
       try {
-        options.onmessage?.({ id: '', event: '', data: '{not-json' });
+        options.onmessage?.({
+          id: '',
+          event: '',
+          data: '{not-json'
+        });
       } catch (error) {
         thrown = error;
       }
@@ -277,7 +299,10 @@ describe('querySSE (plan §11 / §13.8)', () => {
       options.onmessage?.({
         id: '',
         event: '',
-        data: JSON.stringify({ finished: false, response: 'partial' }),
+        data: JSON.stringify({
+          finished: false,
+          response: 'partial'
+        }),
       });
       options.onclose?.();
     });
