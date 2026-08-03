@@ -1,0 +1,16 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "id": "skill-summarize-001",
+    "name": "Summarize",
+    "description": "Summarize source material",
+    "instruction": "Produce a concise summary.",
+    "outputRequirement": "Markdown summary with key points.",
+    "status": "ENABLED",
+    "version": 2,
+    "capabilityKeys": ["builtin:deep_search"],
+    "createdAt": "2026-08-01T00:00:00Z",
+    "updatedAt": "2026-08-02T00:00:00Z"
+  }
+}

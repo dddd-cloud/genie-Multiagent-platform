@@ -1,0 +1,76 @@
+{
+  "payloadVersion": 1,
+  "truncated": true,
+  "events": [
+    {
+      "status": "success",
+      "response": "",
+      "responseAll": "",
+      "finished": false,
+      "useTimes": 0,
+      "useTokens": 0,
+      "resultMap": {
+        "orchestrationEvent": {
+          "schemaVersion": 1,
+          "eventId": "request-fixture:1",
+          "sequence": 1,
+          "eventType": "ROUTE_SELECTED",
+          "requestId": "request-fixture",
+          "runId": "run-fixture",
+          "attemptNo": null,
+          "stepId": null,
+          "agentId": null,
+          "agentName": null,
+          "route": "ORCHESTRATED",
+          "reasonCode": "MULTI_STEP",
+          "errorCode": null,
+          "steps": [],
+          "completionStatus": null
+        }
+      },
+      "responseType": "json",
+      "traceId": "trace-fixture",
+      "reqId": "request-fixture",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "orchestration",
+      "errorMsg": null
+    },
+    {
+      "status": "success",
+      "response": "Truncated snapshot keeps the latest final answer.",
+      "responseAll": "Truncated snapshot keeps the latest final answer.",
+      "finished": true,
+      "useTimes": 3,
+      "useTokens": 90,
+      "resultMap": {
+        "orchestrationEvent": {
+          "schemaVersion": 1,
+          "eventId": "request-fixture:2",
+          "sequence": 2,
+          "eventType": "FINAL_RESPONSE",
+          "requestId": "request-fixture",
+          "runId": "run-fixture",
+          "attemptNo": 1,
+          "stepId": null,
+          "agentId": null,
+          "agentName": null,
+          "route": "ORCHESTRATED",
+          "reasonCode": null,
+          "errorCode": null,
+          "steps": [],
+          "completionStatus": "PARTIAL"
+        }
+      },
+      "responseType": "markdown",
+      "traceId": "trace-fixture",
+      "reqId": "request-fixture",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    }
+  ]
+}

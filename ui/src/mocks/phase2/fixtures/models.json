@@ -1,0 +1,18 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": [
+    {
+      "name": "gpt-4o-mini",
+      "displayName": "GPT-4o Mini",
+      "isDefault": true,
+      "available": true
+    },
+    {
+      "name": "gpt-4o",
+      "displayName": "GPT-4o",
+      "isDefault": false,
+      "available": true
+    }
+  ]
+}

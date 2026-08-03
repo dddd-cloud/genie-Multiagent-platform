@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/tool-binding-view-v1.schema.json",
+  "title": "Tool Binding View V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["directCapabilities", "skillCapabilities", "invalidCapabilities"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "directCapabilities": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "skillCapabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 }
+      }
+    },
+    "invalidCapabilities": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

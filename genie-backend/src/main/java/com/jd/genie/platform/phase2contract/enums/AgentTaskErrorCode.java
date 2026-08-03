@@ -1,0 +1,14 @@
+package com.jd.genie.platform.phase2contract.enums;
+
+public enum AgentTaskErrorCode {
+    INVALID_INPUT,
+    AGENT_OFFLINE,
+    TOOL_PERMISSION_DENIED,
+    TOOL_TIMEOUT,
+    TOOL_UNAVAILABLE,
+    TOOL_INVALID_RESPONSE,
+    AGENT_INVALID_RESULT,
+    CONTEXT_BUDGET_EXCEEDED,
+    EXECUTION_ERROR,
+    CANCELLED
+}

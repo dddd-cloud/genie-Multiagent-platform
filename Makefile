@@ -4,7 +4,9 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: mvp-unit mvp-integration mvp-ui mvp-e2e mvp-acceptance
+.PHONY: mvp-unit mvp-integration mvp-ui mvp-e2e mvp-acceptance \
+	phase2-contract-acceptance phase2-a-acceptance phase2-b-acceptance \
+	phase2-c-acceptance phase2-d-acceptance phase2-acceptance
 
 # Fixed A/B/C script whitelist — plan §18.3. Do not glob arbitrary *.sh.
 A_SCRIPTS := \
@@ -73,3 +75,31 @@ mvp-e2e:
 
 mvp-acceptance:
 	bash scripts/acceptance/run_all.sh
+
+phase2-contract-acceptance:
+	bash scripts/acceptance/phase2/contract/run.sh
+
+phase2-a-acceptance:
+	@test -f scripts/acceptance/phase2/a/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/a/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/a/run.sh
+
+phase2-b-acceptance:
+	@test -f scripts/acceptance/phase2/b/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/b/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/b/run.sh
+
+phase2-c-acceptance:
+	@test -f scripts/acceptance/phase2/c/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/c/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/c/run.sh
+
+phase2-d-acceptance:
+	@test -f scripts/acceptance/phase2/d/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/d/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/d/run.sh
+
+phase2-acceptance:
+	@test -f scripts/acceptance/phase2/run_all.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/run_all.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/run_all.sh

@@ -1,0 +1,21 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "schemaVersion": 1,
+    "patches": [
+      {
+        "operation": "UPSERT",
+        "section": "基本信息",
+        "key": "preferredName",
+        "value": "Alex"
+      },
+      {
+        "operation": "UPSERT",
+        "section": "回答偏好",
+        "key": "language",
+        "value": "zh-CN"
+      }
+    ]
+  }
+}

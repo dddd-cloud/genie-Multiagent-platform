@@ -143,7 +143,31 @@ class ContractShapeTest {
             "CLIENT_DISCONNECTED",
             "SERVICE_RESTARTED",
             "AGENT_STREAM_INTERRUPTED",
-            "SNAPSHOT_INVALID"
+            "SNAPSHOT_INVALID",
+            "VERSION_CONFLICT",
+            "AGENT_INVALID_STATE",
+            "AGENT_OFFLINE",
+            "AGENT_MUST_BE_OFFLINE",
+            "SKILL_IN_USE",
+            "MODEL_NOT_AVAILABLE",
+            "PROMPT_INVALID",
+            "TOOL_BINDING_INVALID",
+            "MCP_URL_REJECTED",
+            "MCP_AUTH_INVALID",
+            "MCP_UNAVAILABLE",
+            "MCP_DISCOVERY_INVALID",
+            "TOOL_NOT_BOUND",
+            "TOOL_INVALID_INPUT",
+            "TOOL_TIMEOUT",
+            "TOOL_INVALID_RESPONSE",
+            "LOCAL_CONTEXT_INVALID",
+            "LOCAL_CONTEXT_TOO_LARGE",
+            "NO_SUITABLE_AGENT",
+            "ORCHESTRATION_PLAN_INVALID",
+            "AGENT_INVALID_RESULT",
+            "CONTEXT_BUDGET_EXCEEDED",
+            "MEMORY_ANALYSIS_FAILED",
+            "SUMMARY_FAILED"
         }, enumNames(MvpErrorCode.class));
     }
 

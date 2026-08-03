@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/phase2-gpt-query-v1.schema.json",
+  "title": "Phase2 GPT Query Request V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sessionId",
+    "requestId",
+    "query",
+    "executionMode",
+    "deepThink",
+    "outputStyle",
+    "allowedAgentIds",
+    "localContext"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "UUID string"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000,
+      "description": "Backend Validator enforces Unicode code point length <= 20000."
+    },
+    "executionMode": {
+      "type": "string",
+      "enum": ["AUTO", "DIRECT", "ORCHESTRATED"]
+    },
+    "deepThink": {
+      "type": "integer",
+      "enum": [0, 1]
+    },
+    "outputStyle": {
+      "type": "string"
+    },
+    "allowedAgentIds": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "localContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "longTermMemory", "conversationSummary"],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "longTermMemory": {
+          "type": "string",
+          "maxLength": 12000,
+          "description": "Backend Validator enforces Unicode code point length <= 12000."
+        },
+        "conversationSummary": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "Backend Validator enforces Unicode code point length <= 20000."
+        }
+      },
+      "description": "Combined longTermMemory + conversationSummary must be <= 30000 Unicode code points; enforced by backend Validator, not JSON Schema."
+    }
+  }
+}

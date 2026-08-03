@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/management-api-v1.schema.json",
+  "title": "Phase2 Management API Safe Response Fields V1",
+  "description": "Safe response field contracts for D independent development. Secrets are forbidden.",
+  "$defs": {
+    "apiResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "data"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "data": {}
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "description", "promptMode", "promptConfig", "systemPrompt",
+        "modelName", "status", "version", "skillIds", "capabilityKeys", "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "promptMode": { "type": "string" },
+        "promptConfig": { "type": "object" },
+        "systemPrompt": { "type": "string" },
+        "modelName": { "type": ["string", "null"] },
+        "status": { "type": "string" },
+        "version": { "type": "integer" },
+        "skillIds": { "type": "array", "items": { "type": "string" } },
+        "capabilityKeys": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "description", "instruction", "outputRequirement",
+        "status", "version", "capabilityKeys", "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "instruction": { "type": "string" },
+        "outputRequirement": { "type": "string" },
+        "status": { "type": "string" },
+        "version": { "type": "integer" },
+        "capabilityKeys": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "displayName", "isDefault", "available"],
+      "properties": {
+        "name": { "type": "string" },
+        "displayName": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "available": { "type": "boolean" }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "serverUrl", "authType", "authName", "status",
+        "credentialConfigured", "lastCheckStatus", "lastCheckCode",
+        "lastCheckedAt", "version", "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "serverUrl": { "type": "string" },
+        "authType": { "type": "string" },
+        "authName": { "type": "string" },
+        "status": { "type": "string" },
+        "credentialConfigured": { "type": "boolean" },
+        "lastCheckStatus": { "type": ["string", "null"] },
+        "lastCheckCode": { "type": ["string", "null"] },
+        "lastCheckedAt": { "type": ["string", "null"] },
+        "version": { "type": "integer" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "mcpTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "toolName", "runtimeName", "description",
+        "inputSchema", "enabled", "available", "version"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "toolName": { "type": "string" },
+        "runtimeName": { "type": "string" },
+        "description": { "type": "string" },
+        "inputSchema": { "type": "object" },
+        "enabled": { "type": "boolean" },
+        "available": { "type": "boolean" },
+        "version": { "type": "integer" }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "allOf": [
+        { "$ref": "#/$defs/apiResponse" },
+        {
+          "properties": {
+            "data": {
+              "oneOf": [
+                { "$ref": "#/$defs/agent" },
+                { "type": "array", "items": { "$ref": "#/$defs/agent" } },
+                { "$ref": "#/$defs/skill" },
+                { "type": "array", "items": { "$ref": "#/$defs/skill" } },
+                { "type": "array", "items": { "$ref": "#/$defs/model" } },
+                { "$ref": "#/$defs/mcpServer" },
+                { "type": "array", "items": { "$ref": "#/$defs/mcpTool" } }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

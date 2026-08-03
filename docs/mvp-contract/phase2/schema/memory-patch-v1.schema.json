@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/memory-patch-v1.schema.json",
+  "title": "Memory Patch Response V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "patches"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "section", "key", "value"],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["UPSERT", "DELETE"]
+          },
+          "section": {
+            "type": "string",
+            "enum": ["基本信息", "回答偏好", "长期目标", "长期约束"]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}

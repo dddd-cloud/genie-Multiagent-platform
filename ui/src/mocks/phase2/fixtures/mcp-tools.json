@@ -1,0 +1,21 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": [
+    {
+      "id": "mcp-tool-001",
+      "toolName": "search_docs",
+      "runtimeName": "search_docs",
+      "description": "Search documentation",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" }
+        }
+      },
+      "enabled": true,
+      "available": true,
+      "version": 1
+    }
+  ]
+}

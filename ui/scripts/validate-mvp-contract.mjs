@@ -14,8 +14,19 @@ const backendContractDir = join(
   'genie-backend/src/main/java/com/jd/genie/platform/contract'
 );
 const docsDir = join(repoRoot, 'docs/document');
-const baselineDoc = join(docsDir, '00_JoyAgent_MVP开发前契约冻结基线_MVP-CONTRACT-002.md');
+const phase1DocsDir = existsSync(join(docsDir, 'phase1'))
+  ? join(docsDir, 'phase1')
+  : docsDir;
+const baselineDoc = join(phase1DocsDir, '00_JoyAgent_MVP开发前契约冻结基线_MVP-CONTRACT-002.md');
 const chatTsPath = join(uiRoot, 'src/utils/chat.ts');
+const phase2SchemaDir = join(contractDir, 'phase2/schema');
+const phase2FixturesDir = join(uiRoot, 'src/mocks/phase2/fixtures');
+const phase2ProtectedBaseline = join(contractDir, 'phase2/protected-baseline.sha256');
+const phase2BackendDir = join(
+  repoRoot,
+  'genie-backend/src/main/java/com/jd/genie/platform/phase2contract'
+);
+const phase2TsDir = join(uiContractsDir, 'phase2');
 
 const POSITIVE_SNAPSHOTS = [
   'react-success.json',
@@ -65,6 +76,30 @@ const EXPECTED_ERROR_CODES = [
   'SERVICE_RESTARTED',
   'AGENT_STREAM_INTERRUPTED',
   'SNAPSHOT_INVALID',
+  'VERSION_CONFLICT',
+  'AGENT_INVALID_STATE',
+  'AGENT_OFFLINE',
+  'AGENT_MUST_BE_OFFLINE',
+  'SKILL_IN_USE',
+  'MODEL_NOT_AVAILABLE',
+  'PROMPT_INVALID',
+  'TOOL_BINDING_INVALID',
+  'MCP_URL_REJECTED',
+  'MCP_AUTH_INVALID',
+  'MCP_UNAVAILABLE',
+  'MCP_DISCOVERY_INVALID',
+  'TOOL_NOT_BOUND',
+  'TOOL_INVALID_INPUT',
+  'TOOL_TIMEOUT',
+  'TOOL_INVALID_RESPONSE',
+  'LOCAL_CONTEXT_INVALID',
+  'LOCAL_CONTEXT_TOO_LARGE',
+  'NO_SUITABLE_AGENT',
+  'ORCHESTRATION_PLAN_INVALID',
+  'AGENT_INVALID_RESULT',
+  'CONTEXT_BUDGET_EXCEEDED',
+  'MEMORY_ANALYSIS_FAILED',
+  'SUMMARY_FAILED',
 ];
 
 const MODULE_DOCS = [
@@ -73,6 +108,45 @@ const MODULE_DOCS = [
   '03_Agent流式持久化与上下文桥接模块_开发验收方案.md',
   '04_前端整合与全链路验收模块_开发验收方案.md',
 ];
+
+const PHASE2_SCHEMA_FILES = [
+  'phase2-gpt-query-v1.schema.json',
+  'agent-capability-summary-v1.schema.json',
+  'agent-runtime-profile-v1.schema.json',
+  'tool-binding-view-v1.schema.json',
+  'orchestration-event-v1.schema.json',
+  'memory-patch-v1.schema.json',
+  'management-api-v1.schema.json',
+];
+
+const PHASE2_PROGRESS_EVENT_TYPES = new Set([
+  'ROUTE_SELECTED',
+  'PLAN_CREATED',
+  'STEP_STARTED',
+  'STEP_COMPLETED',
+  'STEP_FAILED',
+  'STEP_SKIPPED',
+  'REPLAN_STARTED',
+  'SUMMARY_STARTED',
+  'SUMMARY_COMPLETED',
+  'SUMMARY_FALLBACK',
+]);
+
+const PHASE2_SECRET_FIELD_NAMES = new Set([
+  'authorization',
+  'bearer',
+  'token',
+  'cookie',
+  'password',
+  'apiKey',
+  'apikey',
+  'credential',
+  'credentialEnvelope',
+  'X-Genie-Internal-Token',
+  'GENIE_SESSION',
+  'XSRF-TOKEN',
+  'baseUrl',
+]);
 
 const GPT_PROCESS_RESULT_FIELDS = [
   'status',
@@ -881,7 +955,7 @@ function validateOwnershipFromBaseline() {
   };
 
   for (const [module, doc] of Object.entries(moduleDocOwners)) {
-    const content = readText(join(docsDir, doc));
+    const content = readText(join(phase1DocsDir, doc));
     if (!content.includes('MVP-CONTRACT-002')) fail(`${doc} does not reference MVP-CONTRACT-002`);
     else pass(`${doc} references MVP-CONTRACT-002`);
 
@@ -906,6 +980,240 @@ function validateOwnershipFromBaseline() {
   pass('Ownership parsed from MVP-CONTRACT-002 section 16 without conflicts');
 }
 
+function collectFiles(dir, predicate) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...collectFiles(full, predicate));
+    else if (predicate(entry.name, full)) out.push(full);
+  }
+  return out;
+}
+
+function assertNoSecretFields(value, label, seen = new WeakSet()) {
+  if (value === null || typeof value !== 'object') {
+    if (typeof value === 'string') {
+      for (const pattern of SECRET_VALUE_PATTERNS) {
+        if (pattern.test(value)) fail(`${label}: contains forbidden secret value pattern ${pattern}`);
+      }
+    }
+    return;
+  }
+  if (seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoSecretFields(item, `${label}[${index}]`, seen));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (PHASE2_SECRET_FIELD_NAMES.has(key)) {
+      fail(`${label}: forbidden secret field name ${key}`);
+    }
+    assertNoSecretFields(child, `${label}.${key}`, seen);
+  }
+}
+
+function extractJavaEnumValuesFromText(source) {
+  const body = source.match(/enum\s+\w+\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+  return [...body.matchAll(/\b([A-Z][A-Z0-9_]*)\b/g)].map((m) => m[1]);
+}
+
+function validatePhase2SchemasAndFixtures(ajv) {
+  if (!existsSync(phase2SchemaDir)) {
+    fail('Phase2 schema directory missing');
+    return;
+  }
+  const validators = {};
+  for (const name of PHASE2_SCHEMA_FILES) {
+    const schemaPath = join(phase2SchemaDir, name);
+    if (!existsSync(schemaPath)) {
+      fail(`Missing Phase2 schema ${name}`);
+      continue;
+    }
+    try {
+      validators[name] = ajv.compile(JSON.parse(readText(schemaPath)));
+      pass(`Phase2 schema compiled: ${name}`);
+    } catch (error) {
+      fail(`Phase2 schema compile failed ${name}: ${error.message}`);
+    }
+  }
+
+  const jsonFixtures = collectFiles(phase2FixturesDir, (name) => name.endsWith('.json'));
+  const ndjsonFixtures = collectFiles(phase2FixturesDir, (name) => name.endsWith('.ndjson'));
+  const orchestrationValidate = validators['orchestration-event-v1.schema.json'];
+  const memoryValidate = validators['memory-patch-v1.schema.json'];
+  const managementValidate = validators['management-api-v1.schema.json'];
+  const snapshotValidate = ajv.compile(loadSchema());
+
+  for (const filePath of jsonFixtures) {
+    const name = filePath.split(/[\\/]/).pop();
+    let data;
+    try {
+      data = JSON.parse(readText(filePath));
+    } catch (error) {
+      fail(`Phase2 fixture ${name} is not valid JSON: ${error.message}`);
+      continue;
+    }
+    assertNoSecretFields(data, name);
+
+    if (name.startsWith('snapshot-') && name.endsWith('.json')) {
+      if (!snapshotValidate(data)) {
+        fail(`${name} failed snapshot schema: ${JSON.stringify(snapshotValidate.errors)}`);
+      } else if (data.payloadVersion !== 1) {
+        fail(`${name}: payloadVersion must remain 1`);
+      } else {
+        pass(`${name}: snapshot payloadVersion=1`);
+      }
+      if (Array.isArray(data.events)) {
+        data.events.forEach((event, index) => {
+          validateGptProcessResultEvent(event, `${name} events[${index}]`);
+          validatePhase2StreamEvent(event, `${name} events[${index}]`, orchestrationValidate);
+        });
+      }
+      continue;
+    }
+
+    if (name.startsWith('memory-patch') && memoryValidate && isPlainObject(data.data)) {
+      if (!memoryValidate(data.data)) {
+        fail(`${name} failed memory-patch schema: ${JSON.stringify(memoryValidate.errors)}`);
+      } else {
+        pass(`${name}: memory-patch schema ok`);
+      }
+    }
+
+    if (
+      managementValidate &&
+      [
+        'agents-list.json',
+        'agent-detail.json',
+        'skills-list.json',
+        'skill-detail.json',
+        'models.json',
+        'mcp-server-detail.json',
+        'mcp-tools.json',
+      ].includes(name)
+    ) {
+      if (!managementValidate(data)) {
+        fail(`${name} failed management-api schema: ${JSON.stringify(managementValidate.errors)}`);
+      } else {
+        pass(`${name}: management-api schema ok`);
+      }
+    }
+  }
+
+  for (const filePath of ndjsonFixtures) {
+    const name = filePath.split(/[\\/]/).pop();
+    const lines = readText(filePath).split(/\r?\n/).filter((line) => line.trim().length > 0);
+    lines.forEach((line, index) => {
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch (error) {
+        fail(`${name}:${index + 1} invalid JSON: ${error.message}`);
+        return;
+      }
+      validateGptProcessResultEvent(event, `${name}:${index + 1}`);
+      validatePhase2StreamEvent(event, `${name}:${index + 1}`, orchestrationValidate);
+      assertNoSecretFields(event, `${name}:${index + 1}`);
+    });
+    pass(`${name}: ndjson fixture validated`);
+  }
+
+  const malformed = join(phase2FixturesDir, 'snapshot-orchestrated-malformed.txt');
+  if (existsSync(malformed)) {
+    try {
+      JSON.parse(readText(malformed));
+      fail('snapshot-orchestrated-malformed.txt should not parse');
+    } catch {
+      pass('snapshot-orchestrated-malformed.txt cannot be parsed');
+    }
+  }
+}
+
+function validatePhase2StreamEvent(event, label, orchestrationValidate) {
+  const orchestrationEvent = event?.resultMap?.orchestrationEvent;
+  if (!isPlainObject(orchestrationEvent)) {
+    return;
+  }
+  if (orchestrationValidate && !orchestrationValidate(orchestrationEvent)) {
+    fail(`${label}: orchestrationEvent schema failed ${JSON.stringify(orchestrationValidate.errors)}`);
+  }
+  const eventType = orchestrationEvent.eventType;
+  if (PHASE2_PROGRESS_EVENT_TYPES.has(eventType) && event.finished === true) {
+    fail(`${label}: progress event ${eventType} must have finished=false`);
+  }
+  if (eventType === 'FINAL_RESPONSE') {
+    if (event.packageType !== 'result') fail(`${label}: FINAL_RESPONSE packageType must be result`);
+    if (event.responseType !== 'markdown') fail(`${label}: FINAL_RESPONSE responseType must be markdown`);
+    if (event.finished !== true) fail(`${label}: FINAL_RESPONSE must be finished=true`);
+    if (event.status !== 'success') fail(`${label}: FINAL_RESPONSE status must be success`);
+    if (!event.response || !String(event.response).trim()) {
+      fail(`${label}: FINAL_RESPONSE response must be non-empty`);
+    }
+    if (event.response !== event.responseAll) {
+      fail(`${label}: FINAL_RESPONSE response must equal responseAll`);
+    }
+  }
+}
+
+function validatePhase2EnumMirrors() {
+  const pairs = [
+    ['ExecutionMode', 'EXECUTION_MODES', 'enums/ExecutionMode.java'],
+    ['OrchestrationRoute', 'ORCHESTRATION_ROUTES', 'enums/OrchestrationRoute.java'],
+    ['OrchestrationEventType', 'ORCHESTRATION_EVENT_TYPES', 'enums/OrchestrationEventType.java'],
+    ['AgentTaskErrorCode', 'AGENT_TASK_ERROR_CODES', 'enums/AgentTaskErrorCode.java'],
+    ['OrchestrationCompletionStatus', 'ORCHESTRATION_COMPLETION_STATUSES', 'enums/OrchestrationCompletionStatus.java'],
+  ];
+  for (const [name, tsConst, javaRel] of pairs) {
+    const javaValues = extractJavaEnumValuesFromText(readText(join(phase2BackendDir, javaRel)));
+    const tsFile = name.includes('Memory') ? 'memory.ts'
+      : name.startsWith('Execution') ? 'runtime.ts'
+        : 'orchestration.ts';
+    const tsValues = extractTsConstArray(readText(join(phase2TsDir, tsFile)), tsConst);
+    if (JSON.stringify(javaValues) !== JSON.stringify(tsValues)) {
+      fail(`${name} Java/TS mismatch: java=${JSON.stringify(javaValues)} ts=${JSON.stringify(tsValues)}`);
+    } else {
+      pass(`${name} Java/TS enum mirror ok`);
+    }
+  }
+}
+
+function validatePhase2UniqueTypes() {
+  const uniqueNames = [
+    'AgentRuntimeCatalogPort',
+    'ToolBindingPort',
+    'RuntimeToolCollectionPort',
+    'AgentRuntimeProfile',
+    'ToolBindingView',
+    'OrchestrationEvent',
+  ];
+  for (const typeName of uniqueNames) {
+    const matches = collectFiles(join(repoRoot, 'genie-backend/src/main/java'), (name) => name === `${typeName}.java`);
+    if (matches.length !== 1) {
+      fail(`${typeName} must have exactly one main definition, found ${matches.length}`);
+    } else {
+      pass(`${typeName} unique definition ok`);
+    }
+  }
+}
+
+function validatePhase2ProtectedBaselineExists() {
+  if (!existsSync(phase2ProtectedBaseline)) {
+    fail('docs/mvp-contract/phase2/protected-baseline.sha256 missing');
+  } else {
+    pass('Phase2 protected baseline file exists');
+  }
+}
+
+function validatePhase2Contract(ajv) {
+  console.log('\nValidating MVP-CONTRACT-004 Phase2 seams...\n');
+  validatePhase2SchemasAndFixtures(ajv);
+  validatePhase2EnumMirrors();
+  validatePhase2UniqueTypes();
+  validatePhase2ProtectedBaselineExists();
+}
+
 function main() {
   console.log('Validating MVP-CONTRACT-002 foundation...\n');
   const ajv = new Ajv({ allErrors: true, strict: false });
@@ -918,6 +1226,7 @@ function main() {
   validateConfigNames();
   validateMirrorFields();
   validateOwnershipFromBaseline();
+  validatePhase2Contract(ajv);
 
   console.log('');
   if (failures > 0) {

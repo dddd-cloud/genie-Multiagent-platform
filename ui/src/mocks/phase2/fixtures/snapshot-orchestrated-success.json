@@ -1,0 +1,154 @@
+{
+  "payloadVersion": 1,
+  "truncated": false,
+  "events": [
+    {
+      "status": "success",
+      "response": "",
+      "responseAll": "",
+      "finished": false,
+      "useTimes": 0,
+      "useTokens": 0,
+      "resultMap": {
+        "orchestrationEvent": {
+          "schemaVersion": 1,
+          "eventId": "request-fixture:1",
+          "sequence": 1,
+          "eventType": "ROUTE_SELECTED",
+          "requestId": "request-fixture",
+          "runId": "run-fixture",
+          "attemptNo": null,
+          "stepId": null,
+          "agentId": null,
+          "agentName": null,
+          "route": "ORCHESTRATED",
+          "reasonCode": "MULTI_STEP",
+          "errorCode": null,
+          "steps": [],
+          "completionStatus": null
+        }
+      },
+      "responseType": "json",
+      "traceId": "trace-fixture",
+      "reqId": "request-fixture",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "orchestration",
+      "errorMsg": null
+    },
+    {
+      "status": "success",
+      "response": "",
+      "responseAll": "",
+      "finished": false,
+      "useTimes": 0,
+      "useTokens": 0,
+      "resultMap": {
+        "orchestrationEvent": {
+          "schemaVersion": 1,
+          "eventId": "request-fixture:2",
+          "sequence": 2,
+          "eventType": "PLAN_CREATED",
+          "requestId": "request-fixture",
+          "runId": "run-fixture",
+          "attemptNo": 1,
+          "stepId": null,
+          "agentId": null,
+          "agentName": null,
+          "route": null,
+          "reasonCode": null,
+          "errorCode": null,
+          "steps": [
+            {
+              "stepId": "step-1",
+              "agentId": "agent-research-001",
+              "agentName": "Research Agent",
+              "objective": "Gather sources",
+              "inputRefs": []
+            }
+          ],
+          "completionStatus": null
+        }
+      },
+      "responseType": "json",
+      "traceId": "trace-fixture",
+      "reqId": "request-fixture",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "orchestration",
+      "errorMsg": null
+    },
+    {
+      "status": "success",
+      "response": "",
+      "responseAll": "",
+      "finished": false,
+      "useTimes": 0,
+      "useTokens": 0,
+      "resultMap": {
+        "orchestrationEvent": {
+          "schemaVersion": 1,
+          "eventId": "request-fixture:3",
+          "sequence": 3,
+          "eventType": "STEP_COMPLETED",
+          "requestId": "request-fixture",
+          "runId": "run-fixture",
+          "attemptNo": 1,
+          "stepId": "step-1",
+          "agentId": "agent-research-001",
+          "agentName": "Research Agent",
+          "route": null,
+          "reasonCode": null,
+          "errorCode": null,
+          "steps": [],
+          "completionStatus": null
+        }
+      },
+      "responseType": "json",
+      "traceId": "trace-fixture",
+      "reqId": "request-fixture",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "orchestration",
+      "errorMsg": null
+    },
+    {
+      "status": "success",
+      "response": "Orchestrated run finished with a full summary.",
+      "responseAll": "Orchestrated run finished with a full summary.",
+      "finished": true,
+      "useTimes": 8,
+      "useTokens": 220,
+      "resultMap": {
+        "orchestrationEvent": {
+          "schemaVersion": 1,
+          "eventId": "request-fixture:4",
+          "sequence": 4,
+          "eventType": "FINAL_RESPONSE",
+          "requestId": "request-fixture",
+          "runId": "run-fixture",
+          "attemptNo": 1,
+          "stepId": null,
+          "agentId": null,
+          "agentName": null,
+          "route": "ORCHESTRATED",
+          "reasonCode": null,
+          "errorCode": null,
+          "steps": [],
+          "completionStatus": "SUCCESS"
+        }
+      },
+      "responseType": "markdown",
+      "traceId": "trace-fixture",
+      "reqId": "request-fixture",
+      "encrypted": false,
+      "query": null,
+      "messages": null,
+      "packageType": "result",
+      "errorMsg": null
+    }
+  ]
+}

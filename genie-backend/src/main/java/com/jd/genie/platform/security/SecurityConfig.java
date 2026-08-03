@@ -89,7 +89,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/login", "/web/health").permitAll()
                 .requestMatchers("/AutoAgent").hasAuthority(InternalAgentAuthenticationToken.AUTHORITY)
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/auth/logout", "/api/v1/users/me", "/api/v1/conversations/**", "/data/**", "/web/api/v1/gpt/**").authenticated()
+                .requestMatchers(
+                    "/api/v1/auth/logout",
+                    "/api/v1/users/me",
+                    "/api/v1/conversations/**",
+                    "/data/**",
+                    "/web/api/v1/gpt/**",
+                    "/api/v2/**",
+                    "/web/api/v2/gpt/**"
+                ).authenticated()
                 .anyRequest().authenticated())
             .logout(logout -> logout.logoutUrl("/api/v1/auth/logout")
                 .logoutSuccessHandler((request, response, authentication) -> JsonApiWriter.write(objectMapper, response, 200, "OK", "success", null)))

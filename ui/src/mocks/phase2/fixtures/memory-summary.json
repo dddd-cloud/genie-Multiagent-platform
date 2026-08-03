@@ -1,0 +1,8 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": {
+    "schemaVersion": 1,
+    "markdown": "## 当前目标\n完成本周研究报告。\n\n## 已确认事实\n用户偏好中文回答。\n\n## 已完成内容\n完成初稿提纲。\n\n## 未解决事项\n等待数据源确认。"
+  }
+}

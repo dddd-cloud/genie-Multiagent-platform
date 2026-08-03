@@ -1,0 +1,15 @@
+{
+  "code": "VALIDATION_ERROR",
+  "message": "memory patch invalid",
+  "data": {
+    "schemaVersion": 1,
+    "patches": [
+      {
+        "operation": "UPSERT",
+        "section": "基本信息",
+        "key": "preferredName",
+        "value": null
+      }
+    ]
+  }
+}

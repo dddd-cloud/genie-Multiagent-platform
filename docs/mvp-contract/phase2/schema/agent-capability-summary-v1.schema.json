@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/agent-capability-summary-v1.schema.json",
+  "title": "Agent Capability Summary V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "agentVersion", "name", "description"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "agentVersion": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  }
+}

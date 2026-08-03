@@ -1,0 +1,23 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": [
+    {
+      "id": "agent-research-001",
+      "name": "Research Agent",
+      "description": "Researches topics and summarizes findings",
+      "promptMode": "STRUCTURED",
+      "promptConfig": {
+        "role": "researcher"
+      },
+      "systemPrompt": "You are a research agent.",
+      "modelName": "gpt-4o-mini",
+      "status": "ONLINE",
+      "version": 3,
+      "skillIds": ["skill-summarize-001"],
+      "capabilityKeys": ["builtin:deep_search", "builtin:file"],
+      "createdAt": "2026-08-01T00:00:00Z",
+      "updatedAt": "2026-08-02T00:00:00Z"
+    }
+  ]
+}

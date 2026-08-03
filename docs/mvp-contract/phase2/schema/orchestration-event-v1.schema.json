@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/orchestration-event-v1.schema.json",
+  "title": "Orchestration Event V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "sequence",
+    "eventType",
+    "requestId",
+    "runId",
+    "steps"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "eventType": {
+      "type": "string",
+      "enum": [
+        "ROUTE_SELECTED",
+        "PLAN_CREATED",
+        "STEP_STARTED",
+        "STEP_COMPLETED",
+        "STEP_FAILED",
+        "STEP_SKIPPED",
+        "REPLAN_STARTED",
+        "SUMMARY_STARTED",
+        "SUMMARY_COMPLETED",
+        "SUMMARY_FALLBACK",
+        "FINAL_RESPONSE"
+      ]
+    },
+    "requestId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "attemptNo": { "type": ["integer", "null"] },
+    "stepId": { "type": ["string", "null"] },
+    "agentId": { "type": ["string", "null"] },
+    "agentName": { "type": ["string", "null"] },
+    "route": {
+      "type": ["string", "null"],
+      "enum": ["DIRECT", "ORCHESTRATED", null]
+    },
+    "reasonCode": { "type": ["string", "null"] },
+    "errorCode": {
+      "type": ["string", "null"],
+      "enum": [
+        "INVALID_INPUT",
+        "AGENT_OFFLINE",
+        "TOOL_PERMISSION_DENIED",
+        "TOOL_TIMEOUT",
+        "TOOL_UNAVAILABLE",
+        "TOOL_INVALID_RESPONSE",
+        "AGENT_INVALID_RESULT",
+        "CONTEXT_BUDGET_EXCEEDED",
+        "EXECUTION_ERROR",
+        "CANCELLED",
+        null
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stepId", "agentId", "agentName", "objective", "inputRefs"],
+        "properties": {
+          "stepId": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 },
+          "agentName": { "type": "string" },
+          "objective": { "type": "string" },
+          "inputRefs": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "completionStatus": {
+      "type": ["string", "null"],
+      "enum": ["SUCCESS", "PARTIAL", null]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "eventType": { "const": "ROUTE_SELECTED" } }, "required": ["eventType"] },
+      "then": { "required": ["route", "reasonCode"], "properties": { "route": { "type": "string" }, "reasonCode": { "type": "string", "minLength": 1 } } }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "PLAN_CREATED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "steps"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "steps": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "agentId", "agentName"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "stepId": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 },
+          "agentName": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_COMPLETED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "agentId", "agentName"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "stepId": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 },
+          "agentName": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_FAILED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "agentId", "agentName", "errorCode"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "stepId": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 },
+          "agentName": { "type": "string", "minLength": 1 },
+          "errorCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_SKIPPED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "agentId", "agentName", "reasonCode"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "stepId": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 },
+          "agentName": { "type": "string", "minLength": 1 },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "REPLAN_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "reasonCode"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUMMARY_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo"],
+        "properties": { "attemptNo": { "type": "integer" } }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUMMARY_COMPLETED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo"],
+        "properties": { "attemptNo": { "type": "integer" } }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUMMARY_FALLBACK" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "reasonCode"],
+        "properties": {
+          "attemptNo": { "type": "integer" },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "FINAL_RESPONSE" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["completionStatus"],
+        "properties": {
+          "completionStatus": { "type": "string", "enum": ["SUCCESS", "PARTIAL"] }
+        }
+      }
+    }
+  ]
+}

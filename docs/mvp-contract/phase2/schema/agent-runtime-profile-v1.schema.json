@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/agent-runtime-profile-v1.schema.json",
+  "title": "Agent Runtime Profile V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agentId",
+    "agentVersion",
+    "name",
+    "description",
+    "compiledSystemPromptTemplate",
+    "resolvedModelName",
+    "skills",
+    "capabilityKeys"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "agentVersion": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "compiledSystemPromptTemplate": {
+      "type": "string"
+    },
+    "resolvedModelName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "skillId",
+          "skillVersion",
+          "sortOrder",
+          "instruction",
+          "outputRequirement"
+        ],
+        "properties": {
+          "skillId": { "type": "string", "minLength": 1 },
+          "skillVersion": { "type": "integer", "minimum": 0 },
+          "sortOrder": { "type": "integer" },
+          "instruction": { "type": "string" },
+          "outputRequirement": { "type": "string" }
+        }
+      }
+    },
+    "capabilityKeys": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
