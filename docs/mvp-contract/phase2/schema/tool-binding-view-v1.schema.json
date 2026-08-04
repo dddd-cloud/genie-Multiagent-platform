@@ -6,23 +6,29 @@
   "additionalProperties": false,
   "required": ["directCapabilities", "skillCapabilities", "invalidCapabilities"],
   "properties": {
-    "schemaVersion": {
-      "const": 1
-    },
     "directCapabilities": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 }
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capabilityKey" }
     },
     "skillCapabilities": {
       "type": "object",
       "additionalProperties": {
         "type": "array",
-        "items": { "type": "string", "minLength": 1 }
+        "items": { "$ref": "#/$defs/capabilityKey" }
       }
     },
     "invalidCapabilities": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 }
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capabilityKey" }
+    }
+  },
+  "$defs": {
+    "capabilityKey": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(builtin:(code_interpreter|data_analysis|deep_search|file|report)|mcp:[A-Za-z0-9_-]+)$"
     }
   }
 }

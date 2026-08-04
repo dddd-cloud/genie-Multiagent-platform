@@ -11,7 +11,18 @@
       "properties": {
         "code": { "type": "string" },
         "message": { "type": "string" },
-        "data": {}
+        "data": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/agent" },
+            { "type": "array", "items": { "$ref": "#/$defs/agent" } },
+            { "$ref": "#/$defs/skill" },
+            { "type": "array", "items": { "$ref": "#/$defs/skill" } },
+            { "type": "array", "items": { "$ref": "#/$defs/model" } },
+            { "$ref": "#/$defs/mcpServer" },
+            { "type": "array", "items": { "$ref": "#/$defs/mcpTool" } }
+          ]
+        }
       }
     },
     "agent": {
@@ -25,14 +36,33 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "description": { "type": "string" },
-        "promptMode": { "type": "string" },
-        "promptConfig": { "type": "object" },
+        "promptMode": {
+          "type": "string",
+          "enum": ["STRUCTURED", "RAW"]
+        },
+        "promptConfig": {
+          "oneOf": [
+            { "type": "object" },
+            { "type": "null" }
+          ]
+        },
         "systemPrompt": { "type": "string" },
         "modelName": { "type": ["string", "null"] },
-        "status": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "ONLINE", "OFFLINE"]
+        },
         "version": { "type": "integer" },
-        "skillIds": { "type": "array", "items": { "type": "string" } },
-        "capabilityKeys": { "type": "array", "items": { "type": "string" } },
+        "skillIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "capabilityKeys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       }
@@ -50,9 +80,16 @@
         "description": { "type": "string" },
         "instruction": { "type": "string" },
         "outputRequirement": { "type": "string" },
-        "status": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["ENABLED", "DISABLED"]
+        },
         "version": { "type": "integer" },
-        "capabilityKeys": { "type": "array", "items": { "type": "string" } },
+        "capabilityKeys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       }
@@ -80,9 +117,15 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "serverUrl": { "type": "string" },
-        "authType": { "type": "string" },
-        "authName": { "type": "string" },
-        "status": { "type": "string" },
+        "authType": {
+          "type": "string",
+          "enum": ["NONE", "BEARER_TOKEN", "QUERY_PARAM"]
+        },
+        "authName": { "type": ["string", "null"] },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "ENABLED", "DISABLED"]
+        },
         "credentialConfigured": { "type": "boolean" },
         "lastCheckStatus": { "type": ["string", "null"] },
         "lastCheckCode": { "type": ["string", "null"] },
@@ -111,26 +154,5 @@
       }
     }
   },
-  "oneOf": [
-    {
-      "allOf": [
-        { "$ref": "#/$defs/apiResponse" },
-        {
-          "properties": {
-            "data": {
-              "oneOf": [
-                { "$ref": "#/$defs/agent" },
-                { "type": "array", "items": { "$ref": "#/$defs/agent" } },
-                { "$ref": "#/$defs/skill" },
-                { "type": "array", "items": { "$ref": "#/$defs/skill" } },
-                { "type": "array", "items": { "$ref": "#/$defs/model" } },
-                { "$ref": "#/$defs/mcpServer" },
-                { "type": "array", "items": { "$ref": "#/$defs/mcpTool" } }
-              ]
-            }
-          }
-        }
-      ]
-    }
-  ]
+  "$ref": "#/$defs/apiResponse"
 }

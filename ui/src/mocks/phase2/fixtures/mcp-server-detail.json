@@ -5,7 +5,7 @@
     "id": "mcp-server-001",
     "name": "Docs MCP",
     "serverUrl": "https://mcp.example.com/sse",
-    "authType": "BEARER",
+    "authType": "BEARER_TOKEN",
     "authName": "docs-token",
     "status": "ENABLED",
     "credentialConfigured": true,

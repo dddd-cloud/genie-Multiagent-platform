@@ -3,8 +3,8 @@ package com.jd.genie.platform.phase2contract.capability;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.Objects;
 import java.util.Set;
 
 public final class CapabilityKeys {
@@ -41,8 +41,7 @@ public final class CapabilityKeys {
         if (capabilityKey == null || !capabilityKey.startsWith(MCP_PREFIX)) {
             return false;
         }
-        String toolId = capabilityKey.substring(MCP_PREFIX.length());
-        return !toolId.isBlank() && !toolId.contains(" ");
+        return isValidMcpToolId(capabilityKey.substring(MCP_PREFIX.length()));
     }
 
     public static String mcpToolId(String capabilityKey) {
@@ -57,17 +56,17 @@ public final class CapabilityKeys {
     }
 
     public static String forMcpTool(String mcpToolId) {
-        if (mcpToolId == null || mcpToolId.isBlank() || mcpToolId.contains(" ")) {
+        if (!isValidMcpToolId(mcpToolId)) {
             throw new Phase2ContractException(
                 MvpErrorCode.TOOL_BINDING_INVALID,
                 "mcpToolId is invalid"
             );
         }
-        return MCP_PREFIX + mcpToolId.trim();
+        return MCP_PREFIX + mcpToolId;
     }
 
     public static void requireValid(String capabilityKey) {
-        if (capabilityKey == null || capabilityKey.isBlank()) {
+        if (capabilityKey == null || capabilityKey.isEmpty()) {
             throw new Phase2ContractException(
                 MvpErrorCode.TOOL_BINDING_INVALID,
                 "capabilityKey must not be blank"
@@ -78,6 +77,14 @@ public final class CapabilityKeys {
                 MvpErrorCode.TOOL_BINDING_INVALID,
                 "capabilityKey must not have leading or trailing whitespace"
             );
+        }
+        for (int i = 0; i < capabilityKey.length(); i++) {
+            if (Character.isWhitespace(capabilityKey.charAt(i))) {
+                throw new Phase2ContractException(
+                    MvpErrorCode.TOOL_BINDING_INVALID,
+                    "capabilityKey must not contain whitespace"
+                );
+            }
         }
         if ("planning_tool".equals(capabilityKey) || capabilityKey.contains("planning_tool")) {
             throw new Phase2ContractException(
@@ -95,11 +102,10 @@ public final class CapabilityKeys {
             return;
         }
         if (capabilityKey.startsWith(MCP_PREFIX)) {
-            String toolId = capabilityKey.substring(MCP_PREFIX.length());
-            if (toolId.isBlank()) {
+            if (!isValidMcpToolId(capabilityKey.substring(MCP_PREFIX.length()))) {
                 throw new Phase2ContractException(
                     MvpErrorCode.TOOL_BINDING_INVALID,
-                    "mcp capabilityKey requires a non-empty tool id"
+                    "mcp capabilityKey requires a valid tool id"
                 );
             }
             return;
@@ -111,12 +117,50 @@ public final class CapabilityKeys {
     }
 
     public static Set<String> requireAllValid(Iterable<String> capabilityKeys) {
-        Objects.requireNonNull(capabilityKeys, "capabilityKeys");
+        if (capabilityKeys == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.TOOL_BINDING_INVALID,
+                "capabilityKeys must not be null"
+            );
+        }
         Set<String> validated = new LinkedHashSet<>();
         for (String capabilityKey : capabilityKeys) {
             requireValid(capabilityKey);
-            validated.add(capabilityKey);
+            if (!validated.add(capabilityKey)) {
+                throw new Phase2ContractException(
+                    MvpErrorCode.TOOL_BINDING_INVALID,
+                    "capabilityKeys must not contain duplicates"
+                );
+            }
         }
-        return Set.copyOf(validated);
+        return Collections.unmodifiableSet(validated);
+    }
+
+    private static boolean isValidMcpToolId(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        if (!value.equals(value.trim())) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (Character.isWhitespace(ch) || Character.isISOControl(ch)) {
+                return false;
+            }
+            if (ch == '/' || ch == '\\' || ch == '?' || ch == '#') {
+                return false;
+            }
+            boolean allowed =
+                (ch >= 'A' && ch <= 'Z')
+                    || (ch >= 'a' && ch <= 'z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '_'
+                    || ch == '-';
+            if (!allowed) {
+                return false;
+            }
+        }
+        return true;
     }
 }

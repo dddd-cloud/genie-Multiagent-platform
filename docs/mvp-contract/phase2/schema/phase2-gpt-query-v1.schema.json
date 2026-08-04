@@ -42,7 +42,8 @@
       "enum": [0, 1]
     },
     "outputStyle": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "allowedAgentIds": {
       "type": "array",
@@ -74,5 +75,18 @@
       },
       "description": "Combined longTermMemory + conversationSummary must be <= 30000 Unicode code points; enforced by backend Validator, not JSON Schema."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "executionMode": { "const": "DIRECT" } },
+        "required": ["executionMode"]
+      },
+      "then": {
+        "properties": {
+          "allowedAgentIds": { "maxItems": 0 }
+        }
+      }
+    }
+  ]
 }

@@ -6,9 +6,6 @@
   "additionalProperties": false,
   "required": ["agentId", "agentVersion", "name", "description"],
   "properties": {
-    "schemaVersion": {
-      "const": 1
-    },
     "agentId": {
       "type": "string",
       "minLength": 1

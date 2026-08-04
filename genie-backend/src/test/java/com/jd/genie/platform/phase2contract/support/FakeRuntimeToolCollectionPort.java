@@ -28,7 +28,13 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
     private volatile RuntimeException buildException;
 
     public void setToolCollection(ToolCollection toolCollection) {
-        this.toolCollection = toolCollection == null ? new ToolCollection() : toolCollection;
+        if (toolCollection == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "toolCollection must not be null"
+            );
+        }
+        this.toolCollection = toolCollection;
     }
 
     public void setBuildException(RuntimeException exception) {
@@ -66,6 +72,11 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
                 "user, profile and context must not be null"
             );
         }
-        return toolCollection;
+        ToolCollection result = toolCollection;
+        if (result == null) {
+            result = new ToolCollection();
+            toolCollection = result;
+        }
+        return result;
     }
 }

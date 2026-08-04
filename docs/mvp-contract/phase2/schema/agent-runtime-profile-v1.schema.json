@@ -15,9 +15,6 @@
     "capabilityKeys"
   ],
   "properties": {
-    "schemaVersion": {
-      "const": 1
-    },
     "agentId": {
       "type": "string",
       "minLength": 1
@@ -54,7 +51,7 @@
         "properties": {
           "skillId": { "type": "string", "minLength": 1 },
           "skillVersion": { "type": "integer", "minimum": 0 },
-          "sortOrder": { "type": "integer" },
+          "sortOrder": { "type": "integer", "minimum": 0 },
           "instruction": { "type": "string" },
           "outputRequirement": { "type": "string" }
         }
@@ -62,10 +59,17 @@
     },
     "capabilityKeys": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
-        "type": "string",
-        "minLength": 1
+        "$ref": "#/$defs/capabilityKey"
       }
+    }
+  },
+  "$defs": {
+    "capabilityKey": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(builtin:(code_interpreter|data_analysis|deep_search|file|report)|mcp:[A-Za-z0-9_-]+)$"
     }
   }
 }

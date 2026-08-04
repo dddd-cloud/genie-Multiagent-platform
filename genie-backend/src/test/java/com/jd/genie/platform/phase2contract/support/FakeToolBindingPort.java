@@ -2,13 +2,13 @@ package com.jd.genie.platform.phase2contract.support;
 
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import com.jd.genie.platform.phase2contract.dto.ToolBindingView;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,6 +86,8 @@ public class FakeToolBindingPort implements ToolBindingPort {
         if (resolveException != null) {
             throw resolveException;
         }
+        requireUser(user);
+        requireResourceId(agentId);
         if (enabledSkillIds == null) {
             throw new Phase2ContractException(
                 MvpErrorCode.VALIDATION_ERROR,
@@ -115,30 +117,12 @@ public class FakeToolBindingPort implements ToolBindingPort {
 
     @Override
     public void removeAgentBindings(CurrentUser user, String agentId) {
-        calls.add(new CallRecord(
-            CallType.REMOVE_AGENT_BINDINGS,
-            user == null ? null : user.userId(),
-            agentId,
-            null,
-            null
-        ));
-        if (writeException != null) {
-            throw writeException;
-        }
+        remove(CallType.REMOVE_AGENT_BINDINGS, user, agentId);
     }
 
     @Override
     public void removeSkillBindings(CurrentUser user, String skillId) {
-        calls.add(new CallRecord(
-            CallType.REMOVE_SKILL_BINDINGS,
-            user == null ? null : user.userId(),
-            skillId,
-            null,
-            null
-        ));
-        if (writeException != null) {
-            throw writeException;
-        }
+        remove(CallType.REMOVE_SKILL_BINDINGS, user, skillId);
     }
 
     private void replace(
@@ -157,21 +141,60 @@ public class FakeToolBindingPort implements ToolBindingPort {
         if (writeException != null) {
             throw writeException;
         }
+        requireUser(user);
+        requireResourceId(resourceId);
         if (capabilityKeys == null) {
             throw new Phase2ContractException(
                 MvpErrorCode.VALIDATION_ERROR,
                 "capabilityKeys must not be null"
             );
         }
-        Set<String> unique = new HashSet<>();
+        // Empty list means clear all bindings — success with no further action.
+        if (capabilityKeys.isEmpty()) {
+            return;
+        }
+        CapabilityKeys.requireAllValid(capabilityKeys);
         for (String key : capabilityKeys) {
-            if (key == null || key.isBlank() || !unique.add(key) || failingCapabilityKeys.contains(key)) {
+            if (failingCapabilityKeys.contains(key)) {
                 throw new Phase2ContractException(
                     MvpErrorCode.TOOL_BINDING_INVALID,
                     "capabilityKeys contains an invalid entry"
                 );
             }
         }
-        // Empty list means clear all bindings — success with no further action.
+    }
+
+    private void remove(CallType type, CurrentUser user, String resourceId) {
+        calls.add(new CallRecord(
+            type,
+            user == null ? null : user.userId(),
+            resourceId,
+            null,
+            null
+        ));
+        if (writeException != null) {
+            throw writeException;
+        }
+        requireUser(user);
+        requireResourceId(resourceId);
+        // Removing a missing binding remains idempotent success.
+    }
+
+    private static void requireUser(CurrentUser user) {
+        if (user == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "user must not be null"
+            );
+        }
+    }
+
+    private static void requireResourceId(String resourceId) {
+        if (resourceId == null || resourceId.isBlank()) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "resource id must not be blank"
+            );
+        }
     }
 }

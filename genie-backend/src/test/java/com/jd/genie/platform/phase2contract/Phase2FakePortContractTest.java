@@ -61,6 +61,42 @@ class Phase2FakePortContractTest {
     }
 
     @Test
+    void catalogRejectsNullUserAndNullRegistration() {
+        FakeAgentRuntimeCatalogPort fake = new FakeAgentRuntimeCatalogPort();
+        Phase2ContractException nullUser = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.listOnlineCandidates(null, List.of())
+        );
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, nullUser.errorCode());
+
+        assertThrows(Phase2ContractException.class, () -> fake.registerSummary(null));
+        assertThrows(Phase2ContractException.class, () -> fake.registerProfile(null));
+    }
+
+    @Test
+    void catalogEmptyWhitelistOrdersByAgentIdStableAcrossRuns() {
+        FakeAgentRuntimeCatalogPort fake = new FakeAgentRuntimeCatalogPort();
+        fake.registerSummary(new AgentCapabilitySummary("z-agent", 1L, "Z", "d"));
+        fake.registerSummary(new AgentCapabilitySummary("a-agent", 1L, "A", "d"));
+        fake.registerSummary(new AgentCapabilitySummary("m-agent", 1L, "M", "d"));
+
+        List<String> first = fake.listOnlineCandidates(user, List.of()).stream()
+            .map(AgentCapabilitySummary::agentId)
+            .toList();
+        List<String> second = fake.listOnlineCandidates(user, List.of()).stream()
+            .map(AgentCapabilitySummary::agentId)
+            .toList();
+        assertEquals(List.of("a-agent", "m-agent", "z-agent"), first);
+        assertEquals(first, second);
+
+        List<String> whitelistOrder = fake.listOnlineCandidates(
+            user,
+            List.of("z-agent", "a-agent")
+        ).stream().map(AgentCapabilitySummary::agentId).toList();
+        assertEquals(List.of("z-agent", "a-agent"), whitelistOrder);
+    }
+
+    @Test
     void toolBindingFakeSupportsClearAndIdempotentRemove() {
         FakeToolBindingPort fake = new FakeToolBindingPort();
         fake.setResolveResult(new ToolBindingView(List.of("builtin:file"), Map.of(), List.of()));
@@ -77,6 +113,47 @@ class Phase2FakePortContractTest {
     }
 
     @Test
+    void toolBindingRejectsNullUserBlankIdsDuplicatesAndWhitespaceKeys() {
+        FakeToolBindingPort fake = new FakeToolBindingPort();
+
+        Phase2ContractException nullUser = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.replaceAgentBindings(null, "a1", List.of("builtin:file"))
+        );
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, nullUser.errorCode());
+
+        Phase2ContractException blankId = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.replaceSkillBindings(user, "  ", List.of("builtin:file"))
+        );
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, blankId.errorCode());
+
+        Phase2ContractException blankRemove = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.removeAgentBindings(user, "")
+        );
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, blankRemove.errorCode());
+
+        Phase2ContractException duplicate = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.replaceAgentBindings(user, "a1", List.of("builtin:file", "builtin:file"))
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, duplicate.errorCode());
+
+        Phase2ContractException tabKey = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.replaceAgentBindings(user, "a1", List.of("mcp:\ttool"))
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, tabKey.errorCode());
+
+        Phase2ContractException newlineKey = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.replaceSkillBindings(user, "s1", List.of("mcp:tool\n"))
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, newlineKey.errorCode());
+    }
+
+    @Test
     void runtimeToolCollectionFakeRecordsAndExceptions() {
         FakeRuntimeToolCollectionPort fake = new FakeRuntimeToolCollectionPort();
         ToolCollection collection = new ToolCollection();
@@ -88,6 +165,29 @@ class Phase2FakePortContractTest {
         fake.setBuildException(new Phase2ContractException(MvpErrorCode.TOOL_NOT_BOUND, "missing"));
         assertThrows(Phase2ContractException.class, () -> fake.build(user, profile, context));
         assertEquals(2, fake.getCalls().size());
+    }
+
+    @Test
+    void runtimeToolCollectionRejectsNullArgsAndNullCollection() {
+        FakeRuntimeToolCollectionPort fake = new FakeRuntimeToolCollectionPort();
+        AgentRuntimeProfile profile = new AgentRuntimeProfile(
+            "a1", 1L, "A", "d", "p", "gpt-4o-mini", List.of(), List.of());
+        AgentContext context = AgentContext.builder().requestId("req-1").build();
+
+        Phase2ContractException nullUser = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.build(null, profile, context)
+        );
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, nullUser.errorCode());
+
+        Phase2ContractException nullCollection = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.setToolCollection(null)
+        );
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, nullCollection.errorCode());
+
+        fake.reset();
+        assertNotNull(fake.build(user, profile, context));
     }
 
     @Test

@@ -5,6 +5,10 @@ import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -64,5 +68,70 @@ class Phase2CapabilityKeysTest {
             () -> CapabilityKeys.requireValid(""));
         assertThrows(Phase2ContractException.class,
             () -> CapabilityKeys.requireValid(null));
+    }
+
+    @Test
+    void duplicateKeysAreRejected() {
+        Phase2ContractException ex = assertThrows(
+            Phase2ContractException.class,
+            () -> CapabilityKeys.requireAllValid(List.of(
+                CapabilityKeys.BUILTIN_FILE,
+                CapabilityKeys.BUILTIN_REPORT,
+                CapabilityKeys.BUILTIN_FILE
+            ))
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, ex.errorCode());
+    }
+
+    @Test
+    void tabAndNewlineMcpKeysAreRejected() {
+        Phase2ContractException tabKey = assertThrows(
+            Phase2ContractException.class,
+            () -> CapabilityKeys.requireValid("mcp:\ttool")
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, tabKey.errorCode());
+        assertFalse(CapabilityKeys.isMcp("mcp:\ttool"));
+
+        Phase2ContractException newlineKey = assertThrows(
+            Phase2ContractException.class,
+            () -> CapabilityKeys.requireValid("mcp:tool\n")
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, newlineKey.errorCode());
+        assertFalse(CapabilityKeys.isMcp("mcp:tool\n"));
+    }
+
+    @Test
+    void forMcpToolRejectsTabPrefixedId() {
+        Phase2ContractException ex = assertThrows(
+            Phase2ContractException.class,
+            () -> CapabilityKeys.forMcpTool("\ttool")
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, ex.errorCode());
+    }
+
+    @Test
+    void requireAllValidPreservesInputOrder() {
+        Set<String> validated = CapabilityKeys.requireAllValid(List.of(
+            CapabilityKeys.BUILTIN_REPORT,
+            "mcp:mcp-tool-001",
+            CapabilityKeys.BUILTIN_FILE
+        ));
+        assertEquals(
+            List.of(
+                CapabilityKeys.BUILTIN_REPORT,
+                "mcp:mcp-tool-001",
+                CapabilityKeys.BUILTIN_FILE
+            ),
+            new ArrayList<>(validated)
+        );
+    }
+
+    @Test
+    void nullCapabilityKeysIterableIsRejected() {
+        Phase2ContractException ex = assertThrows(
+            Phase2ContractException.class,
+            () -> CapabilityKeys.requireAllValid(null)
+        );
+        assertEquals(MvpErrorCode.TOOL_BINDING_INVALID, ex.errorCode());
     }
 }

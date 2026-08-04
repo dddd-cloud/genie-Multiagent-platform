@@ -9,6 +9,7 @@ import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,10 +38,22 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
     private volatile RuntimeException loadException;
 
     public void registerSummary(AgentCapabilitySummary summary) {
+        if (summary == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "summary must not be null"
+            );
+        }
         summaries.put(summary.agentId(), summary);
     }
 
     public void registerProfile(AgentRuntimeProfile profile) {
+        if (profile == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "profile must not be null"
+            );
+        }
         profiles.put(profile.agentId(), profile);
     }
 
@@ -78,6 +91,12 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
         if (listException != null) {
             throw listException;
         }
+        if (user == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "user must not be null"
+            );
+        }
         if (allowedAgentIds == null) {
             throw new Phase2ContractException(
                 MvpErrorCode.VALIDATION_ERROR,
@@ -87,6 +106,7 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
         List<AgentCapabilitySummary> result = new ArrayList<>();
         if (allowedAgentIds.isEmpty()) {
             result.addAll(summaries.values());
+            result.sort(Comparator.comparing(AgentCapabilitySummary::agentId));
         } else {
             for (String agentId : allowedAgentIds) {
                 AgentCapabilitySummary summary = summaries.get(agentId);
@@ -111,6 +131,12 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
         ));
         if (loadException != null) {
             throw loadException;
+        }
+        if (user == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "user must not be null"
+            );
         }
         if (agentId == null || agentId.isBlank()) {
             throw new Phase2ContractException(

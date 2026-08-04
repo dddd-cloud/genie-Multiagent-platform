@@ -1,0 +1,5 @@
+{
+  "code": "SKILL_IN_USE",
+  "message": "skill is referenced by one or more agents",
+  "data": null
+}

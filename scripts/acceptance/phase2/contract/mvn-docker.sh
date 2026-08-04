@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-IMAGE="${GENIE_MAVEN_IMAGE:-maven:3.9.9-eclipse-temurin-21}"
+IMAGE="${GENIE_MAVEN_IMAGE:-maven:3.9.9-eclipse-temurin-17}"
 CACHE_VOLUME="${GENIE_MAVEN_CACHE_VOLUME:-genie-maven-cache}"
 
 # Git Bash on Windows needs //var/run/docker.sock; Linux uses /var/run/docker.sock.

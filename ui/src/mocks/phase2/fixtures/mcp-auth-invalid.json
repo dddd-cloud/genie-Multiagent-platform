@@ -1,0 +1,5 @@
+{
+  "code": "MCP_AUTH_INVALID",
+  "message": "mcp auth configuration invalid",
+  "data": null
+}

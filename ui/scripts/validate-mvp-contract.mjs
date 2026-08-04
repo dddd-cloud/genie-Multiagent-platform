@@ -132,20 +132,97 @@ const PHASE2_PROGRESS_EVENT_TYPES = new Set([
   'SUMMARY_FALLBACK',
 ]);
 
+const PHASE2_REQUIRED_FIXTURES = [
+  'agents-list.json',
+  'agent-detail.json',
+  'agent-raw-detail.json',
+  'skills-list.json',
+  'skill-detail.json',
+  'models.json',
+  'mcp-server-detail.json',
+  'mcp-tools.json',
+  'memory-patch.json',
+  'memory-summary.json',
+  'memory-patch-invalid.json',
+  'agent-version-conflict.json',
+  'skill-in-use.json',
+  'mcp-url-rejected.json',
+  'mcp-auth-invalid.json',
+  'mcp-discovery-invalid.json',
+  'mcp-unavailable.json',
+  'direct-success.ndjson',
+  'direct-failure.ndjson',
+  'orchestrated-success.ndjson',
+  'orchestrated-replan.ndjson',
+  'orchestrated-summary-fallback.ndjson',
+  'snapshot-orchestrated-success.json',
+  'snapshot-orchestrated-truncated.json',
+  'snapshot-orchestrated-malformed.txt',
+];
+
+const PHASE2_MANAGEMENT_FIXTURES = [
+  'agents-list.json',
+  'agent-detail.json',
+  'agent-raw-detail.json',
+  'skills-list.json',
+  'skill-detail.json',
+  'models.json',
+  'mcp-server-detail.json',
+  'mcp-tools.json',
+];
+
+const PHASE2_ERROR_FIXTURES = {
+  'agent-version-conflict.json': 'VERSION_CONFLICT',
+  'skill-in-use.json': 'SKILL_IN_USE',
+  'mcp-url-rejected.json': 'MCP_URL_REJECTED',
+  'mcp-auth-invalid.json': 'MCP_AUTH_INVALID',
+  'mcp-discovery-invalid.json': 'MCP_DISCOVERY_INVALID',
+  'mcp-unavailable.json': 'MCP_UNAVAILABLE',
+};
+
+const PHASE2_SCHEMA_DTO_MIRRORS = [
+  {
+    schemaFile: 'agent-capability-summary-v1.schema.json',
+    javaRecord: 'AgentCapabilitySummary',
+    javaPath: 'dto/AgentCapabilitySummary.java',
+    tsInterface: 'AgentCapabilitySummary',
+    tsFile: 'runtime.ts',
+  },
+  {
+    schemaFile: 'agent-runtime-profile-v1.schema.json',
+    javaRecord: 'AgentRuntimeProfile',
+    javaPath: 'dto/AgentRuntimeProfile.java',
+    tsInterface: 'AgentRuntimeProfile',
+    tsFile: 'runtime.ts',
+  },
+  {
+    schemaFile: 'tool-binding-view-v1.schema.json',
+    javaRecord: 'ToolBindingView',
+    javaPath: 'dto/ToolBindingView.java',
+    tsInterface: 'ToolBindingView',
+    tsFile: 'runtime.ts',
+  },
+];
+
 const PHASE2_SECRET_FIELD_NAMES = new Set([
   'authorization',
   'bearer',
   'token',
+  'accesstoken',
+  'refreshtoken',
   'cookie',
   'password',
-  'apiKey',
   'apikey',
+  'api_key',
+  'clientsecret',
   'credential',
-  'credentialEnvelope',
-  'X-Genie-Internal-Token',
-  'GENIE_SESSION',
-  'XSRF-TOKEN',
-  'baseUrl',
+  'credentialenvelope',
+  'x-genie-internal-token',
+  'genie_session',
+  'xsrf-token',
+  'baseurl',
+  'base_url',
+  'header',
 ]);
 
 const GPT_PROCESS_RESULT_FIELDS = [
@@ -710,16 +787,42 @@ function validateMswFixtures() {
 }
 
 function extractJavaRecordComponents(javaSource, recordName) {
-  const regex = new RegExp(
-    `(?:public\\s+)?record\\s+${recordName}(?:<[^>]+>)?\\s*\\(([^)]*)\\)`,
-    's'
+  const headerMatch = javaSource.match(
+    new RegExp(`(?:public\\s+)?record\\s+${recordName}(?:<[^>]+>)?\\s*\\(`)
   );
-  const match = javaSource.match(regex);
-  if (!match) return null;
-  return match[1]
-    .split(',')
-    .map((part) => part.trim().split(/\s+/).pop())
-    .filter(Boolean);
+  if (!headerMatch) return null;
+
+  const start = headerMatch.index + headerMatch[0].length;
+  let parenDepth = 1;
+  let params = '';
+  for (let i = start; i < javaSource.length; i += 1) {
+    const ch = javaSource[i];
+    if (ch === '(') parenDepth += 1;
+    else if (ch === ')') {
+      parenDepth -= 1;
+      if (parenDepth === 0) break;
+    }
+    params += ch;
+  }
+
+  const components = [];
+  let genericDepth = 0;
+  let current = '';
+  for (let i = 0; i < params.length; i += 1) {
+    const ch = params[i];
+    if (ch === '<') genericDepth += 1;
+    else if (ch === '>') genericDepth -= 1;
+    else if (ch === ',' && genericDepth === 0) {
+      const name = current.trim().split(/\s+/).pop();
+      if (name) components.push(name);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  const name = current.trim().split(/\s+/).pop();
+  if (name) components.push(name);
+  return components;
 }
 
 function extractTsInterfaceFields(tsSource, interfaceName) {
@@ -1007,7 +1110,7 @@ function assertNoSecretFields(value, label, seen = new WeakSet()) {
     return;
   }
   for (const [key, child] of Object.entries(value)) {
-    if (PHASE2_SECRET_FIELD_NAMES.has(key)) {
+    if (PHASE2_SECRET_FIELD_NAMES.has(key.toLowerCase())) {
       fail(`${label}: forbidden secret field name ${key}`);
     }
     assertNoSecretFields(child, `${label}.${key}`, seen);
@@ -1017,6 +1120,154 @@ function assertNoSecretFields(value, label, seen = new WeakSet()) {
 function extractJavaEnumValuesFromText(source) {
   const body = source.match(/enum\s+\w+\s*\{([\s\S]*?)\}/)?.[1] ?? '';
   return [...body.matchAll(/\b([A-Z][A-Z0-9_]*)\b/g)].map((m) => m[1]);
+}
+
+function validatePhase2RequiredFixtures() {
+  for (const name of PHASE2_REQUIRED_FIXTURES) {
+    const filePath = join(phase2FixturesDir, name);
+    if (!existsSync(filePath)) {
+      fail(`Missing required Phase2 fixture ${name}`);
+    } else {
+      pass(`Required Phase2 fixture present: ${name}`);
+    }
+  }
+}
+
+function validatePhase2ErrorFixtures() {
+  for (const [name, expectedCode] of Object.entries(PHASE2_ERROR_FIXTURES)) {
+    const filePath = join(phase2FixturesDir, name);
+    let data;
+    try {
+      data = JSON.parse(readText(filePath));
+    } catch (error) {
+      fail(`${name} is not valid JSON: ${error.message}`);
+      continue;
+    }
+    if (data.code !== expectedCode) {
+      fail(`${name}: code must be ${expectedCode}, got ${data.code}`);
+    }
+    if (typeof data.message !== 'string' || !data.message.trim()) {
+      fail(`${name}: message must be a non-empty string`);
+    }
+    if (data.data !== null) {
+      fail(`${name}: data must be null`);
+    }
+    assertNoSecretFields(data, name);
+    pass(`${name}: error fixture shape ok`);
+  }
+}
+
+function validatePhase2MemoryPatchFixtures(memoryValidate) {
+  if (!memoryValidate) {
+    fail('memory-patch schema validator unavailable');
+    return;
+  }
+
+  const valid = JSON.parse(readText(join(phase2FixturesDir, 'memory-patch.json')));
+  if (!isPlainObject(valid.data) || !memoryValidate(valid.data)) {
+    fail(`memory-patch.json must pass memory-patch schema: ${JSON.stringify(memoryValidate.errors)}`);
+  } else {
+    pass('memory-patch.json passes memory-patch schema');
+  }
+
+  const invalid = JSON.parse(readText(join(phase2FixturesDir, 'memory-patch-invalid.json')));
+  if (!isPlainObject(invalid.data)) {
+    fail('memory-patch-invalid.json must contain object data for negative schema test');
+  } else if (memoryValidate(invalid.data)) {
+    fail('memory-patch-invalid.json must fail memory-patch schema');
+  } else {
+    pass('memory-patch-invalid.json rejected by memory-patch schema');
+  }
+}
+
+function validatePhase2SchemaPropertyMirrors() {
+  for (const mirror of PHASE2_SCHEMA_DTO_MIRRORS) {
+    const schemaPath = join(phase2SchemaDir, mirror.schemaFile);
+    const schema = JSON.parse(readText(schemaPath));
+    if ('schemaVersion' in (schema.properties ?? {})) {
+      fail(`${mirror.schemaFile} must not define schemaVersion`);
+      continue;
+    }
+    const schemaProps = Object.keys(schema.properties ?? {}).sort();
+    const javaSource = readText(join(phase2BackendDir, mirror.javaPath));
+    const tsSource = readText(join(phase2TsDir, mirror.tsFile));
+    const javaFields = extractJavaRecordComponents(javaSource, mirror.javaRecord)?.sort() ?? [];
+    const tsFields = extractTsInterfaceFields(tsSource, mirror.tsInterface)?.sort() ?? [];
+    if (JSON.stringify(schemaProps) !== JSON.stringify(javaFields)) {
+      fail(
+        `${mirror.schemaFile} properties mismatch Java ${mirror.javaRecord}: schema=${JSON.stringify(schemaProps)} java=${JSON.stringify(javaFields)}`
+      );
+    } else if (JSON.stringify(schemaProps) !== JSON.stringify(tsFields)) {
+      fail(
+        `${mirror.schemaFile} properties mismatch TS ${mirror.tsInterface}: schema=${JSON.stringify(schemaProps)} ts=${JSON.stringify(tsFields)}`
+      );
+    } else {
+      pass(`${mirror.schemaFile} properties mirror Java/TS ${mirror.javaRecord}`);
+    }
+  }
+}
+
+function validatePhase2OrchestrationSequence(events, label) {
+  const orchestrationEvents = events
+    .map((event) => event?.resultMap?.orchestrationEvent)
+    .filter(isPlainObject);
+  if (orchestrationEvents.length === 0) {
+    return;
+  }
+
+  let previousSequence = 0;
+  let expectedRequestId = null;
+  let expectedRunId = null;
+
+  for (const [index, orchestrationEvent] of orchestrationEvents.entries()) {
+    const eventLabel = `${label} orchestrationEvent[${index}]`;
+    if (expectedRequestId === null) {
+      expectedRequestId = orchestrationEvent.requestId;
+      expectedRunId = orchestrationEvent.runId;
+    } else {
+      if (orchestrationEvent.requestId !== expectedRequestId) {
+        fail(`${eventLabel}: requestId must remain ${expectedRequestId}, got ${orchestrationEvent.requestId}`);
+      }
+      if (orchestrationEvent.runId !== expectedRunId) {
+        fail(`${eventLabel}: runId must remain ${expectedRunId}, got ${orchestrationEvent.runId}`);
+      }
+    }
+    if (typeof orchestrationEvent.sequence !== 'number' || orchestrationEvent.sequence <= previousSequence) {
+      fail(`${eventLabel}: sequence must strictly increase, got ${orchestrationEvent.sequence} after ${previousSequence}`);
+    }
+    const expectedEventId = `${orchestrationEvent.requestId}:${orchestrationEvent.sequence}`;
+    if (orchestrationEvent.eventId !== expectedEventId) {
+      fail(`${eventLabel}: eventId must be ${expectedEventId}, got ${orchestrationEvent.eventId}`);
+    }
+    previousSequence = orchestrationEvent.sequence;
+  }
+  pass(`${label}: orchestration sequence consistency ok`);
+}
+
+function validatePhase2ProtectedBaselineContent() {
+  const content = readText(phase2ProtectedBaseline);
+  if (content.includes('\r')) {
+    fail('Phase2 protected baseline must not contain CR line endings');
+    return;
+  }
+  const lines = content.split('\n').filter((line) => line.trim().length > 0);
+  if (lines.length !== 18) {
+    fail(`Phase2 protected baseline must contain exactly 18 entries, found ${lines.length}`);
+  }
+  const paths = [];
+  for (const line of lines) {
+    const match = line.match(/^([a-f0-9A-F]{64}) {2}(.+)$/);
+    if (!match) {
+      fail(`Phase2 protected baseline invalid line format: ${line}`);
+      continue;
+    }
+    paths.push(match[2]);
+  }
+  if (new Set(paths).size !== paths.length) {
+    fail('Phase2 protected baseline contains duplicate paths');
+  } else {
+    pass('Phase2 protected baseline content validated (18 entries, LF, unique paths)');
+  }
 }
 
 function validatePhase2SchemasAndFixtures(ajv) {
@@ -1039,12 +1290,17 @@ function validatePhase2SchemasAndFixtures(ajv) {
     }
   }
 
+  validatePhase2RequiredFixtures();
+
   const jsonFixtures = collectFiles(phase2FixturesDir, (name) => name.endsWith('.json'));
   const ndjsonFixtures = collectFiles(phase2FixturesDir, (name) => name.endsWith('.ndjson'));
   const orchestrationValidate = validators['orchestration-event-v1.schema.json'];
   const memoryValidate = validators['memory-patch-v1.schema.json'];
   const managementValidate = validators['management-api-v1.schema.json'];
   const snapshotValidate = ajv.compile(loadSchema());
+
+  validatePhase2MemoryPatchFixtures(memoryValidate);
+  validatePhase2ErrorFixtures();
 
   for (const filePath of jsonFixtures) {
     const name = filePath.split(/[\\/]/).pop();
@@ -1070,30 +1326,16 @@ function validatePhase2SchemasAndFixtures(ajv) {
           validateGptProcessResultEvent(event, `${name} events[${index}]`);
           validatePhase2StreamEvent(event, `${name} events[${index}]`, orchestrationValidate);
         });
+        validatePhase2OrchestrationSequence(data.events, name);
       }
       continue;
     }
 
-    if (name.startsWith('memory-patch') && memoryValidate && isPlainObject(data.data)) {
-      if (!memoryValidate(data.data)) {
-        fail(`${name} failed memory-patch schema: ${JSON.stringify(memoryValidate.errors)}`);
-      } else {
-        pass(`${name}: memory-patch schema ok`);
-      }
+    if (name.startsWith('memory-patch')) {
+      continue;
     }
 
-    if (
-      managementValidate &&
-      [
-        'agents-list.json',
-        'agent-detail.json',
-        'skills-list.json',
-        'skill-detail.json',
-        'models.json',
-        'mcp-server-detail.json',
-        'mcp-tools.json',
-      ].includes(name)
-    ) {
+    if (PHASE2_MANAGEMENT_FIXTURES.includes(name)) {
       if (!managementValidate(data)) {
         fail(`${name} failed management-api schema: ${JSON.stringify(managementValidate.errors)}`);
       } else {
@@ -1105,6 +1347,7 @@ function validatePhase2SchemasAndFixtures(ajv) {
   for (const filePath of ndjsonFixtures) {
     const name = filePath.split(/[\\/]/).pop();
     const lines = readText(filePath).split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const parsedEvents = [];
     lines.forEach((line, index) => {
       let event;
       try {
@@ -1113,10 +1356,12 @@ function validatePhase2SchemasAndFixtures(ajv) {
         fail(`${name}:${index + 1} invalid JSON: ${error.message}`);
         return;
       }
+      parsedEvents.push(event);
       validateGptProcessResultEvent(event, `${name}:${index + 1}`);
       validatePhase2StreamEvent(event, `${name}:${index + 1}`, orchestrationValidate);
       assertNoSecretFields(event, `${name}:${index + 1}`);
     });
+    validatePhase2OrchestrationSequence(parsedEvents, name);
     pass(`${name}: ndjson fixture validated`);
   }
 
@@ -1140,8 +1385,16 @@ function validatePhase2StreamEvent(event, label, orchestrationValidate) {
     fail(`${label}: orchestrationEvent schema failed ${JSON.stringify(orchestrationValidate.errors)}`);
   }
   const eventType = orchestrationEvent.eventType;
-  if (PHASE2_PROGRESS_EVENT_TYPES.has(eventType) && event.finished === true) {
-    fail(`${label}: progress event ${eventType} must have finished=false`);
+  if (PHASE2_PROGRESS_EVENT_TYPES.has(eventType)) {
+    if (event.packageType !== 'orchestration') {
+      fail(`${label}: progress event ${eventType} packageType must be orchestration`);
+    }
+    if (event.responseType !== 'json') {
+      fail(`${label}: progress event ${eventType} responseType must be json`);
+    }
+    if (event.finished === true) {
+      fail(`${label}: progress event ${eventType} must have finished=false`);
+    }
   }
   if (eventType === 'FINAL_RESPONSE') {
     if (event.packageType !== 'result') fail(`${label}: FINAL_RESPONSE packageType must be result`);
@@ -1203,12 +1456,14 @@ function validatePhase2ProtectedBaselineExists() {
     fail('docs/mvp-contract/phase2/protected-baseline.sha256 missing');
   } else {
     pass('Phase2 protected baseline file exists');
+    validatePhase2ProtectedBaselineContent();
   }
 }
 
 function validatePhase2Contract(ajv) {
   console.log('\nValidating MVP-CONTRACT-004 Phase2 seams...\n');
   validatePhase2SchemasAndFixtures(ajv);
+  validatePhase2SchemaPropertyMirrors();
   validatePhase2EnumMirrors();
   validatePhase2UniqueTypes();
   validatePhase2ProtectedBaselineExists();

@@ -12,26 +12,47 @@
     "patches": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["operation", "section", "key", "value"],
-        "properties": {
-          "operation": {
-            "type": "string",
-            "enum": ["UPSERT", "DELETE"]
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation", "section", "key", "value"],
+            "properties": {
+              "operation": { "const": "UPSERT" },
+              "section": {
+                "type": "string",
+                "enum": ["基本信息", "回答偏好", "长期目标", "长期约束"]
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "section": {
-            "type": "string",
-            "enum": ["基本信息", "回答偏好", "长期目标", "长期约束"]
-          },
-          "key": {
-            "type": "string",
-            "minLength": 1
-          },
-          "value": {
-            "type": ["string", "null"]
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation", "section", "key", "value"],
+            "properties": {
+              "operation": { "const": "DELETE" },
+              "section": {
+                "type": "string",
+                "enum": ["基本信息", "回答偏好", "长期目标", "长期约束"]
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "value": {
+                "type": "null"
+              }
+            }
           }
-        }
+        ]
       }
     }
   }
