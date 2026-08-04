@@ -1,11 +1,19 @@
 package com.jd.genie.platform.phase2.configuration.support;
 
+import com.jd.genie.platform.contract.CurrentUser;
+import com.jd.genie.platform.contract.UserRole;
+import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
+import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
+import com.jd.genie.platform.phase2contract.support.FakeToolBindingPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -34,6 +42,9 @@ public abstract class Phase2AMySqlTestSupport {
     @Autowired
     protected JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    protected FakeToolBindingPort fakeToolBindingPort;
+
     @DynamicPropertySource
     static void mysqlProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
@@ -47,14 +58,32 @@ public abstract class Phase2AMySqlTestSupport {
         jdbcTemplate.update("DELETE FROM agent_skill_binding");
         jdbcTemplate.update("DELETE FROM agent_definition");
         jdbcTemplate.update("DELETE FROM skill_definition");
+        fakeToolBindingPort.reset();
+    }
+
+    protected CurrentUser userA() {
+        return new CurrentUser("tenant-a", "owner-a", "owner-a", "Owner A", UserRole.USER);
+    }
+
+    protected CurrentUser userB() {
+        return new CurrentUser("tenant-a", "owner-b", "owner-b", "Owner B", UserRole.USER);
+    }
+
+    protected CurrentUser tenantBUser() {
+        return new CurrentUser("tenant-b", "owner-a", "owner-a", "Tenant B", UserRole.USER);
     }
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
+    @Import({AgentDefinitionService.class, SkillDefinitionService.class})
     @MapperScan({
         "com.jd.genie.platform.phase2.configuration.agent.mapper",
         "com.jd.genie.platform.phase2.configuration.skill.mapper"
     })
     static class TestApplication {
+        @Bean
+        ToolBindingPort toolBindingPort() {
+            return new FakeToolBindingPort();
+        }
     }
 }

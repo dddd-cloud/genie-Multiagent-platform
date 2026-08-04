@@ -75,6 +75,24 @@ public interface SkillDefinitionMapper extends BaseMapper<SkillDefinitionEntity>
                                   @Param("name") String name,
                                   @Param("excludeSkillId") String excludeSkillId);
 
+    @Select("""
+        <script>
+        SELECT *
+        FROM skill_definition
+        WHERE tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+          AND id IN
+          <foreach collection="skillIds" item="skillId" open="(" separator="," close=")">
+            #{skillId}
+          </foreach>
+        ORDER BY updated_at DESC, id DESC
+        </script>
+        """)
+    List<SkillDefinitionEntity> selectOwnedByIds(@Param("tenantId") String tenantId,
+                                                 @Param("ownerId") String ownerId,
+                                                 @Param("skillIds") List<String> skillIds);
+
     @Update("""
         UPDATE skill_definition
         SET name = #{entity.name},
@@ -94,6 +112,24 @@ public interface SkillDefinitionMapper extends BaseMapper<SkillDefinitionEntity>
                                @Param("entity") SkillDefinitionEntity entity,
                                @Param("version") Long version,
                                @Param("updatedAt") Instant updatedAt);
+
+    @Update("""
+        UPDATE skill_definition
+        SET status = #{status},
+            updated_at = #{updatedAt},
+            version = version + 1
+        WHERE id = #{skillId}
+          AND tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND version = #{version}
+          AND deleted_at IS NULL
+        """)
+    int updateStatusOwnedWithVersion(@Param("tenantId") String tenantId,
+                                     @Param("ownerId") String ownerId,
+                                     @Param("skillId") String skillId,
+                                     @Param("version") Long version,
+                                     @Param("status") String status,
+                                     @Param("updatedAt") Instant updatedAt);
 
     @Update("""
         UPDATE skill_definition

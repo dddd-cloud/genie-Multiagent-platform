@@ -117,6 +117,24 @@ public interface AgentDefinitionMapper extends BaseMapper<AgentDefinitionEntity>
 
     @Update("""
         UPDATE agent_definition
+        SET status = #{status},
+            updated_at = #{updatedAt},
+            version = version + 1
+        WHERE id = #{agentId}
+          AND tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND version = #{version}
+          AND deleted_at IS NULL
+        """)
+    int updateStatusOwnedWithVersion(@Param("tenantId") String tenantId,
+                                     @Param("ownerId") String ownerId,
+                                     @Param("agentId") String agentId,
+                                     @Param("version") Long version,
+                                     @Param("status") String status,
+                                     @Param("updatedAt") Instant updatedAt);
+
+    @Update("""
+        UPDATE agent_definition
         SET deleted_at = #{deletedAt},
             updated_at = #{deletedAt},
             version = version + 1
