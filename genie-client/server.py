@@ -1,7 +1,7 @@
 from datetime import datetime
 from fastapi import FastAPI, Request, Body, Depends
 
-from app.client import SseClient
+from app.client import SseClient, McpClientError
 from app.header import HeaderEntity
 from app.security import require_internal_mcp_token
 from app.logger import default_logger as logger
@@ -18,6 +18,11 @@ app = FastAPI(
         "name": "MIT",
     },
 )
+
+def _failure(exc: Exception):
+    code = exc.code if isinstance(exc, McpClientError) else "MCP_UNAVAILABLE"
+    return {"code": 400 if code in {"MCP_INVALID_INPUT", "MCP_DISCOVERY_INVALID", "MCP_URL_REJECTED"} else 500,
+            "message": code, "data": None}
 
 
 @app.get("/health")
@@ -52,11 +57,7 @@ async def ping_server(
         }
     except Exception as e:
         logger.error("mcp.pong failed")
-        return {
-            "code": 500,
-            "message": "MCP_UNAVAILABLE",
-            "data": None,
-        }
+        return _failure(e)
 
 
 @app.post("/v1/tool/list")
@@ -79,11 +80,7 @@ async def list_tools(
         }
     except Exception as e:
         logger.error("mcp.tool_list failed")
-        return {
-            "code": 500,
-            "message": "MCP_UNAVAILABLE",
-            "data": None,
-        }
+        return _failure(e)
 
 
 @app.post("/v1/tool/call")
@@ -109,11 +106,7 @@ async def call_tool(
         }
     except Exception as e:
         logger.error("mcp.tool_call failed")
-        return {
-            "code": 500,
-            "message": "MCP_UNAVAILABLE",
-            "data": None,
-        }
+        return _failure(e)
 
 
 if __name__ == "__main__":

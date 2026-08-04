@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"name":"tool_runtime_name","result":"PASS","detail":"runtime naming tests selected"}'
+source "$(dirname "$0")/_common.sh"
+if run_maven_tests "McpRuntimeNameCollisionTest"; then json_result tool_runtime_name PASS; else json_result tool_runtime_name FAIL; exit 1; fi

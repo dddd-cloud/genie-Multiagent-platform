@@ -17,12 +17,14 @@ import org.springframework.stereotype.Service;
 public class CredentialEnvelopeService {
     private final ObjectMapper objectMapper;
     private final String configuredKey;
+    private final byte[] validatedKey;
     private final SecureRandom random = new SecureRandom();
 
     public CredentialEnvelopeService(ObjectMapper objectMapper,
                                      @Value("${GENIE_MCP_CREDENTIAL_KEY:}") String configuredKey) {
         this.objectMapper = objectMapper;
         this.configuredKey = configuredKey;
+        this.validatedKey = decodeKey(configuredKey);
     }
 
     public String encrypt(String plaintext, String tenantId, String ownerId, String serverId, AuthType authType) {
@@ -58,8 +60,17 @@ public class CredentialEnvelopeService {
     }
 
     private byte[] key() {
-        try { byte[] key = Base64.getDecoder().decode(configuredKey); if (key.length != 32) throw new IllegalArgumentException(); return key; }
-        catch (RuntimeException ex) { throw invalid(); }
+        return validatedKey.clone();
+    }
+    private byte[] decodeKey(String raw) {
+        try {
+            if (raw == null || raw.isBlank()) throw new IllegalArgumentException();
+            byte[] key = Base64.getDecoder().decode(raw.trim());
+            if (key.length != 32) throw new IllegalArgumentException();
+            return key;
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("GENIE_MCP_CREDENTIAL_KEY must be a valid Base64-encoded 32-byte key");
+        }
     }
     private byte[] aad(String tenantId, String ownerId, String serverId, AuthType authType) {
         return (tenantId + "|" + ownerId + "|" + serverId + "|" + authType.name()).getBytes(StandardCharsets.UTF_8);
