@@ -23,12 +23,12 @@ class AgentVersionConflictTest extends Phase2AMySqlTestSupport {
 
     @Test
     void staleVersionReturnsVersionConflictAndDoesNotCallToolBinding() {
-        AgentResponse created = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null, List.of(), List.of()));
-        agentService.updateAgent(userA(), created.id(), new AgentUpdateRequest(0L, "Agent v2", "desc", null, null, "prompt", null, List.of(), List.of()));
+        AgentResponse created = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
+        agentService.updateAgent(userA(), created.id(), new AgentUpdateRequest(0L, "Agent v2", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
         fakeToolBindingPort.reset();
 
         AgentConfigurationException error = assertThrows(AgentConfigurationException.class,
-            () -> agentService.updateAgent(userA(), created.id(), new AgentUpdateRequest(0L, "Agent v3", "desc", null, null, "prompt", null, List.of(), List.of())));
+            () -> agentService.updateAgent(userA(), created.id(), new AgentUpdateRequest(0L, "Agent v3", "desc", "RAW", null, "prompt", null, List.of(), List.of())));
 
         assertEquals(MvpErrorCode.VERSION_CONFLICT, error.code());
         assertTrue(fakeToolBindingPort.getCalls().isEmpty());

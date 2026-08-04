@@ -22,7 +22,7 @@ class AgentOwnershipIsolationTest extends Phase2AMySqlTestSupport {
 
     @Test
     void crossOwnerAndTenantRequestsReturnNotFoundAndDoNotCallToolBinding() {
-        AgentResponse created = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null, List.of(), List.of()));
+        AgentResponse created = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
         fakeToolBindingPort.reset();
 
         AgentConfigurationException ownerError = assertThrows(AgentConfigurationException.class,

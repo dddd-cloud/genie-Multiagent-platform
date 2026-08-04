@@ -26,7 +26,7 @@ class AgentDefinitionServiceTest extends Phase2AMySqlTestSupport {
     void createsListsGetsAndUpdatesAgentWithoutChangingStatus() {
         AgentResponse created = agentService.createAgent(userA(), agentRequest("Research", List.of(CapabilityKeys.BUILTIN_FILE, CapabilityKeys.BUILTIN_FILE)));
         assertEquals("DRAFT", created.status());
-        assertEquals("STRUCTURED", created.promptMode());
+        assertEquals("RAW", created.promptMode());
         assertEquals(List.of(CapabilityKeys.BUILTIN_FILE), created.capabilityKeys());
 
         PageResponse<AgentResponse> page = agentService.listAgents(userA(), 1, 1);
@@ -44,6 +44,6 @@ class AgentDefinitionServiceTest extends Phase2AMySqlTestSupport {
     }
 
     private AgentCreateRequest agentRequest(String name, List<String> capabilityKeys) {
-        return new AgentCreateRequest(name, "description", null, null, "system prompt", null, List.of(), capabilityKeys);
+        return new AgentCreateRequest(name, "description", "RAW", null, "system prompt", null, List.of(), capabilityKeys);
     }
 }

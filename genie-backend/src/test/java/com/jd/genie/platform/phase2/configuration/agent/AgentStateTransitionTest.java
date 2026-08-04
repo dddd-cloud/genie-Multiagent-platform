@@ -21,7 +21,7 @@ class AgentStateTransitionTest extends Phase2AMySqlTestSupport {
 
     @Test
     void supportsFrozenAgentStateTransitions() {
-        AgentResponse draft = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null, List.of(), List.of()));
+        AgentResponse draft = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
         AgentResponse online = agentService.onlineAgent(userA(), draft.id(), draft.version());
         assertEquals("ONLINE", online.status());
         assertEquals(1L, online.version());

@@ -37,11 +37,11 @@ class ToolBindingRollbackTest extends Phase2AMySqlTestSupport {
 
     @Test
     void agentUpdateRollsBackWhenToolBindingFails() {
-        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null, List.of(), List.of()));
+        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
         fakeToolBindingPort.setWriteException(new IllegalStateException("tool write failed"));
 
         assertThrows(IllegalStateException.class, () -> agentService.updateAgent(userA(), agent.id(),
-            new AgentUpdateRequest(agent.version(), "Changed", "desc", null, null, "prompt", null, List.of(), List.of())));
+            new AgentUpdateRequest(agent.version(), "Changed", "desc", "RAW", null, "prompt", null, List.of(), List.of())));
 
         assertEquals("Agent", agentMapper.selectOwnedById(userA().tenantId(), userA().userId(), agent.id()).getName());
         assertEquals(0L, agentMapper.selectOwnedVersion(userA().tenantId(), userA().userId(), agent.id()));
@@ -62,11 +62,11 @@ class ToolBindingRollbackTest extends Phase2AMySqlTestSupport {
     @Test
     void bindingReplaceRollsBackWhenToolBindingFails() {
         SkillResponse skill = skillService.createSkill(userA(), new SkillCreateRequest("Skill", "desc", "instruction", null, List.of()));
-        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null, List.of(), List.of()));
+        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
         fakeToolBindingPort.setWriteException(new IllegalStateException("tool write failed"));
 
         assertThrows(IllegalStateException.class, () -> agentService.updateAgent(userA(), agent.id(),
-            new AgentUpdateRequest(agent.version(), "Agent", "desc", null, null, "prompt", null,
+            new AgentUpdateRequest(agent.version(), "Agent", "desc", "RAW", null, "prompt", null,
                 List.of(new AgentSkillBindingRequest(skill.id(), 1)), List.of())));
 
         assertEquals(List.of(), bindingMapper.selectOwnedBindingsByAgent(userA().tenantId(), userA().userId(), agent.id()));
@@ -76,7 +76,7 @@ class ToolBindingRollbackTest extends Phase2AMySqlTestSupport {
     @Test
     void removeBindingsFailuresRollBackDeletes() {
         SkillResponse skill = skillService.createSkill(userA(), new SkillCreateRequest("Skill", "desc", "instruction", null, List.of()));
-        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null,
+        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null,
             List.of(new AgentSkillBindingRequest(skill.id(), 1)), List.of()));
         AgentResponse offline = agentService.offlineAgent(userA(), agent.id(), agent.version());
         fakeToolBindingPort.setWriteException(new IllegalStateException("tool write failed"));

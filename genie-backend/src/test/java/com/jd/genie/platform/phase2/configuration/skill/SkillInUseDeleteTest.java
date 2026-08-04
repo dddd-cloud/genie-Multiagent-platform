@@ -27,7 +27,7 @@ class SkillInUseDeleteTest extends Phase2AMySqlTestSupport {
     @Test
     void deleteSkillFailsWhenReferencedByUndeletedAgent() {
         SkillResponse skill = skillService.createSkill(userA(), new SkillCreateRequest("Skill", "desc", "instruction", null, List.of()));
-        agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null,
+        agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null,
             List.of(new AgentSkillBindingRequest(skill.id(), 1)), List.of()));
 
         SkillConfigurationException error = assertThrows(SkillConfigurationException.class,

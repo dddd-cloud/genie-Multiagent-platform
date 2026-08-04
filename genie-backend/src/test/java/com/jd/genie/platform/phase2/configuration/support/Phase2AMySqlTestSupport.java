@@ -2,7 +2,12 @@ package com.jd.genie.platform.phase2.configuration.support;
 
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.UserRole;
+import com.jd.genie.agent.llm.LLMSettings;
+import com.jd.genie.config.GenieConfig;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
+import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewService;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import com.jd.genie.platform.phase2contract.support.FakeToolBindingPort;
@@ -23,6 +28,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
+import java.util.Map;
 
 @Testcontainers
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
@@ -75,7 +81,13 @@ public abstract class Phase2AMySqlTestSupport {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
-    @Import({AgentDefinitionService.class, SkillDefinitionService.class})
+    @Import({
+        AgentDefinitionService.class,
+        SkillDefinitionService.class,
+        AgentPromptCompiler.class,
+        ModelCatalogService.class,
+        PromptPreviewService.class
+    })
     @MapperScan({
         "com.jd.genie.platform.phase2.configuration.agent.mapper",
         "com.jd.genie.platform.phase2.configuration.skill.mapper"
@@ -84,6 +96,24 @@ public abstract class Phase2AMySqlTestSupport {
         @Bean
         ToolBindingPort toolBindingPort() {
             return new FakeToolBindingPort();
+        }
+
+        @Bean
+        GenieConfig genieConfig() {
+            return new GenieConfig() {
+                @Override
+                public Map<String, LLMSettings> getLlmSettingsMap() {
+                    return Map.of(
+                        "qwen-plus", LLMSettings.builder().model("qwen-plus").apiKey("SECRET_MARKER").baseUrl("https://secret.example").interfaceUrl("/private").build(),
+                        "qwen-max", LLMSettings.builder().model("qwen-max").build()
+                    );
+                }
+
+                @Override
+                public String getReactModelName() {
+                    return "qwen-plus";
+                }
+            };
         }
     }
 }

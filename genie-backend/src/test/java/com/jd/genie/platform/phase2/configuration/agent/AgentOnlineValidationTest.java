@@ -31,7 +31,7 @@ class AgentOnlineValidationTest extends Phase2AMySqlTestSupport {
     void onlineRejectsDisabledSkillAndInvalidResolvedCapabilities() {
         SkillResponse skill = skillService.createSkill(userA(), new SkillCreateRequest("Skill", "desc", "instruction", null, List.of()));
         skillService.disableSkill(userA(), skill.id(), skill.version());
-        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null,
+        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null,
             List.of(new AgentSkillBindingRequest(skill.id(), 1)), List.of()));
 
         AgentConfigurationException disabled = assertThrows(AgentConfigurationException.class,

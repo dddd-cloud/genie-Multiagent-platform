@@ -33,17 +33,17 @@ class SkillOrderingTransactionTest extends Phase2AMySqlTestSupport {
     void validatesConsecutiveOrderingAndReplacesBindingsAtomically() {
         SkillResponse first = skillService.createSkill(userA(), new SkillCreateRequest("First", "desc", "instruction", null, List.of()));
         SkillResponse second = skillService.createSkill(userA(), new SkillCreateRequest("Second", "desc", "instruction", null, List.of()));
-        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", null, null, "prompt", null,
+        AgentResponse agent = agentService.createAgent(userA(), new AgentCreateRequest("Agent", "desc", "RAW", null, "prompt", null,
             List.of(new AgentSkillBindingRequest(first.id(), 1)), List.of()));
 
         AgentConfigurationException invalid = assertThrows(AgentConfigurationException.class,
-            () -> agentService.updateAgent(userA(), agent.id(), new AgentUpdateRequest(agent.version(), "Agent", "desc", null, null, "prompt", null,
+            () -> agentService.updateAgent(userA(), agent.id(), new AgentUpdateRequest(agent.version(), "Agent", "desc", "RAW", null, "prompt", null,
                 List.of(new AgentSkillBindingRequest(first.id(), 1), new AgentSkillBindingRequest(second.id(), 3)), List.of())));
         assertEquals(MvpErrorCode.VALIDATION_ERROR, invalid.code());
         assertEquals(List.of(first.id()), bindingMapper.selectOwnedBindingsByAgent(userA().tenantId(), userA().userId(), agent.id())
             .stream().map(row -> row.getSkillId()).toList());
 
-        AgentResponse updated = agentService.updateAgent(userA(), agent.id(), new AgentUpdateRequest(agent.version(), "Agent", "desc", null, null, "prompt", null,
+        AgentResponse updated = agentService.updateAgent(userA(), agent.id(), new AgentUpdateRequest(agent.version(), "Agent", "desc", "RAW", null, "prompt", null,
             List.of(new AgentSkillBindingRequest(second.id(), 1), new AgentSkillBindingRequest(first.id(), 2)), List.of()));
         assertEquals(1L, updated.version());
         assertEquals(List.of(second.id(), first.id()), bindingMapper.selectOwnedBindingsByAgent(userA().tenantId(), userA().userId(), agent.id())

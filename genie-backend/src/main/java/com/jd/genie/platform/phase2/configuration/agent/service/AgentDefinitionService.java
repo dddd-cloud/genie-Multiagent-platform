@@ -14,6 +14,13 @@ import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentDefinitionMa
 import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentSkillBindingMapper;
 import com.jd.genie.platform.phase2.configuration.agent.model.AgentStatus;
 import com.jd.genie.platform.phase2.configuration.agent.model.PromptMode;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
+import com.jd.genie.platform.phase2.configuration.model.ModelResolutionResult;
+import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationRequest;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationResult;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptSkillFragment;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptValidationException;
 import com.jd.genie.platform.phase2.configuration.skill.entity.SkillDefinitionEntity;
 import com.jd.genie.platform.phase2.configuration.skill.mapper.SkillDefinitionMapper;
 import com.jd.genie.platform.phase2.configuration.skill.model.SkillStatus;
@@ -49,6 +56,8 @@ public class AgentDefinitionService {
     private final AgentSkillBindingMapper bindingMapper;
     private final SkillDefinitionMapper skillMapper;
     private final ObjectProvider<ToolBindingPort> toolBindingPortProvider;
+    private final AgentPromptCompiler promptCompiler;
+    private final ModelCatalogService modelCatalogService;
     private final Clock clock = Clock.systemUTC();
 
     @Transactional
@@ -59,6 +68,8 @@ public class AgentDefinitionService {
         List<AgentSkillBindingRequest> skills = normalizeSkillBindings(input.skills());
         List<String> capabilityKeys = normalizeCapabilityKeys(input.capabilityKeys());
         Map<String, SkillDefinitionEntity> ownedSkills = loadOwnedSkills(user, skills.stream().map(AgentSkillBindingRequest::skillId).toList());
+        PromptCompilationResult compiled = compilePrompt(input, buildPromptFragments(skills, ownedSkills, false));
+        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(input.modelName());
 
         Instant now = Instant.now(clock);
         AgentDefinitionEntity entity = new AgentDefinitionEntity();
@@ -67,10 +78,10 @@ public class AgentDefinitionService {
         entity.setOwnerId(user.userId());
         entity.setName(input.name());
         entity.setDescription(input.description());
-        entity.setPromptMode(input.promptMode());
-        entity.setPromptConfig(input.promptConfig());
-        entity.setSystemPrompt(input.systemPrompt());
-        entity.setModelName(input.modelName());
+        entity.setPromptMode(compiled.promptMode());
+        entity.setPromptConfig(compiled.canonicalPromptConfig());
+        entity.setSystemPrompt(compiled.compiledSystemPromptTemplate());
+        entity.setModelName(model.storedModelName());
         entity.setStatus(AgentStatus.DRAFT.name());
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -112,15 +123,17 @@ public class AgentDefinitionService {
         List<AgentSkillBindingRequest> skills = normalizeSkillBindings(input.skills());
         List<String> capabilityKeys = normalizeCapabilityKeys(input.capabilityKeys());
         Map<String, SkillDefinitionEntity> ownedSkills = loadOwnedSkills(user, skills.stream().map(AgentSkillBindingRequest::skillId).toList());
+        PromptCompilationResult compiled = compilePrompt(input, buildPromptFragments(skills, ownedSkills, false));
+        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(input.modelName());
 
         AgentDefinitionEntity update = new AgentDefinitionEntity();
         update.setId(agentId);
         update.setName(input.name());
         update.setDescription(input.description());
-        update.setPromptMode(input.promptMode());
-        update.setPromptConfig(input.promptConfig());
-        update.setSystemPrompt(input.systemPrompt());
-        update.setModelName(input.modelName());
+        update.setPromptMode(compiled.promptMode());
+        update.setPromptConfig(compiled.canonicalPromptConfig());
+        update.setSystemPrompt(compiled.compiledSystemPromptTemplate());
+        update.setModelName(model.storedModelName());
 
         Instant now = Instant.now(clock);
         int updated = agentMapper.updateOwnedWithVersion(user.tenantId(), user.userId(), update, version, now);
@@ -138,7 +151,12 @@ public class AgentDefinitionService {
         if (AgentStatus.ONLINE.name().equals(entity.getStatus())) {
             throw error(MvpErrorCode.AGENT_INVALID_STATE);
         }
-        validateOnlineCandidate(user, entity);
+        List<AgentSkillBindingEntity> bindings = validateOnlineCandidate(user, entity);
+        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(entity.getModelName());
+        if (model.resolvedModelName() == null || model.resolvedModelName().isBlank()) {
+            throw error(MvpErrorCode.MODEL_NOT_AVAILABLE);
+        }
+        recompileOnlinePrompt(user, entity, bindings);
         ToolBindingView view = toolBindingPort().resolveBindings(user, agentId, enabledSkillIds(user, agentId));
         if (!view.invalidCapabilities().isEmpty()) {
             throw error(MvpErrorCode.TOOL_BINDING_INVALID);
@@ -176,7 +194,7 @@ public class AgentDefinitionService {
         toolBindingPort().removeAgentBindings(user, agentId);
     }
 
-    private void validateOnlineCandidate(CurrentUser user, AgentDefinitionEntity entity) {
+    private List<AgentSkillBindingEntity> validateOnlineCandidate(CurrentUser user, AgentDefinitionEntity entity) {
         validateText(entity.getName(), MAX_NAME_CODE_POINTS);
         validateText(entity.getDescription(), MAX_DESCRIPTION_CODE_POINTS);
         validateText(entity.getSystemPrompt(), MAX_PROMPT_CODE_POINTS);
@@ -194,6 +212,19 @@ public class AgentDefinitionService {
                 throw error(MvpErrorCode.AGENT_INVALID_STATE);
             }
         }
+        return bindings;
+    }
+
+    private void recompileOnlinePrompt(CurrentUser user, AgentDefinitionEntity entity, List<AgentSkillBindingEntity> bindings) {
+        Map<String, SkillDefinitionEntity> skills = loadOwnedSkills(user, bindings.stream().map(AgentSkillBindingEntity::getSkillId).toList());
+        List<PromptSkillFragment> fragments = bindings.stream().map(binding -> {
+            SkillDefinitionEntity skill = skills.get(binding.getSkillId());
+            return new PromptSkillFragment(skill.getId(), skill.getVersion(), skill.getName(), binding.getSortOrder(),
+                skill.getInstruction(), skill.getOutputRequirement());
+        }).toList();
+        String rawPrompt = PromptMode.RAW.name().equals(entity.getPromptMode()) ? entity.getSystemPrompt() : null;
+        compilePrompt(new NormalizedAgentInput(entity.getName(), entity.getDescription(), entity.getPromptMode(),
+            entity.getPromptConfig(), rawPrompt, entity.getModelName(), List.of(), List.of()), fragments);
     }
 
     private List<String> enabledSkillIds(CurrentUser user, String agentId) {
@@ -229,6 +260,34 @@ public class AgentDefinitionService {
         bindingMapper.batchInsert(rows);
     }
 
+    private List<PromptSkillFragment> buildPromptFragments(List<AgentSkillBindingRequest> bindings,
+                                                           Map<String, SkillDefinitionEntity> ownedSkills,
+                                                           boolean requireEnabled) {
+        return bindings.stream().map(binding -> {
+            SkillDefinitionEntity skill = ownedSkills.get(binding.skillId());
+            if (skill == null) {
+                throw error(MvpErrorCode.RESOURCE_NOT_FOUND);
+            }
+            if (!SkillStatus.ENABLED.name().equals(skill.getStatus())) {
+                if (requireEnabled) {
+                    throw error(MvpErrorCode.AGENT_INVALID_STATE);
+                }
+                return null;
+            }
+            return new PromptSkillFragment(skill.getId(), skill.getVersion(), skill.getName(), binding.sortOrder(),
+                skill.getInstruction(), skill.getOutputRequirement());
+        }).filter(fragment -> fragment != null).toList();
+    }
+
+    private PromptCompilationResult compilePrompt(NormalizedAgentInput input, List<PromptSkillFragment> fragments) {
+        try {
+            return promptCompiler.compile(new PromptCompilationRequest(input.promptMode(), input.promptConfig(),
+                input.systemPrompt(), fragments));
+        } catch (PromptValidationException ex) {
+            throw error(ex.code());
+        }
+    }
+
     private Map<String, SkillDefinitionEntity> loadOwnedSkills(CurrentUser user, List<String> skillIds) {
         if (skillIds.isEmpty()) {
             return Map.of();
@@ -256,7 +315,7 @@ public class AgentDefinitionService {
             normalizeRequiredText(request.description(), MAX_DESCRIPTION_CODE_POINTS),
             normalizePromptMode(request.promptMode()),
             normalizeOptionalText(request.promptConfig(), MAX_PROMPT_CODE_POINTS),
-            normalizeRequiredText(request.systemPrompt(), MAX_PROMPT_CODE_POINTS),
+            normalizeOptionalText(request.systemPrompt(), MAX_PROMPT_CODE_POINTS),
             normalizeOptionalText(request.modelName(), 128),
             request.skills(),
             request.capabilityKeys()
@@ -272,7 +331,7 @@ public class AgentDefinitionService {
             normalizeRequiredText(request.description(), MAX_DESCRIPTION_CODE_POINTS),
             normalizePromptMode(request.promptMode()),
             normalizeOptionalText(request.promptConfig(), MAX_PROMPT_CODE_POINTS),
-            normalizeRequiredText(request.systemPrompt(), MAX_PROMPT_CODE_POINTS),
+            normalizeOptionalText(request.systemPrompt(), MAX_PROMPT_CODE_POINTS),
             normalizeOptionalText(request.modelName(), 128),
             request.skills(),
             request.capabilityKeys()
