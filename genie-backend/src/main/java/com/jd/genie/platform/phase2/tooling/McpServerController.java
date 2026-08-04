@@ -24,7 +24,7 @@ public class McpServerController {
     @PutMapping("/mcp-servers/{id}") public ApiResponse<McpServerResponse> update(@PathVariable String id,@RequestBody UpdateMcpServerRequest request) { return ok(service.update(id,request)); }
     @DeleteMapping("/mcp-servers/{id}") public ApiResponse<Void> delete(@PathVariable String id,@RequestParam long version) { service.delete(id,version); return new ApiResponse<>("OK","success",null); }
     @PostMapping("/mcp-servers/{id}/test") public ApiResponse<McpServerResponse> test(@PathVariable String id) { return ok(service.test(id)); }
-    @PostMapping("/mcp-servers/{id}/refresh-tools") public ApiResponse<List<McpToolResponse>> refresh(@PathVariable String id) { return ok(service.tools(id)); }
+    @PostMapping("/mcp-servers/{id}/refresh-tools") public ApiResponse<List<McpToolResponse>> refresh(@PathVariable String id) { return ok(service.refreshTools(id)); }
     @PostMapping("/mcp-servers/{id}/enable") public ApiResponse<McpServerResponse> enable(@PathVariable String id,@RequestParam long version) { return ok(service.setStatus(id,version,McpServerStatus.ENABLED)); }
     @PostMapping("/mcp-servers/{id}/disable") public ApiResponse<McpServerResponse> disable(@PathVariable String id,@RequestParam long version) { return ok(service.setStatus(id,version,McpServerStatus.DISABLED)); }
     @GetMapping("/mcp-servers/{id}/tools") public ApiResponse<List<McpToolResponse>> tools(@PathVariable String id) { return ok(service.tools(id)); }

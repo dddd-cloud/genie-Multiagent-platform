@@ -1,8 +1,9 @@
 from datetime import datetime
-from fastapi import FastAPI, Request, Body
+from fastapi import FastAPI, Request, Body, Depends
 
 from app.client import SseClient
 from app.header import HeaderEntity
+from app.security import require_internal_mcp_token
 from app.logger import default_logger as logger
 
 app = FastAPI(
@@ -35,11 +36,12 @@ async def health_check():
 async def ping_server(
         request: Request,
         server_url: str = Body(..., embed=True, description="mcp server url", alias="server_url"),
+        _: None = Depends(require_internal_mcp_token),
 ):
     """
     - 根据请求 server_url 测试 server 的连通性
     """
-    logger.info(f"方法:/v1/serv/pong, {server_url}, request headers: {request.headers}")
+    logger.info("mcp.pong request")
     mcp_client = SseClient(server_url=server_url, entity=HeaderEntity(request.headers))
     try:
         await mcp_client.ping_server()
@@ -49,10 +51,10 @@ async def ping_server(
             "data": {},
         }
     except Exception as e:
-        logger.error(f"Error ping server: {str(e)}")
+        logger.error("mcp.pong failed")
         return {
             "code": 500,
-            "message": f"Error: {str(e)}",
+            "message": "MCP_UNAVAILABLE",
             "data": None,
         }
 
@@ -61,11 +63,12 @@ async def ping_server(
 async def list_tools(
         request: Request,
         server_url: str = Body(..., embed=True, description="mcp server url", alias="server_url"),
+        _: None = Depends(require_internal_mcp_token),
 ):
     """
     - 根据请求 server_url 查询 tools 列表
     """
-    logger.info(f"方法:/v1/tool/list, {server_url}, request headers: {request.headers}")
+    logger.info("mcp.tool_list request")
     mcp_client = SseClient(server_url=server_url, entity=HeaderEntity(request.headers))
     try:
         tools = await mcp_client.list_tools()
@@ -75,10 +78,10 @@ async def list_tools(
             "data": tools,
         }
     except Exception as e:
-        logger.error(f"Error list tool: {str(e)}")
+        logger.error("mcp.tool_list failed")
         return {
             "code": 500,
-            "message": f"Error: {str(e)}",
+            "message": "MCP_UNAVAILABLE",
             "data": None,
         }
 
@@ -89,15 +92,13 @@ async def call_tool(
         server_url: str = Body(..., description="mcp server url", alias="server_url"),
         name: str = Body(..., description="tool name to call", alias="name"),
         arguments: dict = Body(..., description="tool parameters", alias="arguments"),
+        _: None = Depends(require_internal_mcp_token),
 ):
     """
     - 调用指定工具
     """
-    logger.info(f"方法: /v1/tool/call, {name} with arguments: {arguments}")
-    logger.info(f"call: {server_url}, request headers: {request.headers}")
+    logger.info("mcp.tool_call request")
     entity = HeaderEntity(request.headers)
-    if arguments is not None and arguments.get("Cookie") is not None:
-        entity.append_cookie(arguments.get("Cookie"))
     mcp_client = SseClient(server_url=server_url, entity=entity)
     try:
         result = await mcp_client.call_tool(name, arguments)
@@ -107,10 +108,10 @@ async def call_tool(
             "data": result,
         }
     except Exception as e:
-        logger.error(f"Error calling tool {name}: {str(e)}")
+        logger.error("mcp.tool_call failed")
         return {
             "code": 500,
-            "message": f"Error calling tool {name}: {str(e)}",
+            "message": "MCP_UNAVAILABLE",
             "data": None,
         }
 
