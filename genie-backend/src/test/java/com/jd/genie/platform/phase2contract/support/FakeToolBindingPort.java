@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -36,14 +38,18 @@ public class FakeToolBindingPort implements ToolBindingPort {
 
     private final List<CallRecord> calls = new CopyOnWriteArrayList<>();
     private final Set<String> failingCapabilityKeys = ConcurrentHashMap.newKeySet();
-    private volatile ToolBindingView resolveResult = new ToolBindingView(List.of(), Map.of(), List.of());
+    private final Map<String, List<String>> agentBindings = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> skillBindings = new ConcurrentHashMap<>();
+    private volatile ToolBindingView resolveOverride;
     private volatile RuntimeException resolveException;
     private volatile RuntimeException writeException;
 
     public void setResolveResult(ToolBindingView result) {
-        this.resolveResult = result == null
-            ? new ToolBindingView(List.of(), Map.of(), List.of())
-            : result;
+        this.resolveOverride = result;
+    }
+
+    public void clearResolveResult() {
+        this.resolveOverride = null;
     }
 
     public void setResolveException(RuntimeException exception) {
@@ -55,7 +61,20 @@ public class FakeToolBindingPort implements ToolBindingPort {
     }
 
     public void failCapabilityKey(String capabilityKey) {
+        CapabilityKeys.requireValid(capabilityKey);
         failingCapabilityKeys.add(capabilityKey);
+    }
+
+    public List<String> getAgentBindings(CurrentUser user, String agentId) {
+        requireUser(user);
+        requireResourceId(agentId);
+        return agentBindings.getOrDefault(scopedKey(user, agentId), List.of());
+    }
+
+    public List<String> getSkillBindings(CurrentUser user, String skillId) {
+        requireUser(user);
+        requireResourceId(skillId);
+        return skillBindings.getOrDefault(scopedKey(user, skillId), List.of());
     }
 
     public List<CallRecord> getCalls() {
@@ -65,7 +84,9 @@ public class FakeToolBindingPort implements ToolBindingPort {
     public void reset() {
         calls.clear();
         failingCapabilityKeys.clear();
-        resolveResult = new ToolBindingView(List.of(), Map.of(), List.of());
+        agentBindings.clear();
+        skillBindings.clear();
+        resolveOverride = null;
         resolveException = null;
         writeException = null;
     }
@@ -94,7 +115,23 @@ public class FakeToolBindingPort implements ToolBindingPort {
                 "enabledSkillIds must not be null"
             );
         }
-        return resolveResult;
+        ToolBindingView override = resolveOverride;
+        if (override != null) {
+            return override;
+        }
+
+        List<String> invalid = new ArrayList<>();
+        List<String> direct = partitionValid(
+            agentBindings.getOrDefault(scopedKey(user, agentId), List.of()),
+            invalid
+        );
+        Map<String, List<String>> skills = new LinkedHashMap<>();
+        for (String skillId : enabledSkillIds) {
+            requireResourceId(skillId);
+            List<String> configured = skillBindings.getOrDefault(scopedKey(user, skillId), List.of());
+            skills.put(skillId, partitionValid(configured, invalid));
+        }
+        return new ToolBindingView(direct, skills, List.copyOf(new LinkedHashSet<>(invalid)));
     }
 
     @Override
@@ -149,10 +186,6 @@ public class FakeToolBindingPort implements ToolBindingPort {
                 "capabilityKeys must not be null"
             );
         }
-        // Empty list means clear all bindings — success with no further action.
-        if (capabilityKeys.isEmpty()) {
-            return;
-        }
         CapabilityKeys.requireAllValid(capabilityKeys);
         for (String key : capabilityKeys) {
             if (failingCapabilityKeys.contains(key)) {
@@ -161,6 +194,15 @@ public class FakeToolBindingPort implements ToolBindingPort {
                     "capabilityKeys contains an invalid entry"
                 );
             }
+        }
+        Map<String, List<String>> target = type == CallType.REPLACE_AGENT_BINDINGS
+            ? agentBindings
+            : skillBindings;
+        String key = scopedKey(user, resourceId);
+        if (capabilityKeys.isEmpty()) {
+            target.remove(key);
+        } else {
+            target.put(key, List.copyOf(capabilityKeys));
         }
     }
 
@@ -177,7 +219,10 @@ public class FakeToolBindingPort implements ToolBindingPort {
         }
         requireUser(user);
         requireResourceId(resourceId);
-        // Removing a missing binding remains idempotent success.
+        Map<String, List<String>> target = type == CallType.REMOVE_AGENT_BINDINGS
+            ? agentBindings
+            : skillBindings;
+        target.remove(scopedKey(user, resourceId));
     }
 
     private static void requireUser(CurrentUser user) {
@@ -196,5 +241,21 @@ public class FakeToolBindingPort implements ToolBindingPort {
                 "resource id must not be blank"
             );
         }
+    }
+
+    private List<String> partitionValid(List<String> configured, List<String> invalid) {
+        List<String> valid = new ArrayList<>();
+        for (String capabilityKey : configured) {
+            if (failingCapabilityKeys.contains(capabilityKey)) {
+                invalid.add(capabilityKey);
+            } else {
+                valid.add(capabilityKey);
+            }
+        }
+        return List.copyOf(valid);
+    }
+
+    private static String scopedKey(CurrentUser user, String resourceId) {
+        return user.tenantId() + "\u0000" + user.userId() + "\u0000" + resourceId;
     }
 }

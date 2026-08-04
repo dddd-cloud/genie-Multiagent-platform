@@ -140,6 +140,7 @@ const PHASE2_REQUIRED_FIXTURES = [
   'skill-detail.json',
   'models.json',
   'mcp-server-detail.json',
+  'mcp-servers-list.json',
   'mcp-tools.json',
   'memory-patch.json',
   'memory-summary.json',
@@ -168,6 +169,7 @@ const PHASE2_MANAGEMENT_FIXTURES = [
   'skill-detail.json',
   'models.json',
   'mcp-server-detail.json',
+  'mcp-servers-list.json',
   'mcp-tools.json',
 ];
 
@@ -1342,6 +1344,15 @@ function validatePhase2SchemasAndFixtures(ajv) {
         pass(`${name}: management-api schema ok`);
       }
     }
+  }
+
+  const emptyManagementList = { code: 'OK', message: 'success', data: [] };
+  if (!managementValidate(emptyManagementList)) {
+    fail(
+      `management-api schema must accept empty list responses: ${JSON.stringify(managementValidate.errors)}`
+    );
+  } else {
+    pass('management-api schema accepts empty list responses');
   }
 
   for (const filePath of ndjsonFixtures) {

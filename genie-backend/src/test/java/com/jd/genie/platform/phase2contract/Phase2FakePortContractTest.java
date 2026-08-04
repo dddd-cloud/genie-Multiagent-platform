@@ -97,6 +97,34 @@ class Phase2FakePortContractTest {
     }
 
     @Test
+    void catalogCanModelOfflineHiddenAndVersionChangeScenarios() {
+        FakeAgentRuntimeCatalogPort fake = new FakeAgentRuntimeCatalogPort();
+        fake.registerSummary(new AgentCapabilitySummary("a1", 1L, "A", "d"));
+        fake.registerProfile(new AgentRuntimeProfile(
+            "a1", 1L, "A", "d", "p", "gpt-4o-mini", List.of(), List.of()));
+
+        fake.markOffline("a1");
+        assertTrue(fake.listOnlineCandidates(user, List.of()).isEmpty());
+        Phase2ContractException offline = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.loadOnlineProfile(user, "a1")
+        );
+        assertEquals(MvpErrorCode.AGENT_OFFLINE, offline.errorCode());
+
+        fake.clearLoadFailure("a1");
+        fake.registerProfile(new AgentRuntimeProfile(
+            "a1", 2L, "A", "d", "p", "gpt-4o-mini", List.of(), List.of()));
+        assertEquals(2L, fake.loadOnlineProfile(user, "a1").agentVersion());
+
+        fake.hideFromUser("a1");
+        Phase2ContractException hidden = assertThrows(
+            Phase2ContractException.class,
+            () -> fake.loadOnlineProfile(user, "a1")
+        );
+        assertEquals(MvpErrorCode.RESOURCE_NOT_FOUND, hidden.errorCode());
+    }
+
+    @Test
     void toolBindingFakeSupportsClearAndIdempotentRemove() {
         FakeToolBindingPort fake = new FakeToolBindingPort();
         fake.setResolveResult(new ToolBindingView(List.of("builtin:file"), Map.of(), List.of()));
@@ -104,12 +132,52 @@ class Phase2FakePortContractTest {
         fake.replaceAgentBindings(user, "a1", List.of());
         fake.removeAgentBindings(user, "a1");
         fake.removeAgentBindings(user, "a1");
-        fake.failCapabilityKey("builtin:unknown");
+        fake.failCapabilityKey("builtin:file");
         assertThrows(Phase2ContractException.class,
             () -> fake.replaceAgentBindings(user, "a1", List.of("builtin:unknown")));
         assertTrue(fake.getCalls().size() >= 4);
         fake.reset();
         assertTrue(fake.getCalls().isEmpty());
+    }
+
+    @Test
+    void toolBindingFakePersistsResolvesAndScopesBindings() {
+        FakeToolBindingPort fake = new FakeToolBindingPort();
+        CurrentUser otherUser = new CurrentUser("t1", "u2", "other", "Other", UserRole.USER);
+
+        fake.replaceAgentBindings(user, "a1", List.of("builtin:file", "builtin:report"));
+        fake.replaceSkillBindings(user, "s1", List.of("builtin:deep_search"));
+        fake.replaceAgentBindings(otherUser, "a1", List.of("builtin:data_analysis"));
+
+        ToolBindingView view = fake.resolveBindings(user, "a1", List.of("s1"));
+        assertEquals(List.of("builtin:file", "builtin:report"), view.directCapabilities());
+        assertEquals(List.of("builtin:deep_search"), view.skillCapabilities().get("s1"));
+        assertEquals(List.of("builtin:data_analysis"), fake.getAgentBindings(otherUser, "a1"));
+
+        fake.failCapabilityKey("builtin:file");
+        ToolBindingView invalidView = fake.resolveBindings(user, "a1", List.of("s1"));
+        assertEquals(List.of("builtin:report"), invalidView.directCapabilities());
+        assertEquals(List.of("builtin:file"), invalidView.invalidCapabilities());
+
+        fake.replaceAgentBindings(user, "a1", List.of());
+        assertTrue(fake.getAgentBindings(user, "a1").isEmpty());
+        assertEquals(List.of("builtin:data_analysis"), fake.getAgentBindings(otherUser, "a1"));
+    }
+
+    @Test
+    void toolBindingFakeWriteFailureIsAtomic() {
+        FakeToolBindingPort fake = new FakeToolBindingPort();
+        fake.replaceAgentBindings(user, "a1", List.of("builtin:file"));
+        fake.setWriteException(new Phase2ContractException(
+            MvpErrorCode.INTERNAL_ERROR,
+            "injected write failure"
+        ));
+
+        assertThrows(
+            Phase2ContractException.class,
+            () -> fake.replaceAgentBindings(user, "a1", List.of("builtin:report"))
+        );
+        assertEquals(List.of("builtin:file"), fake.getAgentBindings(user, "a1"));
     }
 
     @Test

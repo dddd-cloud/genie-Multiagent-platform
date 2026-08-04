@@ -12,7 +12,7 @@
         "code": { "type": "string" },
         "message": { "type": "string" },
         "data": {
-          "oneOf": [
+          "anyOf": [
             { "type": "null" },
             { "$ref": "#/$defs/agent" },
             { "type": "array", "items": { "$ref": "#/$defs/agent" } },
@@ -20,6 +20,7 @@
             { "type": "array", "items": { "$ref": "#/$defs/skill" } },
             { "type": "array", "items": { "$ref": "#/$defs/model" } },
             { "$ref": "#/$defs/mcpServer" },
+            { "type": "array", "items": { "$ref": "#/$defs/mcpServer" } },
             { "type": "array", "items": { "$ref": "#/$defs/mcpTool" } }
           ]
         }

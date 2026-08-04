@@ -34,6 +34,7 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
     private final List<CallRecord> calls = new CopyOnWriteArrayList<>();
     private final Map<String, AgentCapabilitySummary> summaries = new ConcurrentHashMap<>();
     private final Map<String, AgentRuntimeProfile> profiles = new ConcurrentHashMap<>();
+    private final Map<String, MvpErrorCode> loadFailures = new ConcurrentHashMap<>();
     private volatile RuntimeException listException;
     private volatile RuntimeException loadException;
 
@@ -44,6 +45,7 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
                 "summary must not be null"
             );
         }
+        requireAgentId(summary.agentId());
         summaries.put(summary.agentId(), summary);
     }
 
@@ -54,7 +56,40 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
                 "profile must not be null"
             );
         }
+        requireAgentId(profile.agentId());
         profiles.put(profile.agentId(), profile);
+    }
+
+    /**
+     * Configures the deterministic visibility/state result used by C tests.
+     * RESOURCE_NOT_FOUND models deleted/foreign resources without exposing which
+     * case occurred; AGENT_OFFLINE models a visible agent that is not runnable.
+     */
+    public void failLoad(String agentId, MvpErrorCode errorCode) {
+        requireAgentId(agentId);
+        if (errorCode != MvpErrorCode.RESOURCE_NOT_FOUND
+            && errorCode != MvpErrorCode.AGENT_OFFLINE) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "load failure must be RESOURCE_NOT_FOUND or AGENT_OFFLINE"
+            );
+        }
+        loadFailures.put(agentId, errorCode);
+    }
+
+    public void markOffline(String agentId) {
+        failLoad(agentId, MvpErrorCode.AGENT_OFFLINE);
+        summaries.remove(agentId);
+    }
+
+    public void hideFromUser(String agentId) {
+        failLoad(agentId, MvpErrorCode.RESOURCE_NOT_FOUND);
+        summaries.remove(agentId);
+    }
+
+    public void clearLoadFailure(String agentId) {
+        requireAgentId(agentId);
+        loadFailures.remove(agentId);
     }
 
     public void setListException(RuntimeException exception) {
@@ -73,6 +108,7 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
         calls.clear();
         summaries.clear();
         profiles.clear();
+        loadFailures.clear();
         listException = null;
         loadException = null;
     }
@@ -144,6 +180,15 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
                 "agentId must not be blank"
             );
         }
+        MvpErrorCode configuredFailure = loadFailures.get(agentId);
+        if (configuredFailure != null) {
+            throw new Phase2ContractException(
+                configuredFailure,
+                configuredFailure == MvpErrorCode.AGENT_OFFLINE
+                    ? "agent is offline"
+                    : "agent profile not found"
+            );
+        }
         AgentRuntimeProfile profile = profiles.get(agentId);
         if (profile == null) {
             throw new Phase2ContractException(
@@ -156,5 +201,14 @@ public class FakeAgentRuntimeCatalogPort implements AgentRuntimeCatalogPort {
 
     public Map<String, AgentCapabilitySummary> registeredSummaries() {
         return Collections.unmodifiableMap(new LinkedHashMap<>(summaries));
+    }
+
+    private static void requireAgentId(String agentId) {
+        if (agentId == null || agentId.isBlank()) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "agentId must not be blank"
+            );
+        }
     }
 }

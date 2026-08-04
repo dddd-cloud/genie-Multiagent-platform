@@ -1,0 +1,21 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": [
+    {
+      "id": "mcp-server-001",
+      "name": "Docs MCP",
+      "serverUrl": "https://mcp.example.com/sse",
+      "authType": "BEARER_TOKEN",
+      "authName": "docs-token",
+      "status": "ENABLED",
+      "credentialConfigured": true,
+      "lastCheckStatus": "SUCCESS",
+      "lastCheckCode": "OK",
+      "lastCheckedAt": "2026-08-02T12:00:00Z",
+      "version": 1,
+      "createdAt": "2026-08-01T00:00:00Z",
+      "updatedAt": "2026-08-02T12:00:00Z"
+    }
+  ]
+}

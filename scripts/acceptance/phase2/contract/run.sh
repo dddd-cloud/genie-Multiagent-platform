@@ -47,7 +47,7 @@ resolve_maven() {
 run_maven_tests() {
   local -a args=(
     -q
-    -Dtest=Phase2ContractShapeTest,Phase2ContractSerializationTest,Phase2CapabilityKeysTest,Phase2ErrorCodeContractTest,Phase2FakePortContractTest,Phase2SnapshotCompatibilityTest,Phase2FinalAnswerCompatibilityTest,Phase2SecurityIntegrationTest,ContractShapeTest,ContractSerializationTest,ContractFakeSupportTest,SecurityCsrfIntegrationTest,InternalAgentSecurityIntegrationTest
+    -Dtest=Phase2ContractShapeTest,Phase2ContractSerializationTest,Phase2CapabilityKeysTest,Phase2ErrorCodeContractTest,Phase2FakePortContractTest,Phase2ReusablePortContractTest,Phase2SnapshotCompatibilityTest,Phase2FinalAnswerCompatibilityTest,Phase2SecurityIntegrationTest,ContractShapeTest,ContractSerializationTest,ContractFakeSupportTest,SecurityCsrfIntegrationTest,InternalAgentSecurityIntegrationTest
     test
   )
   if [[ "${MVN_CMD[0]}" == "mvn" ]]; then
