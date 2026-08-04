@@ -4,6 +4,7 @@ import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.UserRole;
 import com.jd.genie.agent.llm.LLMSettings;
 import com.jd.genie.config.GenieConfig;
+import com.jd.genie.platform.phase2.configuration.agent.runtime.AgentRuntimeCatalogService;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
@@ -83,6 +84,7 @@ public abstract class Phase2AMySqlTestSupport {
     @EnableAutoConfiguration
     @Import({
         AgentDefinitionService.class,
+        AgentRuntimeCatalogService.class,
         SkillDefinitionService.class,
         AgentPromptCompiler.class,
         ModelCatalogService.class,

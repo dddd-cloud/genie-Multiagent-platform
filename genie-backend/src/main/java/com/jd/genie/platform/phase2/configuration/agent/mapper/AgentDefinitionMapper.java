@@ -40,6 +40,37 @@ public interface AgentDefinitionMapper extends BaseMapper<AgentDefinitionEntity>
                                                 @Param("offset") int offset);
 
     @Select("""
+        SELECT *
+        FROM agent_definition
+        WHERE tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+          AND status = 'ONLINE'
+        ORDER BY updated_at DESC, id DESC
+        """)
+    List<AgentDefinitionEntity> selectOwnedOnlineCandidates(@Param("tenantId") String tenantId,
+                                                            @Param("ownerId") String ownerId);
+
+    @Select("""
+        <script>
+        SELECT *
+        FROM agent_definition
+        WHERE tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+          AND status = 'ONLINE'
+          AND id IN
+          <foreach collection="agentIds" item="agentId" open="(" separator="," close=")">
+            #{agentId}
+          </foreach>
+        ORDER BY updated_at DESC, id DESC
+        </script>
+        """)
+    List<AgentDefinitionEntity> selectOwnedOnlineCandidatesByIds(@Param("tenantId") String tenantId,
+                                                                 @Param("ownerId") String ownerId,
+                                                                 @Param("agentIds") List<String> agentIds);
+
+    @Select("""
         SELECT COUNT(1)
         FROM agent_definition
         WHERE tenant_id = #{tenantId}
