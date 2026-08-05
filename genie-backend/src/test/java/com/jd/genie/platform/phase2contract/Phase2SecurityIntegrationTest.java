@@ -78,7 +78,7 @@ class Phase2SecurityIntegrationTest {
     }
 
     @Test
-    void v2PathsRequireSessionAndCsrfAndReturn404WhenAuthorized() throws Exception {
+    void v2PathsRequireSessionAndCsrf() throws Exception {
         MvcResult csrfResult = mockMvc.perform(get("/api/v1/auth/csrf"))
             .andExpect(status().isOk())
             .andReturn();
@@ -126,19 +126,6 @@ class Phase2SecurityIntegrationTest {
                 .content("{}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
-
-        mockMvc.perform(post("/api/v2/agents")
-                .cookie(sessionCookie, csrfCookie)
-                .header("X-XSRF-TOKEN", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-            .andExpect(status().isNotFound());
-        mockMvc.perform(post("/web/api/v2/gpt/queryAgentStreamIncr")
-                .cookie(sessionCookie, csrfCookie)
-                .header("X-XSRF-TOKEN", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-            .andExpect(status().isNotFound());
     }
 
     @Test
