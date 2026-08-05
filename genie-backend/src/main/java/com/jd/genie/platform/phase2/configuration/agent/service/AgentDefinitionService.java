@@ -79,8 +79,8 @@ public class AgentDefinitionService {
         entity.setName(input.name());
         entity.setDescription(input.description());
         entity.setPromptMode(compiled.promptMode());
-        entity.setPromptConfig(compiled.canonicalPromptConfig());
-        entity.setSystemPrompt(compiled.compiledSystemPromptTemplate());
+        entity.setPromptConfig(persistedPromptConfig(compiled));
+        entity.setSystemPrompt(persistedSystemPrompt(input, compiled));
         entity.setModelName(model.storedModelName());
         entity.setStatus(AgentStatus.DRAFT.name());
         entity.setCreatedAt(now);
@@ -131,8 +131,8 @@ public class AgentDefinitionService {
         update.setName(input.name());
         update.setDescription(input.description());
         update.setPromptMode(compiled.promptMode());
-        update.setPromptConfig(compiled.canonicalPromptConfig());
-        update.setSystemPrompt(compiled.compiledSystemPromptTemplate());
+        update.setPromptConfig(persistedPromptConfig(compiled));
+        update.setSystemPrompt(persistedSystemPrompt(input, compiled));
         update.setModelName(model.storedModelName());
 
         Instant now = Instant.now(clock);
@@ -286,6 +286,16 @@ public class AgentDefinitionService {
         } catch (PromptValidationException ex) {
             throw error(ex.code());
         }
+    }
+
+    private String persistedPromptConfig(PromptCompilationResult compiled) {
+        return PromptMode.RAW.name().equals(compiled.promptMode()) ? null : compiled.canonicalPromptConfig();
+    }
+
+    private String persistedSystemPrompt(NormalizedAgentInput input, PromptCompilationResult compiled) {
+        return PromptMode.RAW.name().equals(compiled.promptMode())
+            ? input.systemPrompt()
+            : compiled.compiledSystemPromptTemplate();
     }
 
     private Map<String, SkillDefinitionEntity> loadOwnedSkills(CurrentUser user, List<String> skillIds) {

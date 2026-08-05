@@ -39,8 +39,8 @@ class AgentPromptIntegrationTest extends Phase2AMySqlTestSupport {
 
         stored = agentMapper.selectOwnedById(userA().tenantId(), userA().userId(), updated.id());
         assertNull(stored.getPromptConfig());
-        assertTrue(stored.getSystemPrompt().contains("Raw user prompt"));
-        assertTrue(stored.getSystemPrompt().contains("# Platform Execution Boundary"));
+        assertTrue("Raw user prompt".equals(stored.getSystemPrompt()));
+        assertFalse(stored.getSystemPrompt().contains("# Platform Execution Boundary"));
         assertTrue("qwen-max".equals(stored.getModelName()));
     }
 }

@@ -93,19 +93,6 @@ public class AgentPromptCompiler {
         }
     }
 
-    public String extractRawPromptFromCompiledTemplate(String compiledSystemPromptTemplate) {
-        String compiled = normalizeRequired(compiledSystemPromptTemplate);
-        int configurationStart = compiled.indexOf("# Agent Configuration");
-        int skillsStart = compiled.indexOf("# Skills", Math.max(configurationStart, 0));
-        if (configurationStart < 0 || skillsStart < 0 || skillsStart <= configurationStart) {
-            validatePlaceholders(compiled);
-            return compiled;
-        }
-        String raw = compiled.substring(configurationStart + "# Agent Configuration".length(), skillsStart).trim();
-        validatePlaceholders(raw);
-        return normalizeRequired(raw);
-    }
-
     private PromptCompilationResult compileStructured(String promptConfig, List<PromptSkillFragment> skills) {
         Map<String, String> fields = parseStructuredConfig(promptConfig);
         StringBuilder builder = new StringBuilder(PLATFORM_BOUNDARY);

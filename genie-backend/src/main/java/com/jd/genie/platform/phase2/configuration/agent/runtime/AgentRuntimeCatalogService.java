@@ -144,7 +144,7 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
             .toList();
         try {
             String rawPrompt = PromptMode.RAW.name().equals(agent.getPromptMode())
-                ? promptCompiler.extractRawPromptFromCompiledTemplate(agent.getSystemPrompt())
+                ? agent.getSystemPrompt()
                 : null;
             return promptCompiler.compile(new PromptCompilationRequest(
                 agent.getPromptMode(),

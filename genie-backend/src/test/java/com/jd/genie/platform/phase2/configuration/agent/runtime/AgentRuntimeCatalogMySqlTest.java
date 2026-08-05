@@ -1,14 +1,18 @@
 package com.jd.genie.platform.phase2.configuration.agent.runtime;
 
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
+import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingRequest;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeSkill;
+import com.jd.genie.platform.phase2contract.dto.ToolBindingView;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,6 +54,56 @@ class AgentRuntimeCatalogMySqlTest extends AgentRuntimeCatalogTestSupport {
     }
 
     @Test
+    void rawRuntimeProfileRecompilesFromStoredSourceWithCurrentEnabledSkillsOnly() {
+        SkillResponse skill = skill("First", 1);
+        String rawPrompt = """
+            # Skills
+            This is a literal user-authored heading.
+
+            # 运行时上下文
+            This is not a generated runtime section.
+
+            # Agent Configuration
+            This is not a generated configuration boundary.
+
+            Produce {"ok": true} for {{query}}.
+            """.trim();
+        AgentResponse draft = agentService.createAgent(userA(), new AgentCreateRequest(
+            "Runtime Raw",
+            "description",
+            "RAW",
+            null,
+            rawPrompt,
+            null,
+            List.of(new AgentSkillBindingRequest(skill.id(), 1)),
+            List.of()
+        ));
+        fakeToolBindingPort.setResolveResult(new ToolBindingView(List.of(), Map.of(), List.of()));
+        AgentResponse online = agentService.onlineAgent(userA(), draft.id(), draft.version());
+
+        AgentRuntimeProfile firstProfile = runtimeCatalogPort.loadOnlineProfile(userA(), online.id());
+        AgentRuntimeProfile secondProfile = runtimeCatalogPort.loadOnlineProfile(userA(), online.id());
+
+        assertTrue(firstProfile.compiledSystemPromptTemplate().contains(rawPrompt));
+        assertEquals(1, occurrences(firstProfile.compiledSystemPromptTemplate(), "Instruction 1"));
+        assertEquals(1, occurrences(secondProfile.compiledSystemPromptTemplate(), "Instruction 1"));
+
+        SkillResponse updatedSkill = updateSkill(skill, "Fresh runtime instruction");
+        AgentRuntimeProfile updatedProfile = runtimeCatalogPort.loadOnlineProfile(userA(), online.id());
+        assertTrue(updatedProfile.compiledSystemPromptTemplate().contains("Fresh runtime instruction"));
+        assertTrue(!updatedProfile.compiledSystemPromptTemplate().contains("Instruction 1"));
+
+        skillService.disableSkill(userA(), updatedSkill.id(), updatedSkill.version());
+        AgentRuntimeProfile disabledProfile = runtimeCatalogPort.loadOnlineProfile(userA(), online.id());
+
+        assertEquals(List.of(skill.id()), firstProfile.skills().stream().map(AgentRuntimeSkill::skillId).toList());
+        assertEquals(List.of(), disabledProfile.skills());
+        assertTrue(firstProfile.compiledSystemPromptTemplate().contains("Instruction 1"));
+        assertTrue(!disabledProfile.compiledSystemPromptTemplate().contains("Fresh runtime instruction"));
+        assertTrue(disabledProfile.compiledSystemPromptTemplate().contains("No enabled skills are attached."));
+    }
+
+    @Test
     void modelDefaultAndExplicitModelResolveToRealKeys() {
         AgentResponse defaultModel = onlineAgentWithModel("Default model", null);
         AgentResponse explicitModel = onlineAgentWithModel("Explicit model", "qwen-max");
@@ -66,5 +120,18 @@ class AgentRuntimeCatalogMySqlTest extends AgentRuntimeCatalogTestSupport {
         Phase2ContractException ex = assertThrows(Phase2ContractException.class,
             () -> runtimeCatalogPort.loadOnlineProfile(userA(), online.id()));
         assertEquals(MvpErrorCode.MODEL_NOT_AVAILABLE, ex.errorCode());
+    }
+
+    private int occurrences(String value, String needle) {
+        int count = 0;
+        int offset = 0;
+        while (true) {
+            int next = value.indexOf(needle, offset);
+            if (next < 0) {
+                return count;
+            }
+            count++;
+            offset = next + needle.length();
+        }
     }
 }
