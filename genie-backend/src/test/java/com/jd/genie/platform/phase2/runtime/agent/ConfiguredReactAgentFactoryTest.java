@@ -42,10 +42,11 @@ class ConfiguredReactAgentFactoryTest {
         try {
             ReactImplAgent agent = factory.create(context, profile, printer, 99);
 
-            assertEquals("frozen prompt", agent.getSystemPrompt());
-            assertEquals("frozen prompt", agent.getSystemPromptSnapshot());
-            assertEquals("frozen prompt", agent.getNextStepPrompt());
-            assertEquals("frozen prompt", agent.getNextStepPromptSnapshot());
+            assertEquals(true, agent.getSystemPrompt().startsWith("frozen prompt"));
+            assertEquals(true, agent.getSystemPrompt().contains("\"status\":\"SUCCESS\""));
+            assertEquals(agent.getSystemPrompt(), agent.getSystemPromptSnapshot());
+            assertEquals(agent.getSystemPrompt(), agent.getNextStepPrompt());
+            assertEquals(agent.getSystemPrompt(), agent.getNextStepPromptSnapshot());
             assertEquals("frozen-model", agent.getLlm().getModel());
             assertEquals(20, agent.getMaxSteps());
             assertSame(tools, agent.getAvailableTools());

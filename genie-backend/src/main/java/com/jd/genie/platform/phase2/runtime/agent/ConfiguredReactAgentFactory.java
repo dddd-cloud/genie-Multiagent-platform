@@ -10,6 +10,18 @@ import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 public final class ConfiguredReactAgentFactory {
     private static final int DEFAULT_MAX_STEPS = 10;
     private static final int MAX_MAX_STEPS = 20;
+    /**
+     * Frozen result contract for Phase2 configured agents (C runtime).
+     * Must remain a single JSON object — never wrap success outside the parser.
+     */
+    private static final String RESULT_CONTRACT = """
+            
+            You must finish by outputting ONLY one JSON object (no markdown, no extra text):
+            {"status":"SUCCESS","output":"<your final answer>","errorCode":null,"retryable":false}
+            On failure use:
+            {"status":"FAILURE","output":null,"errorCode":"EXECUTION_ERROR","retryable":true}
+            Prefer answering without tools when tools are empty or unnecessary.
+            """;
 
     public ReactImplAgent create(
             AgentContext context,
@@ -19,14 +31,31 @@ public final class ConfiguredReactAgentFactory {
     ) {
         int boundedSteps = Math.max(1, Math.min(MAX_MAX_STEPS, maxSteps <= 0 ? DEFAULT_MAX_STEPS : maxSteps));
         context.setPrinter(printer);
+        if (context.getDateInfo() == null) {
+            context.setDateInfo("");
+        }
+        if (context.getBasePrompt() == null) {
+            context.setBasePrompt("");
+        }
+        if (context.getQuery() == null) {
+            context.setQuery("");
+        }
+        if (context.getProductFiles() == null) {
+            context.setProductFiles(java.util.List.of());
+        }
+        if (context.getToolCollection() == null) {
+            context.setToolCollection(new ToolCollection());
+        }
         ReactImplAgent agent = new ReactImplAgent(context);
-        agent.setSystemPrompt(profile.compiledSystemPromptTemplate());
-        agent.setSystemPromptSnapshot(profile.compiledSystemPromptTemplate());
-        agent.setNextStepPrompt(profile.compiledSystemPromptTemplate());
-        agent.setNextStepPromptSnapshot(profile.compiledSystemPromptTemplate());
+        String prompt = (profile.compiledSystemPromptTemplate() == null ? "" : profile.compiledSystemPromptTemplate())
+                + RESULT_CONTRACT;
+        agent.setSystemPrompt(prompt);
+        agent.setSystemPromptSnapshot(prompt);
+        agent.setNextStepPrompt(prompt);
+        agent.setNextStepPromptSnapshot(prompt);
         agent.setLlm(new LLM(profile.resolvedModelName(), ""));
         agent.setMaxSteps(boundedSteps);
-        agent.setAvailableTools(context.getToolCollection() == null ? new ToolCollection() : context.getToolCollection());
+        agent.setAvailableTools(context.getToolCollection());
         return agent;
     }
 }

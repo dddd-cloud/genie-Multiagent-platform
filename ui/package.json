@@ -6,6 +6,7 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "vite",
+    "dev:phase2-mock": "vite --mode mvp-mock",
     "build": "tsc -b && vite build --mode production",
     "lint": "eslint .",
     "fix": "eslint . --fix",
@@ -13,7 +14,10 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:phase2": "vitest run src/features/phase2",
     "e2e": "playwright test",
+    "e2e:phase2:mock": "playwright test -c playwright.phase2-mock.config.ts",
+    "e2e:phase2:real": "playwright test -c playwright.phase2-real.config.ts",
     "contract:validate": "node scripts/validate-mvp-contract.mjs"
   },
   "dependencies": {

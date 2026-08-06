@@ -9,8 +9,12 @@ import {
 } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { Button, message } from 'antd';
+import { FormOutlined } from '@ant-design/icons';
 import type { ConversationListItem } from '@/contracts';
 import { useAuth } from '@/features/auth/useAuth';
+import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
+import LocalMemoryProvider from '@/features/phase2/localMemory/LocalMemoryProvider';
+import Phase2Navigation from '@/layout/Phase2Navigation';
 import { MvpApiError } from '@/services/apiError';
 import {
   createConversation,
@@ -283,7 +287,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
     [reload, remove, state.items, upsert],
   );
 
-  return (
+  const layout = (
     <ConversationLayoutContext.Provider value={contextValue}>
       <div className="h-full w-full flex bg-page">
         <div className="h-full w-[272px] shrink-0 flex flex-col bg-sidebar border-r border-border">
@@ -300,10 +304,21 @@ const ConversationLayout: GenieType.FC = memo(() => {
               退出
             </Button>
           </div>
+          <div className="w-full px-10 pt-10 pb-8 border-b border-border">
+            <button
+              type="button"
+              onClick={handleNew}
+              aria-label="新会话"
+              className="w-full flex items-center gap-8 rounded-[8px] px-10 py-8 text-[14px] leading-[22px] text-text-primary hover:bg-[#F5F5F7] transition-colors duration-150"
+            >
+              <FormOutlined className="text-[15px] text-text-secondary" />
+              <span>新会话</span>
+            </button>
+          </div>
+          {isPhase2Enabled() ? <Phase2Navigation /> : null}
           <div className="flex-1 min-h-0 w-full">
             <ConversationSidebar
               state={state}
-              onNew={handleNew}
               onRename={handleRename}
               onDelete={handleDelete}
               onLoadMore={handleLoadMore}
@@ -318,6 +333,14 @@ const ConversationLayout: GenieType.FC = memo(() => {
       </div>
     </ConversationLayoutContext.Provider>
   );
+
+  if (user?.id) {
+    return (
+      <LocalMemoryProvider userId={user.id}>{layout}</LocalMemoryProvider>
+    );
+  }
+
+  return layout;
 });
 
 ConversationLayout.displayName = 'ConversationLayout';

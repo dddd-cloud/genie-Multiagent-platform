@@ -31,7 +31,6 @@ export function isValidConversationTitle(title: string): boolean {
 
 type Props = {
   state: ConversationListState;
-  onNew: () => void;
   onRename: (id: string, title: string) => void | Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
   onLoadMore: () => void;
@@ -42,7 +41,6 @@ type Props = {
 const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
   const {
     state,
-    onNew,
     onRename,
     onDelete,
     onLoadMore,
@@ -114,19 +112,11 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
   return (
     <aside className="h-full w-full flex flex-col bg-sidebar">
       {modalContextHolder}
-      <div className="p-12 border-b border-border">
-        <Button
-          type="primary"
-          block
-          onClick={onNew}
-          aria-label="新会话"
-          className="!h-38"
-        >
-          新会话
-        </Button>
-      </div>
+      <div className="flex-1 overflow-auto px-10 pb-8 pt-4">
+        <div className="px-10 pt-4 pb-8 text-[14px] font-semibold text-text-primary leading-[22px]">
+          最近
+        </div>
 
-      <div className="flex-1 overflow-auto p-8">
         {state.loading && state.items.length === 0 ? (
           <div className="flex justify-center py-40">
             <Spin />
@@ -156,37 +146,32 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
             <div
               key={item.id}
               className={classNames(
-                'group rounded-md px-10 py-10 mb-2 cursor-pointer transition-colors duration-150',
+                'group rounded-[8px] px-10 py-8 mb-1 cursor-pointer transition-colors duration-150',
                 {
-                  'bg-brand-soft': active,
-                  'hover:bg-surface-subtle': !active,
+                  'bg-[#F0F0F2]': active,
+                  'hover:bg-[#F5F5F7]': !active,
                 },
               )}
               onClick={() => onSelect(item.id)}
             >
-              <div className="flex items-start justify-between gap-8">
+              <div className="flex items-center justify-between gap-8">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[14px] font-medium text-text-primary truncate leading-[22px]">
+                  <div className="text-[14px] text-text-primary truncate leading-[22px]">
                     {item.title}
                   </div>
-                  {item.lastMessagePreview ? (
-                    <div className="text-[12px] text-text-secondary mt-4 line-clamp-2 leading-[18px]">
-                      {item.lastMessagePreview}
-                    </div>
-                  ) : null}
                   {item.lastMessageAt ? (
-                    <div className="text-[11px] text-text-tertiary mt-4 leading-[16px]">
+                    <div className="text-[11px] text-text-tertiary mt-2 leading-[16px]">
                       {formatTime(item.lastMessageAt)}
                     </div>
                   ) : null}
                 </div>
                 <div
-                  className="shrink-0 flex items-center gap-2 pt-2"
+                  className="shrink-0 flex items-center gap-2"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center size-24 rounded-sm text-text-tertiary opacity-45 hover:opacity-100 hover:bg-surface focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand transition-opacity duration-150"
+                    className="inline-flex items-center justify-center size-24 rounded-sm text-text-tertiary opacity-0 group-hover:opacity-70 hover:!opacity-100 hover:bg-surface focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand transition-opacity duration-150"
                     aria-label={`重命名 ${item.title}`}
                     onClick={() => openRename(item.id, item.title)}
                   >
@@ -194,7 +179,7 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center size-24 rounded-sm text-danger opacity-45 hover:opacity-100 hover:bg-danger-soft focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-danger transition-opacity duration-150"
+                    className="inline-flex items-center justify-center size-24 rounded-sm text-danger opacity-0 group-hover:opacity-70 hover:!opacity-100 hover:bg-danger-soft focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-danger transition-opacity duration-150"
                     aria-label={`删除 ${item.title}`}
                     onClick={() => confirmDelete(item.id, item.title)}
                   >

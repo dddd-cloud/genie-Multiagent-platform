@@ -19,6 +19,17 @@ class AgentTaskResultParserTest {
     }
 
     @Test
+    void extractsJsonObjectFromMarkdownFence() {
+        AgentTaskResult result = parser.parse("""
+                ```json
+                {"status":"SUCCESS","output":"done","errorCode":null,"retryable":false}
+                ```
+                """);
+        assertEquals(AgentTaskResult.Status.SUCCESS, result.status());
+        assertEquals("done", result.output());
+    }
+
+    @Test
     void rejectsNaturalLanguageAndExtraFields() {
         AgentBridgeException error = assertThrows(
                 AgentBridgeException.class,

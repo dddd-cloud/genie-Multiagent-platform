@@ -14,6 +14,12 @@
 #   MVP_FAKE_AGENT_MODE / MVP_FAKE_AGENT_EVENT_COUNT / MVP_FAKE_AGENT_DELAY_MS
 #   GENIE_SESSION_TIMEOUT / GENIE_STREAM_SNAPSHOT_MAX_BYTES / …
 #
+# Phase2 Stage 2 (optional — keep :- so Stage 1 MVP still starts without them;
+# backend beans fail-fast when MCP crypto is used without a key):
+#   VITE_PHASE2_ENABLED=true          (UI build-time flag)
+#   GENIE_MCP_CREDENTIAL_KEY          (32-byte base64)
+#   GENIE_INTERNAL_MCP_TOKEN
+#
 # Ready checks (from genie-backend network namespace — tool/client use network_mode: service:genie-backend):
 #   curl -fsS http://127.0.0.1:1601/openapi.json
 #   curl -fsS http://127.0.0.1:8188/health
@@ -64,6 +70,10 @@ services:
       GENIE_BOOTSTRAP_ADMIN_USERNAME: ${GENIE_BOOTSTRAP_ADMIN_USERNAME:?required}
       GENIE_BOOTSTRAP_ADMIN_PASSWORD: ${GENIE_BOOTSTRAP_ADMIN_PASSWORD:?required}
       GENIE_INTERNAL_AGENT_TOKEN: ${GENIE_INTERNAL_AGENT_TOKEN:?required}
+      # Phase2 Stage 2: set GENIE_MCP_CREDENTIAL_KEY (32-byte base64) + GENIE_INTERNAL_MCP_TOKEN.
+      # Keep :- (not :?required) so Stage 1 MVP startups are not blocked.
+      GENIE_MCP_CREDENTIAL_KEY: ${GENIE_MCP_CREDENTIAL_KEY:-}
+      GENIE_INTERNAL_MCP_TOKEN: ${GENIE_INTERNAL_MCP_TOKEN:-}
       MVP_ACCEPTANCE_USER_PASSWORD: ${MVP_ACCEPTANCE_USER_PASSWORD:?required}
       MVP_ACCEPTANCE_ADMIN_PASSWORD: ${MVP_ACCEPTANCE_ADMIN_PASSWORD:?required}
       MVP_FAKE_AGENT_MODE: ${MVP_FAKE_AGENT_MODE:-SUCCESS}
@@ -139,6 +149,7 @@ services:
     network_mode: "service:genie-backend"
     environment:
       UV_LINK_MODE: copy
+      GENIE_INTERNAL_MCP_TOKEN: ${GENIE_INTERNAL_MCP_TOKEN:-}
     depends_on:
       genie-backend:
         condition: service_started
@@ -160,6 +171,9 @@ services:
     environment:
       SERVICE_BASE_URL: http://genie-backend:8080
       CI: "true"
+      # Vite inlines VITE_* at build time — must be present for `pnpm build`.
+      # Stage 2 real Phase2 UI: set VITE_PHASE2_ENABLED=true before build/preview.
+      VITE_PHASE2_ENABLED: ${VITE_PHASE2_ENABLED:-false}
     ports:
       - "3000:3000"
     depends_on:
@@ -173,6 +187,7 @@ services:
         corepack enable
         corepack prepare pnpm@9.15.0 --activate
         pnpm install --frozen-lockfile
+        export VITE_PHASE2_ENABLED="${VITE_PHASE2_ENABLED:-false}"
         pnpm build
         exec pnpm preview --host 0.0.0.0 --port 3000
     networks:

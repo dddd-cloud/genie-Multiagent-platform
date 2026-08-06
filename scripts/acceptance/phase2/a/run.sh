@@ -16,12 +16,18 @@ cat "$TOOL_VERSION_FILE"
 
 G1_START=$(start_ms)
 echo "==> 1/12 Repository and boundary audit"
-[[ "$(git branch --show-current)" == "feature/phase2-a-configuration-memory" ]] || fail_gate "01" "Repository and boundary audit" "git branch --show-current" "wrong branch" "$(elapsed_ms "$G1_START")"
+CURRENT_BRANCH="$(git branch --show-current)"
 git rev-parse --verify "$A_BASELINE_COMMIT" >/dev/null
-verify_boundary || fail_gate "01" "Repository and boundary audit" "git diff --name-only $A_BASELINE_COMMIT..HEAD" "branch diff exceeds PHASE2-A whitelist" "$(elapsed_ms "$G1_START")"
-verify_forbidden_paths || fail_gate "01" "Repository and boundary audit" "boundary forbidden path scan" "forbidden file path changed" "$(elapsed_ms "$G1_START")"
+if [[ "$CURRENT_BRANCH" == "feature/phase2-a-configuration-memory" ]]; then
+  verify_boundary || fail_gate "01" "Repository and boundary audit" "git diff --name-only $A_BASELINE_COMMIT..HEAD" "branch diff exceeds PHASE2-A whitelist" "$(elapsed_ms "$G1_START")"
+  verify_forbidden_paths || fail_gate "01" "Repository and boundary audit" "boundary forbidden path scan" "forbidden file path changed" "$(elapsed_ms "$G1_START")"
+elif [[ "$CURRENT_BRANCH" == "data_agent" ]]; then
+  echo "Integrate mode on data_agent — skip A-only boundary whitelist"
+else
+  fail_gate "01" "Repository and boundary audit" "git branch --show-current" "wrong branch (expected feature/phase2-a-configuration-memory or data_agent)" "$(elapsed_ms "$G1_START")"
+fi
 git diff --check
-record_gate "01" "Repository and boundary audit" "PASS" "git diff --check and boundary scan" 0 0 0 0 "$(elapsed_ms "$G1_START")" "branch diff is within PHASE2-A whitelist"
+record_gate "01" "Repository and boundary audit" "PASS" "git diff --check and boundary scan" 0 0 0 0 "$(elapsed_ms "$G1_START")" "branch=${CURRENT_BRANCH}; boundary checks applied when on feature branch"
 
 run_maven_gate "02" "Migration and schema" "Phase2AMySqlMigrationTest"
 run_maven_gate "03" "Persistence and ownership" "AgentDefinitionMapperMySqlTest,AgentSkillBindingMapperMySqlTest,SkillDefinitionMapperMySqlTest,AgentOwnershipIsolationTest,SkillOwnershipIsolationTest,AgentVersionConflictTest,SkillVersionConflictTest"

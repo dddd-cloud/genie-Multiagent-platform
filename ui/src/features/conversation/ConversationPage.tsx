@@ -13,11 +13,15 @@ import {
 } from 'react-router-dom';
 import { Spin, message } from 'antd';
 import type {
+  ConversationMessageResponse,
   ConversationResponse,
+  ExecutionMode,
   OutputStyle,
 } from '@/contracts';
 import { OUTPUT_STYLES } from '@/contracts';
 import ChatView from '@/components/ChatView';
+import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
+import { useLocalMemoryOptional } from '@/features/phase2/localMemory/useLocalMemory';
 import { MvpApiError } from '@/services/apiError';
 import { getConversation, getMessages } from './api';
 import { hydrateConversation } from './hydrateConversation';
@@ -52,9 +56,13 @@ const ConversationPage: GenieType.FC = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const layout = useConversationLayout();
+  const localMemory = useLocalMemoryOptional();
 
   const [conversation, setConversation] = useState<ConversationResponse | null>(
     null,
+  );
+  const [rawMessages, setRawMessages] = useState<ConversationMessageResponse[]>(
+    [],
   );
   const [chats, setChats] = useState<PersistedChatItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +70,15 @@ const ConversationPage: GenieType.FC = memo(() => {
   const [pendingDraft, setPendingDraft] = useState<ConversationDraft | null>(
     null,
   );
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('AUTO');
+  const [allowedAgentIds, setAllowedAgentIds] = useState<string[]>([]);
   const consumedDraftIdsRef = useRef<Set<string>>(new Set());
+
+  // Send-mode selection is not persisted across refresh.
+  useEffect(() => {
+    setExecutionMode('AUTO');
+    setAllowedAgentIds([]);
+  }, [conversationId]);
 
   const detachedRunning = useMemo(
     () =>
@@ -98,6 +114,23 @@ const ConversationPage: GenieType.FC = memo(() => {
 
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  const localMemoryRef = useRef(localMemory);
+  localMemoryRef.current = localMemory;
+
+  const applyMessages = useCallback(
+    async (list: ConversationMessageResponse[], id: string) => {
+      setRawMessages(list);
+      setChats(hydrateConversation(list, id));
+      if (isPhase2Enabled()) {
+        try {
+          await localMemoryRef.current?.observeCompletedMessages?.(id, list);
+        } catch {
+          // Memory observation is best-effort; never block chat hydrate.
+        }
+      }
+    },
+    [],
+  );
 
   const onReloadMessages = useCallback(async () => {
     if (!conversationId) {
@@ -106,7 +139,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     try {
       const messages = await getMessages(conversationId);
       const list = messages ?? [];
-      setChats(hydrateConversation(list, conversationId));
+      await applyMessages(list, conversationId);
     } catch (err: unknown) {
       if (isAuthRequired(err)) {
         throw err;
@@ -127,7 +160,7 @@ const ConversationPage: GenieType.FC = memo(() => {
         err instanceof MvpApiError ? err.message : '刷新消息失败',
       );
     }
-  }, [conversationId, navigate]);
+  }, [applyMessages, conversationId, navigate]);
 
   /**
    * Plan §10.3: after SSE open / terminal, reload conversation detail AND list.
@@ -180,7 +213,7 @@ const ConversationPage: GenieType.FC = memo(() => {
         }
         setConversation(conv);
         const list = messages ?? [];
-        setChats(hydrateConversation(list, conversationId));
+        await applyMessages(list, conversationId);
         const ctx = layoutRef.current;
         if (ctx) {
           const existing = ctx.items.find((row) => row.id === conv.id);
@@ -229,7 +262,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, navigate]);
+  }, [applyMessages, conversationId, navigate]);
 
   /**
    * Plan §9.3 / §9.4:
@@ -268,6 +301,10 @@ const ConversationPage: GenieType.FC = memo(() => {
       return;
     }
 
+    if (isPhase2Enabled()) {
+      setExecutionMode(state.executionMode ?? 'AUTO');
+      setAllowedAgentIds(state.allowedAgentIds ?? []);
+    }
     setPendingDraft(state);
     navigate(location.pathname, {
       replace: true,
@@ -301,6 +338,9 @@ const ConversationPage: GenieType.FC = memo(() => {
     );
   }
 
+  // Retained for Phase2 memory observation / future consumers of server message rows.
+  void rawMessages;
+
   return (
     <ChatView
       key={conversationId}
@@ -308,6 +348,10 @@ const ConversationPage: GenieType.FC = memo(() => {
       conversationTitle={conversation.title}
       initialChats={chats}
       mode={derivedMode}
+      executionMode={executionMode}
+      allowedAgentIds={allowedAgentIds}
+      onExecutionModeChange={setExecutionMode}
+      onAllowedAgentIdsChange={setAllowedAgentIds}
       initialDraft={
         pendingDraft
           ? {

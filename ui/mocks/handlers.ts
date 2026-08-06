@@ -10,6 +10,12 @@ import conversationInterrupted from '../../docs/mvp-contract/fixtures/msw/conver
 import conversationBusy from '../../docs/mvp-contract/fixtures/msw/conversation-busy.json';
 import userIsolation404 from '../../docs/mvp-contract/fixtures/msw/user-isolation-404.json';
 import { createFakeSseResponse, type FakeSseScenario } from './fakeSse';
+import { phase2Handlers } from '../src/mocks/phase2/handlers';
+import {
+  getPhase2Messages,
+  getPhase2State,
+  resetPhase2State,
+} from '../src/mocks/phase2/state';
 
 const CSRF_HEADER = 'X-XSRF-TOKEN';
 const CSRF_TOKEN = 'mvp-mock-csrf-token';
@@ -69,6 +75,7 @@ export function resetMockState(partial?: Partial<MockSessionState>): void {
   if (partial?.busyIds) {
     mockState.busyIds = partial.busyIds;
   }
+  resetPhase2State();
 }
 
 function ok<T>(data: T): ApiResponse<T> {
@@ -154,11 +161,30 @@ export const handlers: HttpHandler[] = [
       password?: string;
     };
 
-    if (body.username === 'user-a' && body.password === 'password') {
-      const user = (authSuccess as ApiResponse<UserResponse>).data!;
+    const applyUserSwitch = (user: UserResponse) => {
+      if (mockState.user?.id !== user.id) {
+        mockState.conversations = new Map();
+        getPhase2State().conversationMessages = new Map();
+      }
       mockState.authenticated = true;
       mockState.user = user;
+    };
+
+    if (body.username === 'user-a' && body.password === 'password') {
+      const user = (authSuccess as ApiResponse<UserResponse>).data!;
+      applyUserSwitch(user);
       return HttpResponse.json(authSuccess);
+    }
+
+    if (body.username === 'user-b' && body.password === 'password') {
+      const user: UserResponse = {
+        id: 'user-b-id',
+        username: 'user-b',
+        displayName: 'User B',
+        role: 'USER',
+      };
+      applyUserSwitch(user);
+      return HttpResponse.json(ok(user));
     }
 
     return HttpResponse.json(auth401, { status: 401 });
@@ -269,6 +295,11 @@ export const handlers: HttpHandler[] = [
     if (authError) return authError;
 
     const id = String(params.id);
+    const phase2Messages = getPhase2Messages(id);
+    if (phase2Messages) {
+      return HttpResponse.json(ok(phase2Messages));
+    }
+
     const history = HISTORY_FIXTURES[id];
     if (history) {
       return HttpResponse.json(ok(history.data.messages));
@@ -343,4 +374,6 @@ export const handlers: HttpHandler[] = [
 
     return createFakeSseResponse(mockState.sseScenario);
   }),
+
+  ...phase2Handlers,
 ];

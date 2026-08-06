@@ -1,13 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { message } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { Button, Modal, message } from 'antd';
 import classNames from 'classnames';
 import { useMemoizedFn } from 'ahooks';
-import type { OutputStyle } from '@/contracts';
+import type { ExecutionMode, OutputStyle, Phase2AgentResponse } from '@/contracts';
 import { OUTPUT_STYLES } from '@/contracts';
 import { notifyMvpError } from '@/features/auth/mvpErrorBus';
 import type { PersistedChatItem } from '@/features/conversation/types';
 import { isUuid } from '@/features/conversation/requestId';
+import AllowedAgentSelector from '@/features/phase2/executionMode/AllowedAgentSelector';
+import ExecutionModeSelector from '@/features/phase2/executionMode/ExecutionModeSelector';
+import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
+import { buildPhase2GptQueryRequest } from '@/features/phase2/executionMode/phase2RequestBuilder';
+import { useLocalMemoryOptional } from '@/features/phase2/localMemory/useLocalMemory';
+import OrchestrationTimeline from '@/features/phase2/orchestration/OrchestrationTimeline';
+import {
+  createInitialOrchestrationState,
+  markOrchestrationDone,
+  reduceOrchestrationEvent,
+  reduceOrchestrationTrace,
+  toggleMainOpen,
+  toggleMasterOpen,
+  toggleStepOpen,
+} from '@/features/phase2/orchestration/orchestrationReducer';
+import { extractOrchestrationEventFromResult } from '@/features/phase2/orchestration/parseOrchestrationEvent';
+import { extractOrchestrationTraceFromResult } from '@/features/phase2/orchestration/parseOrchestrationTrace';
 import { MvpApiError } from '@/services/apiError';
+import { listAgents } from '@/services/phase2/agents';
+import { getPhase2ErrorMessage } from '@/services/phase2/errorMessages';
+import { queryPhase2SSE } from '@/services/phase2/queryPhase2SSE';
 import {
   ActionViewItemEnum,
   scrollToTop,
@@ -39,6 +60,10 @@ interface ChatViewProps {
   detachedRunning: boolean;
   onReloadMessages: () => Promise<void>;
   onConversationChanged: () => Promise<void>;
+  executionMode?: ExecutionMode;
+  allowedAgentIds?: string[];
+  onExecutionModeChange?: (mode: ExecutionMode) => void;
+  onAllowedAgentIdsChange?: (agentIds: string[]) => void;
 }
 
 const QUERY_MIN = 1;
@@ -77,6 +102,9 @@ function cloneWorkingChat(item: PersistedChatItem): PersistedChatItem {
     multiAgent: structuredClone(item.multiAgent ?? { tasks: [] }),
     tasks: item.tasks ? [...item.tasks] : [],
     files: item.files ? [...item.files] : [],
+    orchestration: item.orchestration
+      ? structuredClone(item.orchestration)
+      : undefined,
   };
 }
 
@@ -117,6 +145,123 @@ function buildLoadingChat(
   };
 }
 
+type LocalContextChoice =
+  | { action: 'abort' }
+  | { action: 'continue'; longTermMemory: string; conversationSummary: string };
+
+async function resolvePhase2LocalContext(
+  conversationId: string,
+  localMemory: ReturnType<typeof useLocalMemoryOptional>,
+  navigate: (path: string) => void,
+): Promise<LocalContextChoice> {
+  if (!localMemory?.repository) {
+    return {
+      action: 'continue',
+      longTermMemory: '',
+      conversationSummary: ''
+    };
+  }
+
+  let ltmRaw = '';
+  let summaryRaw = '';
+  let corrupted = false;
+  let unavailable = false;
+
+  try {
+    const [ltm, summary] = await Promise.all([
+      localMemory.repository.readLongTermMemory(),
+      localMemory.repository.readConversationSummary(conversationId),
+    ]);
+
+    if (ltm.status === 'UNAVAILABLE' || summary.status === 'UNAVAILABLE') {
+      unavailable = true;
+    }
+    if (ltm.status === 'CORRUPTED' || summary.status === 'CORRUPTED') {
+      corrupted = true;
+    }
+    if (ltm.status === 'READY' && typeof ltm.raw === 'string') {
+      ltmRaw = ltm.raw;
+    }
+    if (summary.status === 'READY' && typeof summary.raw === 'string') {
+      summaryRaw = summary.raw;
+    }
+    if (ltm.status === 'ERROR' || summary.status === 'ERROR') {
+      unavailable = true;
+    }
+  } catch {
+    unavailable = true;
+  }
+
+  if (corrupted) {
+    const choice = await new Promise<'cancel' | 'navigate' | 'continue'>((resolve) => {
+      let settled = false;
+      const settle = (value: 'cancel' | 'navigate' | 'continue') => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(value);
+      };
+      Modal.confirm({
+        title: '本地记忆文件已损坏',
+        content:
+          '检测到长期记忆或会话摘要无法解析。不会静默发送损坏内容。请选择下一步。',
+        okText: '不带损坏上下文继续',
+        cancelText: '取消',
+        centered: true,
+        footer: (_, { OkBtn, CancelBtn }) => (
+          <>
+            <CancelBtn />
+            <Button
+              onClick={() => {
+                settle('navigate');
+                Modal.destroyAll();
+              }}
+            >
+              前往本地记忆页面
+            </Button>
+            <OkBtn />
+          </>
+        ),
+        onOk: () => {
+          settle('continue');
+        },
+        onCancel: () => {
+          settle('cancel');
+        },
+      });
+    });
+
+    if (choice === 'cancel') {
+      return { action: 'abort' };
+    }
+    if (choice === 'navigate') {
+      navigate('/app/settings/memory');
+      return { action: 'abort' };
+    }
+    return {
+      action: 'continue',
+      longTermMemory: '',
+      conversationSummary: ''
+    };
+  }
+
+  if (unavailable) {
+    message.info('本地记忆暂不可用，将不带本地上下文继续');
+    return {
+      action: 'continue',
+      longTermMemory: '',
+      conversationSummary: ''
+    };
+  }
+
+  return {
+    action: 'continue',
+    longTermMemory: ltmRaw,
+    conversationSummary: summaryRaw,
+  };
+}
+
 const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const {
     conversationId,
@@ -127,9 +272,17 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     detachedRunning,
     onReloadMessages,
     onConversationChanged,
+    executionMode = 'AUTO',
+    allowedAgentIds = [],
+    onExecutionModeChange,
+    onAllowedAgentIdsChange,
   } = props;
 
   const sessionId = conversationId;
+  const navigate = useNavigate();
+  const localMemory = useLocalMemoryOptional();
+  const phase2 = isPhase2Enabled();
+
   const [chatList, setChatList] = useState<PersistedChatItem[]>(initialChats);
   const [taskList, setTaskList] = useState<MESSAGE.Task[]>([]);
   const [activeTask, setActiveTask] = useState<CHAT.Task>();
@@ -139,6 +292,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const [reconcileHint, setReconcileHint] = useState<string | null>(null);
   const [needManualRefresh, setNeedManualRefresh] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [agents, setAgents] = useState<Phase2AgentResponse[]>([]);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const actionViewRef = ActionView.useActionView();
@@ -150,6 +304,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const mountedRef = useRef(true);
   const initialChatsRef = useRef(initialChats);
   initialChatsRef.current = initialChats;
+  const executionModeRef = useRef(executionMode);
+  executionModeRef.current = executionMode;
+  const allowedAgentIdsRef = useRef(allowedAgentIds);
+  allowedAgentIdsRef.current = allowedAgentIds;
 
   const product = useMemo(() => {
     if (!mode.productType) {
@@ -180,6 +338,28 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       setChatList(initialChats);
     }
   }, [initialChats]);
+
+  useEffect(() => {
+    if (!phase2) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await listAgents();
+        if (!cancelled) {
+          setAgents(list ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setAgents([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phase2]);
 
   const temporaryChangeTask = useMemoizedFn((tasks: MESSAGE.Task[]) => {
     const task = tasks[tasks.length - 1] as CHAT.Task;
@@ -218,6 +398,27 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     actionViewRef.current?.openPlanView();
   });
 
+  const patchOrchestration = useMemoizedFn(
+    (
+      requestId: string,
+      updater: (
+        state: NonNullable<PersistedChatItem['orchestration']>,
+      ) => NonNullable<PersistedChatItem['orchestration']>,
+    ) => {
+      setChatList((prev) =>
+        prev.map((item) => {
+          if (item.requestId !== requestId || !item.orchestration) {
+            return item;
+          }
+          return {
+            ...item,
+            orchestration: updater(item.orchestration),
+          };
+        }),
+      );
+    },
+  );
+
   const stopLoadingForRequest = useMemoizedFn((requestId: string, patch?: Partial<PersistedChatItem>) => {
     setChatList((prev) =>
       prev.map((item) =>
@@ -225,6 +426,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           ? {
             ...item,
             loading: false,
+            orchestration: item.orchestration
+              ? markOrchestrationDone(item.orchestration)
+              : item.orchestration,
             ...patch,
           }
           : item,
@@ -311,6 +515,27 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     await onReloadMessages();
   });
 
+  const handlePhase2HttpError = useMemoizedFn(async (
+    result: Extract<SseTerminalResult, { kind: 'HTTP_ERROR' }>,
+  ) => {
+    const { code, message: msg } = result;
+
+    if (code === 'LOCAL_CONTEXT_INVALID' || code === 'LOCAL_CONTEXT_TOO_LARGE') {
+      message.error(getPhase2ErrorMessage(code, msg));
+      await onReloadMessages();
+      return;
+    }
+
+    if (code === 'NO_SUITABLE_AGENT') {
+      // Do not auto-switch to DIRECT.
+      message.error(getPhase2ErrorMessage(code, msg));
+      await onReloadMessages();
+      return;
+    }
+
+    await handleHttpError(result);
+  });
+
   const sendMessage = useMemoizedFn(
     async (inputInfo: CHAT.TInputInfo, requestIdArg?: string) => {
       if (sendInFlightRef.current) {
@@ -331,6 +556,39 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         return;
       }
 
+      const usePhase2 = isPhase2Enabled();
+      let phase2Body: Record<string, unknown> | null = null;
+
+      if (usePhase2) {
+        const localCtx = await resolvePhase2LocalContext(
+          sessionId,
+          localMemory,
+          navigate,
+        );
+        if (localCtx.action === 'abort') {
+          return;
+        }
+
+        const built = buildPhase2GptQueryRequest({
+          sessionId,
+          requestId,
+          query,
+          executionMode: executionModeRef.current,
+          deepThink: deepThink ? 1 : 0,
+          outputStyle,
+          allowedAgentIds: allowedAgentIdsRef.current,
+          longTermMemory: localCtx.longTermMemory,
+          conversationSummary: localCtx.conversationSummary,
+        });
+
+        if (!built.ok) {
+          message.error(built.message || '请求参数无效');
+          // Never fall back to V1 (especially ORCHESTRATED).
+          return;
+        }
+        phase2Body = built.request as unknown as Record<string, unknown>;
+      }
+
       const loadingChat = buildLoadingChat(
         {
           ...inputInfo,
@@ -348,15 +606,33 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       setSendInFlight(true);
       openedOnceRef.current = false;
 
-      const body: Record<string, unknown> = {
-        sessionId,
-        requestId,
-        query,
-        deepThink: deepThink ? 1 : 0,
-        outputStyle,
+      const body: Record<string, unknown> = usePhase2 && phase2Body
+        ? phase2Body
+        : {
+          sessionId,
+          requestId,
+          query,
+          deepThink: deepThink ? 1 : 0,
+          outputStyle,
+        };
+
+      const commitWorkingChat = (working: PersistedChatItem) => {
+        const nextItem: PersistedChatItem = { ...working };
+        currentChat = nextItem;
+        setChatList((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((c) => c.requestId === requestId);
+          if (idx >= 0) {
+            next[idx] = nextItem;
+          }
+          return next;
+        });
+        if (chatRef.current) {
+          scrollToTop(chatRef.current);
+        }
       };
 
-      const handleMessage = (data: MESSAGE.Answer) => {
+      const handleMessageV1 = (data: MESSAGE.Answer) => {
         const { finished, resultMap } = data;
         // Plan §11.4: apply in receive order, sync — no rAF before settle/reload.
         const working = cloneWorkingChat(currentChat);
@@ -385,33 +661,115 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           updatePlan(taskData.plan);
         }
         openAction(taskData.taskList);
-
-        const nextItem: PersistedChatItem = { ...working };
-        currentChat = nextItem;
-        setChatList((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((c) => c.requestId === requestId);
-          if (idx >= 0) {
-            next[idx] = nextItem;
-          }
-          return next;
-        });
-
-        if (chatRef.current) {
-          scrollToTop(chatRef.current);
-        }
+        commitWorkingChat(working);
       };
 
-      const handle = querySSE({
-        body,
-        handleMessage,
-        onOpen: () => {
-          if (!openedOnceRef.current) {
-            openedOnceRef.current = true;
-            void onConversationChanged();
+      const handleMessagePhase2 = (data: MESSAGE.Answer) => {
+        const { finished, resultMap, packageType } = data;
+        const working = cloneWorkingChat(currentChat);
+
+        const orchEvent = extractOrchestrationEventFromResult(data);
+        if (orchEvent) {
+          const prev =
+            working.orchestration ?? createInitialOrchestrationState();
+          working.orchestration = reduceOrchestrationEvent(prev, orchEvent);
+          if (working.orchestration.recoveryWarnings.length > 0) {
+            working.orchestrationRecoveryWarning = true;
           }
-        },
-      });
+        }
+
+        const orchTrace = extractOrchestrationTraceFromResult(data);
+        if (orchTrace) {
+          const prev =
+            working.orchestration ?? createInitialOrchestrationState();
+          working.orchestration = reduceOrchestrationTrace(prev, orchTrace);
+        }
+
+        const isOrchPackage =
+          packageType === 'orchestration' ||
+          packageType === 'orchestration_trace';
+
+        if (!isOrchPackage) {
+          if (
+            resultMap?.eventData &&
+            typeof resultMap.eventData === 'object' &&
+            !Array.isArray(resultMap.eventData)
+          ) {
+            combineData(resultMap.eventData, working);
+          }
+
+          if (packageType === 'result' && finished) {
+            if (data.responseAll) {
+              working.response = data.responseAll;
+            } else if (data.response) {
+              working.response = data.response;
+            }
+            working.loading = false;
+            if (working.orchestration) {
+              working.orchestration = markOrchestrationDone(
+                working.orchestration,
+              );
+            }
+          } else if (!orchEvent) {
+            // DIRECT / eventData streams: keep incremental body updates.
+            if (data.responseAll) {
+              working.response = data.responseAll;
+            } else if (data.response) {
+              working.response = data.response;
+            }
+            if (finished) {
+              working.loading = false;
+              if (working.orchestration) {
+                working.orchestration = markOrchestrationDone(
+                  working.orchestration,
+                );
+              }
+            }
+          } else if (finished) {
+            working.loading = false;
+            if (working.orchestration) {
+              working.orchestration = markOrchestrationDone(
+                working.orchestration,
+              );
+            }
+          }
+
+          const taskData = handleTaskData(working, deepThink, working.multiAgent);
+          setTaskList(taskData.taskList);
+          temporaryChangeTask(taskData.taskList);
+          if (taskData.plan) {
+            updatePlan(taskData.plan);
+          }
+          openAction(taskData.taskList);
+        }
+
+        commitWorkingChat(working);
+      };
+
+      const handleMessage = usePhase2 ? handleMessagePhase2 : handleMessageV1;
+
+      // Phase2 always uses V2 SSE; never silently fall back to V1 on open failure.
+      const handle = usePhase2
+        ? queryPhase2SSE({
+          body,
+          handleMessage,
+          onOpen: () => {
+            if (!openedOnceRef.current) {
+              openedOnceRef.current = true;
+              void onConversationChanged();
+            }
+          },
+        })
+        : querySSE({
+          body,
+          handleMessage,
+          onOpen: () => {
+            if (!openedOnceRef.current) {
+              openedOnceRef.current = true;
+              void onConversationChanged();
+            }
+          },
+        });
       sseHandleRef.current = handle;
 
       const result = await handle.done;
@@ -437,10 +795,15 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       if (result.kind === 'HTTP_ERROR') {
         // Stop local loading only — do not invent FAILED; reload (except AUTH)
         // clears optimistic turns the backend never accepted.
+        // Do NOT auto-resend as V1 after Phase2 POST open failure.
         stopLoadingForRequest(requestId, { tip: '' });
         sendInFlightRef.current = false;
         setSendInFlight(false);
-        await handleHttpError(result);
+        if (usePhase2) {
+          await handlePhase2HttpError(result);
+        } else {
+          await handleHttpError(result);
+        }
         return;
       }
 
@@ -567,6 +930,33 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                   changeTask={changeTask}
                   changeFile={changeFile}
                   changePlan={changePlan}
+                  beforeResponse={
+                    chat.orchestration &&
+                    (chat.orchestration.route === 'ORCHESTRATED' ||
+                      chat.orchestration.route === null) ? (
+                      <div>
+                        <OrchestrationTimeline
+                          state={chat.orchestration}
+                          onToggleMaster={() =>
+                            patchOrchestration(chat.requestId, toggleMasterOpen)
+                          }
+                          onToggleMain={() =>
+                            patchOrchestration(chat.requestId, toggleMainOpen)
+                          }
+                          onToggleStep={(attemptNo, stepId) =>
+                            patchOrchestration(chat.requestId, (state) =>
+                              toggleStepOpen(state, attemptNo, stepId),
+                            )
+                          }
+                        />
+                        {chat.orchestrationRecoveryWarning ? (
+                          <div className="mt-4 text-[12px] text-text-tertiary">
+                            编排时间线存在恢复告警，部分事件可能已跳过
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null
+                  }
                 />
                 {chat.snapshotTruncated ? (
                   <div className="mt-8 text-[12px] text-text-tertiary">
@@ -594,6 +984,28 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
             );
           })}
         </div>
+
+        {phase2 ? (
+          <div className="mb-12 flex flex-wrap items-center gap-12">
+            <ExecutionModeSelector
+              value={executionMode}
+              disabled={inputDisabled}
+              onChange={(next) => {
+                onExecutionModeChange?.(next);
+                if (next === 'DIRECT') {
+                  onAllowedAgentIdsChange?.([]);
+                }
+              }}
+            />
+            <AllowedAgentSelector
+              agents={agents}
+              value={allowedAgentIds}
+              executionMode={executionMode}
+              disabled={inputDisabled}
+              onChange={(ids) => onAllowedAgentIdsChange?.(ids)}
+            />
+          </div>
+        ) : null}
 
         <GeneralInput
           placeholder={

@@ -5,6 +5,15 @@ import type {
 } from '@/contracts';
 import { OUTPUT_STYLES } from '@/contracts';
 import { combineData, handleTaskData } from '@/utils/chat';
+import { extractOrchestrationEventFromResult } from '@/features/phase2/orchestration/parseOrchestrationEvent';
+import { extractOrchestrationTraceFromResult } from '@/features/phase2/orchestration/parseOrchestrationTrace';
+import {
+  createInitialOrchestrationState,
+  markOrchestrationDone,
+  reduceOrchestrationEvent,
+  reduceOrchestrationTrace,
+} from '@/features/phase2/orchestration/orchestrationReducer';
+import type { OrchestrationUiState } from '@/features/phase2/orchestration/types';
 import { parseSnapshot } from './snapshot';
 import type { PersistedChatItem } from './types';
 
@@ -90,14 +99,49 @@ function extractResponseFromEvents(
   return fallback ?? '';
 }
 
+function hasNonEmptyContent(content: string | null | undefined): boolean {
+  return typeof content === 'string' && content.length > 0;
+}
+
 function replaySnapshot(
   item: PersistedChatItem,
   events: GptProcessResultEvent[],
 ): void {
+  let orchestration: OrchestrationUiState | undefined = item.orchestration;
+  let sawOrchestration = false;
+
   for (const event of events) {
     if (event.packageType === 'heartbeat') {
       continue;
     }
+
+    const orchEvent = extractOrchestrationEventFromResult(event);
+    if (orchEvent) {
+      if (!orchestration) {
+        orchestration = createInitialOrchestrationState();
+      }
+      orchestration = reduceOrchestrationEvent(orchestration, orchEvent);
+      sawOrchestration = true;
+    }
+
+    const orchTrace = extractOrchestrationTraceFromResult(event);
+    if (orchTrace) {
+      if (!orchestration) {
+        orchestration = createInitialOrchestrationState();
+      }
+      orchestration = reduceOrchestrationTrace(orchestration, orchTrace);
+      sawOrchestration = true;
+    }
+
+    // Orchestration progress / live-trace packages restore work panel only —
+    // never combineData or append chat body from them.
+    if (
+      event.packageType === 'orchestration' ||
+      event.packageType === 'orchestration_trace'
+    ) {
+      continue;
+    }
+
     const eventData = extractEventData(event);
     if (eventData) {
       combineData(eventData, item);
@@ -108,6 +152,35 @@ function replaySnapshot(
       item.response = event.response;
     }
   }
+
+  if (sawOrchestration && orchestration) {
+    // Snapshot hydrate restores plan/outputs; UI stays collapsed by default.
+    item.orchestration = {
+      ...orchestration,
+      masterOpen: false,
+      main: { ...orchestration.main, open: false },
+      attempts: Object.fromEntries(
+        Object.entries(orchestration.attempts).map(([key, attempt]) => [
+          Number(key),
+          {
+            ...attempt,
+            steps: Object.fromEntries(
+              Object.entries(attempt.steps).map(([stepId, step]) => [
+                stepId,
+                { ...step, open: false },
+              ]),
+            ),
+          },
+        ]),
+      ),
+      phaseLabel:
+        orchestration.terminalStatus === 'RUNNING' ? 'thinking' : 'done',
+    };
+    if (item.orchestration.terminalStatus !== 'RUNNING') {
+      item.orchestration = markOrchestrationDone(item.orchestration);
+    }
+  }
+
   handleTaskData(item, item.deepThink, item.multiAgent);
 }
 
@@ -132,7 +205,23 @@ function applyAssistant(
       if (envelope.truncated) {
         item.snapshotTruncated = true;
       }
-      if (!item.response) {
+
+      if (assistant.status === 'COMPLETED') {
+        // Snapshot restores process/timeline only; non-empty content is final text.
+        if (hasNonEmptyContent(assistant.content)) {
+          item.response = assistant.content as string;
+        } else if (!item.response) {
+          item.response = extractResponseFromEvents(envelope.events, null);
+        }
+      } else if (
+        assistant.status === 'FAILED' ||
+        assistant.status === 'INTERRUPTED'
+      ) {
+        // Snapshot restores process; content is fallback for body.
+        if (!item.response && assistant.content) {
+          item.response = assistant.content;
+        }
+      } else if (!item.response) {
         item.response = extractResponseFromEvents(
           envelope.events,
           assistant.content,
@@ -150,6 +239,13 @@ function applyAssistant(
   // Content fallback: ensure response is set when snapshot yields nothing.
   if (!item.response && assistant.content) {
     item.response = assistant.content;
+  }
+
+  if (
+    item.orchestration &&
+    item.orchestration.recoveryWarnings.length > 0
+  ) {
+    item.orchestrationRecoveryWarning = true;
   }
 
   switch (assistant.status) {

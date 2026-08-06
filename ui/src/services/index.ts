@@ -57,3 +57,6 @@ export const api = {
 };
 
 export default api;
+
+export { requestMvp, MvpApiError } from './mvp';
+export type { RequestMvpOptions } from './mvp';

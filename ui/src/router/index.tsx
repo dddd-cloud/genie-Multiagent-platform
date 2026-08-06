@@ -14,6 +14,27 @@ const ConversationLayout = React.lazy(
 const ConversationPage = React.lazy(
   () => import('@/features/conversation/ConversationPage'),
 );
+const AgentListPage = React.lazy(
+  () => import('@/features/phase2/agents/AgentListPage'),
+);
+const AgentEditorPage = React.lazy(
+  () => import('@/features/phase2/agents/AgentEditorPage'),
+);
+const SkillListPage = React.lazy(
+  () => import('@/features/phase2/skills/SkillListPage'),
+);
+const SkillEditorPage = React.lazy(
+  () => import('@/features/phase2/skills/SkillEditorPage'),
+);
+const McpListPage = React.lazy(
+  () => import('@/features/phase2/mcp/McpListPage'),
+);
+const McpEditorPage = React.lazy(
+  () => import('@/features/phase2/mcp/McpEditorPage'),
+);
+const MemorySettingsPage = React.lazy(
+  () => import('@/features/phase2/localMemory/MemorySettingsPage'),
+);
 
 const router = createBrowserRouter([
   {
@@ -59,6 +80,86 @@ const router = createBrowserRouter([
                 element: (
                   <Suspense fallback={<Loading loading className="h-full" />}>
                     <ConversationPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'agents',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <AgentListPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'agents/new',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <AgentEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'agents/:agentId',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <AgentEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'skills',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <SkillListPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'skills/new',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <SkillEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'skills/:skillId',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <SkillEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'mcp',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <McpListPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'mcp/new',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <McpEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'mcp/:serverId',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <McpEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'settings/memory',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <MemorySettingsPage />
                   </Suspense>
                 ),
               },

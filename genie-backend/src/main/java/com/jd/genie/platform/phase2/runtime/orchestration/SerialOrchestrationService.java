@@ -1,8 +1,9 @@
 package com.jd.genie.platform.phase2.runtime.orchestration;
 
 import com.jd.genie.agent.agent.AgentContext;
-import com.jd.genie.agent.printer.Printer;
+import com.jd.genie.agent.dto.File;
 import com.jd.genie.agent.tool.ToolCollection;
+import com.jd.genie.agent.util.DateUtil;
 import com.jd.genie.platform.agentbridge.AgentBridgeException;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
@@ -10,18 +11,23 @@ import com.jd.genie.platform.phase2.runtime.agent.AgentTaskResult;
 import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentExecutor;
 import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentPrinter;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
+import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
+import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
+@Slf4j
 public final class SerialOrchestrationService {
     private final AgentRuntimeCatalogPort catalogPort;
     private final RuntimeToolCollectionPort toolCollectionPort;
@@ -68,6 +74,19 @@ public final class SerialOrchestrationService {
             BooleanSupplier cancellationRequested,
             Map<String, AgentTaskResult> reusableResults
     ) {
+        return execute(user, query, steps, events, cancellationRequested, reusableResults, null, 1);
+    }
+
+    public Map<String, AgentTaskResult> execute(
+            CurrentUser user,
+            String query,
+            Iterable<OrchestrationStep> steps,
+            OrchestrationEventSink events,
+            BooleanSupplier cancellationRequested,
+            Map<String, AgentTaskResult> reusableResults,
+            OrchestrationTraceChannel traceChannel,
+            int attemptNo
+    ) {
         AtomicReference<String> runningStepId = new AtomicReference<>();
         requestRunningStep.set(runningStepId);
         try {
@@ -99,7 +118,9 @@ public final class SerialOrchestrationService {
                         reusableResults,
                         events,
                         runningStepId,
-                        cancellationRequested
+                        cancellationRequested,
+                        traceChannel,
+                        attemptNo
                 );
                 results.put(step.stepId(), result);
                 blocked = result.status() == AgentTaskResult.Status.FAILURE;
@@ -118,7 +139,9 @@ public final class SerialOrchestrationService {
             Map<String, AgentTaskResult> reusableResults,
             OrchestrationEventSink events,
             AtomicReference<String> runningStepId,
-            BooleanSupplier cancellationRequested
+            BooleanSupplier cancellationRequested,
+            OrchestrationTraceChannel traceChannel,
+            int attemptNo
     ) {
         if (!runningStepId.compareAndSet(null, step.stepId())) {
             throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "More than one orchestration step is running");
@@ -126,41 +149,100 @@ public final class SerialOrchestrationService {
         ConfiguredAgentPrinter printer = new ConfiguredAgentPrinter();
         try {
             AgentRuntimeProfile profile = catalogPort.loadOnlineProfile(user, step.agentId());
+            String agentName = profile.name() == null || profile.name().isBlank() ? step.agentId() : profile.name();
+            printer = new ConfiguredAgentPrinter(
+                    traceChannel, attemptNo, step.stepId(), step.agentId(), agentName);
             String signature = resultSignature(step, inputs, profile.agentVersion());
             AgentTaskResult reused = reusableResults.get(signature);
             if (reused != null) {
-                events.emit("STEP_COMPLETED", step, reused, Map.of("reasonCode", "REUSED"));
+                events.emit("STEP_COMPLETED", step, reused, Map.of(
+                        "reasonCode", "REUSED",
+                        "agentName", agentName
+                ));
+                if (traceChannel != null && reused.status() == AgentTaskResult.Status.SUCCESS) {
+                    traceChannel.emitStep(attemptNo, step.stepId(), step.agentId(), agentName,
+                            OrchestrationTraceChannel.KIND_OUTPUT,
+                            reused.output() == null ? "" : reused.output(),
+                            false);
+                }
                 return reused;
             }
+            List<File> emptyFiles = new ArrayList<>();
+            String objective = step.objective() == null ? "" : step.objective();
+            String safeQuery = query == null ? "" : query;
             AgentContext context = AgentContext.builder()
                     .requestId(step.stepId())
-                    .query(query)
-                    .task(step.objective())
-                    .basePrompt(step.objective() + "\nReferenced results:\n" + inputs)
+                    .sessionId(step.stepId())
+                    .query(safeQuery)
+                    .task(objective)
+                    .basePrompt(objective + "\nReferenced results:\n" + inputs)
+                    .dateInfo(DateUtil.CurrentDateInfo())
+                    .productFiles(emptyFiles)
+                    .taskProductFiles(emptyFiles)
+                    .isStream(false)
+                    .templateType("empty")
                     .build();
             ToolCollection tools = toolCollectionPort.build(user, profile, context);
             context.setToolCollection(tools);
             if (cancellationRequested.getAsBoolean()) {
                 throw new AgentBridgeException(MvpErrorCode.CLIENT_DISCONNECTED, "Orchestration cancelled before Agent launch");
             }
-            events.emit("STEP_STARTED", step, null, Map.of("agentId", step.agentId()));
+            events.emit("STEP_STARTED", step, null, Map.of(
+                    "agentId", step.agentId(),
+                    "agentName", agentName
+            ));
+            if (traceChannel != null) {
+                traceChannel.emitStep(attemptNo, step.stepId(), step.agentId(), agentName,
+                        OrchestrationTraceChannel.KIND_STATUS,
+                        "开始执行：" + objective,
+                        false);
+            }
             AgentTaskResult result = executor.execute(context, profile, printer, maxAgentSteps);
             if (result.status() == AgentTaskResult.Status.SUCCESS) {
                 reusableResults.put(signature, result);
             }
-            events.emit(result.status() == AgentTaskResult.Status.SUCCESS ? "STEP_COMPLETED" : "STEP_FAILED", step, result, Map.of());
+            events.emit(
+                    result.status() == AgentTaskResult.Status.SUCCESS ? "STEP_COMPLETED" : "STEP_FAILED",
+                    step,
+                    result,
+                    Map.of("agentName", agentName)
+            );
+            if (traceChannel != null) {
+                if (result.status() == AgentTaskResult.Status.SUCCESS) {
+                    traceChannel.emitStep(attemptNo, step.stepId(), step.agentId(), agentName,
+                            OrchestrationTraceChannel.KIND_OUTPUT,
+                            result.output() == null ? "" : result.output(),
+                            false);
+                } else {
+                    traceChannel.emitStep(attemptNo, step.stepId(), step.agentId(), agentName,
+                            OrchestrationTraceChannel.KIND_ERROR,
+                            result.errorCode() == null ? "EXECUTION_ERROR" : result.errorCode(),
+                            false);
+                }
+            }
             return result;
         } catch (AgentBridgeException error) {
             if (error.getErrorCode() == MvpErrorCode.CLIENT_DISCONNECTED) {
                 throw error;
             }
+            log.warn("Orchestration step failed agentId={} stepId={} code={}",
+                    step.agentId(), step.stepId(), error.getErrorCode(), error);
             String errorCode = orchestrationErrorCode(error.getErrorCode());
             AgentTaskResult failure = AgentTaskResult.failure(errorCode, errorCode.equals("TOOL_TIMEOUT") || errorCode.equals("TOOL_UNAVAILABLE") || errorCode.equals("EXECUTION_ERROR"));
             events.emit("STEP_FAILED", step, failure, Map.of("errorCode", errorCode));
+            if (traceChannel != null) {
+                traceChannel.emitStep(attemptNo, step.stepId(), step.agentId(), step.agentId(),
+                        OrchestrationTraceChannel.KIND_ERROR, errorCode, false);
+            }
             return failure;
         } catch (Exception error) {
+            log.error("Orchestration step crashed agentId={} stepId={}", step.agentId(), step.stepId(), error);
             AgentTaskResult failure = AgentTaskResult.failure("EXECUTION_ERROR", true);
             events.emit("STEP_FAILED", step, failure, Map.of("errorCode", "EXECUTION_ERROR"));
+            if (traceChannel != null) {
+                traceChannel.emitStep(attemptNo, step.stepId(), step.agentId(), step.agentId(),
+                        OrchestrationTraceChannel.KIND_ERROR, "EXECUTION_ERROR", false);
+            }
             return failure;
         } finally {
             printer.close();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ConversationMessageResponse } from '@/contracts';
+import snapshotOrchestratedSuccess from '@/mocks/phase2/fixtures/snapshot-orchestrated-success.json';
 import { hydrateConversation } from '../hydrateConversation';
 import reactSuccess from '../../../../../docs/mvp-contract/fixtures/snapshot/react-success.json';
 import planSuccess from '../../../../../docs/mvp-contract/fixtures/snapshot/plan-success.json';
@@ -64,14 +65,14 @@ function pair(opts: {
 }
 
 describe('hydrateConversation', () => {
-  it('replays react-success snapshot into response', () => {
+  it('replays react-success snapshot process; empty content keeps snapshot response', () => {
     const items = hydrateConversation(
       pair({
         requestId: 'req-react-001',
         query: '帮我分析这个项目',
         assistantStatus: 'COMPLETED',
         streamSnapshot: JSON.stringify(reactSuccess),
-        content: 'fallback content',
+        content: null,
       }),
       CONV_ID,
     );
@@ -83,6 +84,20 @@ describe('hydrateConversation', () => {
     expect(items[0].deepThink).toBe(false);
   });
 
+  it('COMPLETED non-empty content overrides snapshot response', () => {
+    const items = hydrateConversation(
+      pair({
+        requestId: 'req-react-content',
+        query: '帮我分析这个项目',
+        assistantStatus: 'COMPLETED',
+        streamSnapshot: JSON.stringify(reactSuccess),
+        content: 'DB final answer',
+      }),
+      CONV_ID,
+    );
+    expect(items[0].response).toBe('DB final answer');
+  });
+
   it('replays plan-success and preserves deepThink from user turn', () => {
     const items = hydrateConversation(
       pair({
@@ -90,7 +105,8 @@ describe('hydrateConversation', () => {
         query: '制定分析计划',
         assistantStatus: 'COMPLETED',
         streamSnapshot: JSON.stringify(planSuccess),
-        content: 'Plan fallback',
+        // COMPLETED: non-empty content is the final body (snapshot restores process).
+        content: 'Plan 模式分析完成，已生成完整报告。',
         deepThink: 1,
       }),
       CONV_ID,
@@ -98,7 +114,7 @@ describe('hydrateConversation', () => {
     expect(items).toHaveLength(1);
     expect(items[0].loading).toBe(false);
     expect(items[0].deepThink).toBe(true);
-    expect(items[0].response).toBeTruthy();
+    expect(items[0].response).toBe('Plan 模式分析完成，已生成完整报告。');
   });
 
   it('FAILED terminal state is not permanently loading', () => {
@@ -142,7 +158,7 @@ describe('hydrateConversation', () => {
         query: '截断任务',
         assistantStatus: 'COMPLETED',
         streamSnapshot: JSON.stringify(truncatedSnapshot),
-        content: 'content fallback',
+        content: null,
       }),
       CONV_ID,
     );
@@ -254,5 +270,28 @@ describe('hydrateConversation', () => {
       CONV_ID,
     );
     expect(items[0].loading).toBe(false);
+  });
+
+  it('replays orchestration snapshot into timeline; content is final body', () => {
+    const items = hydrateConversation(
+      pair({
+        requestId: 'request-fixture',
+        query: 'orchestrate',
+        assistantStatus: 'COMPLETED',
+        streamSnapshot: JSON.stringify(snapshotOrchestratedSuccess),
+        content: 'Orchestrated run finished with a full summary.',
+      }),
+      CONV_ID,
+    );
+    expect(items[0].response).toBe(
+      'Orchestrated run finished with a full summary.',
+    );
+    expect(items[0].orchestration).toBeDefined();
+    expect(items[0].orchestration?.route).toBe('ORCHESTRATED');
+    expect(items[0].orchestration?.terminalStatus).toBe('SUCCESS');
+    expect(items[0].orchestration?.attempts[1]?.steps['step-1']?.status).toBe(
+      'COMPLETED',
+    );
+    expect(items[0].orchestrationRecoveryWarning).toBeUndefined();
   });
 });

@@ -1,7 +1,9 @@
 package com.jd.genie.platform.phase2.runtime.agent;
 
 import com.jd.genie.agent.agent.AgentContext;
+import com.jd.genie.agent.dto.File;
 import com.jd.genie.agent.tool.ToolCollection;
+import com.jd.genie.agent.util.DateUtil;
 import com.jd.genie.platform.agentbridge.AgentBridgeException;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.CurrentUserProvider;
@@ -12,6 +14,7 @@ import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,10 +44,18 @@ public final class AgentTestService {
         try {
             CurrentUser user = currentUserProvider.requireCurrentUser();
             AgentRuntimeProfile profile = catalogPort.loadOnlineProfile(user, agentId);
+            List<File> emptyFiles = new ArrayList<>();
             AgentContext context = AgentContext.builder()
                     .requestId(UUID.randomUUID().toString())
+                    .sessionId("agent-test")
                     .query(request.query())
                     .task(request.query())
+                    .basePrompt(request.query())
+                    .dateInfo(DateUtil.CurrentDateInfo())
+                    .productFiles(emptyFiles)
+                    .taskProductFiles(emptyFiles)
+                    .isStream(false)
+                    .templateType("empty")
                     .build();
             ToolCollection tools = toolCollectionPort.build(user, profile, context);
             context.setToolCollection(tools);

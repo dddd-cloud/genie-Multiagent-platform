@@ -1,4 +1,6 @@
-import { FC } from "react";
+import { FC, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import AttachmentList from "@/components/AttachmentList";
 import LoadingDot from "@/components/LoadingDot";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -10,6 +12,8 @@ type Props = {
   changeTask?: (task: CHAT.Task) => void;
   changeFile?: (file: CHAT.TFile) => void;
   changePlan?: () => void;
+  /** Rendered above the final answer body (e.g. orchestration work panel). */
+  beforeResponse?: ReactNode;
 };
 
 const PlanSection: FC<{ plan: CHAT.PlanItem[] }> = ({ plan }) => (
@@ -221,7 +225,8 @@ const ConclusionSection: FC<{
 };
 
 const Dialogue: FC<Props> = (props) => {
-  const { chat, deepThink, changeTask, changeFile, changePlan } = props;
+  const { chat, deepThink, changeTask, changeFile, changePlan, beforeResponse } =
+    props;
   const isReactType = !deepThink;
 
   const changeActiveChat = (task: CHAT.Task) => {
@@ -266,6 +271,9 @@ const Dialogue: FC<Props> = (props) => {
           />
         </div>
       ) : null}
+      {beforeResponse ? (
+        <div className="w-full mt-[24px]">{beforeResponse}</div>
+      ) : null}
       {chat.conclusion ? (
         <div className="w-full">
           <ConclusionSection chat={chat} changeFile={changeFile} />
@@ -273,7 +281,11 @@ const Dialogue: FC<Props> = (props) => {
       ) : null}
       {!chat.conclusion && chat.response ? (
         <div className="w-full mt-[24px]">
-          <div className="mb-[8px]">{chat.response}</div>
+          <div className="mb-[8px] markdown-body text-[15px] leading-[24px] text-text-primary [&_h1]:text-[18px] [&_h1]:font-semibold [&_h1]:mb-8 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h2]:mb-8 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mb-6 [&_p]:mb-8 [&_strong]:font-semibold">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+              {chat.response}
+            </ReactMarkdown>
+          </div>
         </div>
       ) : null}
       {chat.loading ? <LoadingDot /> : null}

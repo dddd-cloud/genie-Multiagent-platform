@@ -33,7 +33,7 @@ public final class AgentTaskResultParser {
 
     public AgentTaskResult parse(String raw) {
         try {
-            JsonNode root = objectMapper.readTree(raw);
+            JsonNode root = objectMapper.readTree(extractJsonObject(raw));
             if (root == null || !root.isObject() || root.size() != 4
                     || !root.has("status") || !root.has("output")
                     || !root.has("errorCode") || !root.has("retryable")) {
@@ -60,6 +60,26 @@ public final class AgentTaskResultParser {
         } catch (Exception error) {
             throw invalid();
         }
+    }
+
+    private String extractJsonObject(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("```")) {
+            int firstNl = trimmed.indexOf('\n');
+            int lastFence = trimmed.lastIndexOf("```");
+            if (firstNl > 0 && lastFence > firstNl) {
+                trimmed = trimmed.substring(firstNl + 1, lastFence).trim();
+            }
+        }
+        int start = trimmed.indexOf('{');
+        int end = trimmed.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return trimmed.substring(start, end + 1);
+        }
+        return trimmed;
     }
 
     private AgentBridgeException invalid() {

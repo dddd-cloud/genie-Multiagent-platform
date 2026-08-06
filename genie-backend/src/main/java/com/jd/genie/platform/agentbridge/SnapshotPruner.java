@@ -147,7 +147,18 @@ public final class SnapshotPruner {
     }
 
     private void removeOldestNonCriticalEvents(ObjectNode root, ArrayNode events, long maxBytes) {
+        // Drop intermediate THOUGHT traces first so MAIN STATUS/OUTPUT and step OUTPUT/ERROR survive.
         int index = 0;
+        while (utf8Size(root) > maxBytes && index < events.size()) {
+            int finalEventIndex = lastFinalEventIndex(events);
+            JsonNode event = events.get(index);
+            if (index != finalEventIndex && isDroppableThoughtTrace(event)) {
+                events.remove(index);
+            } else {
+                index++;
+            }
+        }
+        index = 0;
         while (utf8Size(root) > maxBytes && index < events.size()) {
             int finalEventIndex = lastFinalEventIndex(events);
             JsonNode event = events.get(index);
@@ -168,6 +179,23 @@ public final class SnapshotPruner {
             "FINAL_RESPONSE"
     );
 
+    private static final java.util.Set<String> CRITICAL_TRACE_KINDS = java.util.Set.of(
+            "STATUS",
+            "OUTPUT",
+            "ERROR"
+    );
+
+    private boolean isDroppableThoughtTrace(JsonNode event) {
+        if (!"orchestration_trace".equals(event.path("packageType").asText(""))) {
+            return false;
+        }
+        String kind = event.path("resultMap")
+                .path("orchestrationTrace")
+                .path("kind")
+                .asText("");
+        return "THOUGHT".equals(kind);
+    }
+
     private boolean isPlanOrTaskEvent(JsonNode event) {
         String messageType = event.path("resultMap")
                 .path("eventData")
@@ -177,9 +205,19 @@ public final class SnapshotPruner {
                 .path("orchestrationEvent")
                 .path("eventType")
                 .asText("");
-        return "plan".equals(messageType)
+        if ("plan".equals(messageType)
                 || "task".equals(messageType)
-                || CRITICAL_ORCHESTRATION_EVENTS.contains(orchestrationEventType);
+                || CRITICAL_ORCHESTRATION_EVENTS.contains(orchestrationEventType)) {
+            return true;
+        }
+        if ("orchestration_trace".equals(event.path("packageType").asText(""))) {
+            String kind = event.path("resultMap")
+                    .path("orchestrationTrace")
+                    .path("kind")
+                    .asText("");
+            return CRITICAL_TRACE_KINDS.contains(kind);
+        }
+        return false;
     }
 
     private AgentBridgeException invalidSnapshot(String message, Throwable cause) {

@@ -23,6 +23,18 @@ Fill the empty required values in `.env`:
 - `GENIE_BOOTSTRAP_ADMIN_PASSWORD`
 - `GENIE_INTERNAL_AGENT_TOKEN`
 
+Optional Phase2 variables (safe to leave empty/false for Stage 1 MVP).
+Compose keeps `:-` defaults so non-Phase2 startups are not blocked; Phase2
+backend beans fail-fast when MCP crypto/token are missing at runtime.
+
+**Stage 2 real Phase2 gate** requires these set before `pnpm build` / stack up:
+
+- `VITE_PHASE2_ENABLED=true` — UI Phase2 feature flag (baked in at `pnpm build`)
+- `GENIE_MCP_CREDENTIAL_KEY` — 32-byte key, base64-encoded (MCP credential encryption)
+- `GENIE_INTERNAL_MCP_TOKEN` — internal token for MCP-related service calls
+
+Then run real E2E with `PHASE2_REAL_E2E_READY=1` (see `scripts/acceptance/phase2/d/real_e2e.sh`).
+
 The two `MVP_ACCEPTANCE_*` values are local acceptance credentials only and
 must never be reused in production.
 

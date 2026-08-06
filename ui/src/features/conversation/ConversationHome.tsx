@@ -13,6 +13,7 @@ import {
   chatQustions,
   demoList,
 } from '@/utils/constants';
+import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import { MvpApiError } from '@/services/apiError';
 import { createConversation } from './api';
 import { createRequestId } from './requestId';
@@ -76,6 +77,12 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
           requestId,
           inputInfo: info,
           productType: product.type,
+          ...(isPhase2Enabled()
+            ? {
+              executionMode: 'AUTO' as const,
+              allowedAgentIds: [] as string[],
+            }
+            : {}),
         };
         navigate(`/app/chat/${created.id}`, { state: draft });
       } catch (err: unknown) {

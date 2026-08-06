@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_APP_TITLE?: string;
+  readonly VITE_PHASE2_ENABLED?: string;
   readonly MODE: string;
 }
 

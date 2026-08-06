@@ -11,6 +11,7 @@ import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
+import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
 
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public final class Phase2OrchestrationRuntime {
     private static final int MAX_ATTEMPTS = 3;
@@ -62,10 +64,13 @@ public final class Phase2OrchestrationRuntime {
         Map<String, String> plannerFailureMetadata = new LinkedHashMap<>();
         Map<String, String> currentAttemptFailures = new LinkedHashMap<>();
         AtomicLong sequence = new AtomicLong();
+        OrchestrationTraceChannel traces = new OrchestrationTraceChannel(observer, requestId, runId, sequence);
         try {
             emit(observer, requestId, runId, sequence, "ROUTE_SELECTED", Map.of(
                     "route", route.route().name(), "reasonCode", route.reasonCode()
             ), List.of());
+            traces.emitMain(OrchestrationTraceChannel.KIND_STATUS,
+                    "路由决策：" + route.route().name() + "（" + route.reasonCode() + "）", false);
             if (route.route() != RouteDecision.Route.ORCHESTRATED) {
                 throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "DIRECT route must use the existing V1 execution path");
             }
@@ -76,6 +81,8 @@ public final class Phase2OrchestrationRuntime {
             int lastAttemptNo = 1;
             for (int attemptNo = 1; attemptNo <= MAX_ATTEMPTS; attemptNo++) {
                 lastAttemptNo = attemptNo;
+                traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS,
+                        attemptNo == 1 ? "正在制定任务计划…" : "正在重规划（第 " + attemptNo + " 次尝试）…", false);
                 OrchestrationPlan plan = planValidator.validate(
                         modelPort.createPlan(
                                 query,
@@ -93,8 +100,11 @@ public final class Phase2OrchestrationRuntime {
                             "Replanned attempt repeats an unsuccessful plan"
                     );
                 }
-                List<OrchestrationPlanStepView> steps = plan.steps().stream().map(this::stepView).toList();
+                List<OrchestrationPlanStepView> steps = plan.steps().stream()
+                        .map(step -> stepView(step, candidates))
+                        .toList();
                 emit(observer, requestId, runId, sequence, "PLAN_CREATED", Map.of("attemptNo", attemptNo), steps);
+                traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_OUTPUT, formatPlanTrace(steps), false);
                 int currentAttempt = attemptNo;
                 Map<String, AgentTaskResult> results = serialService.execute(
                         user,
@@ -104,12 +114,14 @@ public final class Phase2OrchestrationRuntime {
                                 observer, requestId, runId, sequence, eventType, currentAttempt, step, result, details, steps
                         ),
                         observer::isTerminal,
-                        reusableResults
+                        reusableResults,
+                        traces,
+                        currentAttempt
                 );
                 currentAttemptFailures.clear();
                 collectResults(results, successes, currentAttemptFailures);
                 if (currentAttemptFailures.isEmpty()) {
-                    complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "SUCCESS", attemptNo);
+                    complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "SUCCESS", attemptNo, traces);
                     return;
                 }
                 plannerFailureMetadata.putAll(currentAttemptFailures);
@@ -119,11 +131,13 @@ public final class Phase2OrchestrationRuntime {
                             "attemptNo", attemptNo + 1,
                             "reasonCode", "RETRYABLE_STEP_FAILURE"
                     ), steps);
+                    traces.emitMain(attemptNo + 1, OrchestrationTraceChannel.KIND_STATUS,
+                            "上一步失败，准备重规划…", false);
                     continue;
                 }
                 break;
             }
-            complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "PARTIAL", lastAttemptNo);
+            complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "PARTIAL", lastAttemptNo, traces);
         } catch (RuntimeException error) {
             if (!observer.isTerminal()) {
                 observer.onError(controlledFailure(error));
@@ -170,7 +184,8 @@ public final class Phase2OrchestrationRuntime {
         eventDetails.put("attemptNo", attemptNo);
         eventDetails.put("stepId", step.stepId());
         eventDetails.put("agentId", step.agentId());
-        eventDetails.put("agentName", step.agentId());
+        Object named = details == null ? null : details.get("agentName");
+        eventDetails.put("agentName", named instanceof String name && !name.isBlank() ? name : step.agentId());
         if (result != null && result.status() == AgentTaskResult.Status.FAILURE) {
             eventDetails.put("errorCode", result.errorCode());
         }
@@ -216,9 +231,11 @@ public final class Phase2OrchestrationRuntime {
             Map<String, String> successes,
             Map<String, String> failures,
             String completionStatus,
-            int attemptNo
+            int attemptNo,
+            OrchestrationTraceChannel traces
     ) {
         emit(observer, requestId, runId, sequence, "SUMMARY_STARTED", Map.of("attemptNo", attemptNo), List.of());
+        traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "正在汇总各 Agent 结果…", false);
         String answer;
         try {
             answer = modelPort.summarize(query, Map.copyOf(successes), Map.copyOf(failures));
@@ -226,11 +243,13 @@ public final class Phase2OrchestrationRuntime {
                 throw new AgentBridgeException(MvpErrorCode.SUMMARY_FAILED, "Summary is empty");
             }
             emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
+            traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总完成", false);
         } catch (RuntimeException ignored) {
             answer = deterministicSummary(successes, failures);
             emit(observer, requestId, runId, sequence, "SUMMARY_FALLBACK", Map.of(
                     "attemptNo", attemptNo, "reasonCode", "SUMMARY_FAILED"
             ), List.of());
+            traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总失败，已使用兜底摘要", false);
         }
         GptProcessResult finalResponse = eventMapper.finalResponse(
                 requestId,
@@ -241,6 +260,20 @@ public final class Phase2OrchestrationRuntime {
         );
         observer.onEvent(finalResponse);
         observer.onCompleted();
+    }
+
+    private String formatPlanTrace(List<OrchestrationPlanStepView> steps) {
+        if (steps == null || steps.isEmpty()) {
+            return "计划为空";
+        }
+        return steps.stream()
+                .map(step -> {
+                    String name = step.agentName() == null || step.agentName().isBlank()
+                            ? step.agentId()
+                            : step.agentName();
+                    return "- [" + step.stepId() + "] " + name + "：" + step.objective();
+                })
+                .collect(Collectors.joining("\n", "任务安排：\n", ""));
     }
 
     private void emit(
@@ -255,8 +288,24 @@ public final class Phase2OrchestrationRuntime {
         observer.onEvent(eventMapper.progress(requestId, runId, sequence.incrementAndGet(), eventType, details, steps));
     }
 
-    private OrchestrationPlanStepView stepView(OrchestrationStep step) {
-        return new OrchestrationPlanStepView(step.stepId(), step.agentId(), step.agentId(), step.objective(), step.inputRefs());
+    private OrchestrationPlanStepView stepView(
+            OrchestrationStep step,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        String agentName = step.agentId();
+        if (candidates != null) {
+            for (AgentCapabilitySummary candidate : candidates) {
+                if (candidate != null && step.agentId().equals(candidate.agentId())) {
+                    if (candidate.name() != null && !candidate.name().isBlank()) {
+                        agentName = candidate.name();
+                    }
+                    break;
+                }
+            }
+        }
+        return new OrchestrationPlanStepView(
+                step.stepId(), step.agentId(), agentName, step.objective(), step.inputRefs()
+        );
     }
 
     private String deterministicSummary(Map<String, String> successes, Map<String, String> failures) {

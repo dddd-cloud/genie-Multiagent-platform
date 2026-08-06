@@ -45,8 +45,75 @@ class OrchestrationSnapshotPrunerTest {
         assertEquals("final answer", terminal.getResponseAll());
     }
 
+    @Test
+    void dropsThoughtTracesBeforeCriticalTraceKindsWhenPruning() {
+        GptProcessResult thought = GptProcessResult.builder()
+                .status("running")
+                .response("")
+                .responseAll("")
+                .finished(false)
+                .packageType("orchestration_trace")
+                .resultMap(Map.of("orchestrationTrace", Map.of(
+                        "schemaVersion", 1,
+                        "sequence", 1,
+                        "kind", "THOUGHT",
+                        "text", "x".repeat(2_000)
+                )))
+                .build();
+        GptProcessResult output = GptProcessResult.builder()
+                .status("running")
+                .response("")
+                .responseAll("")
+                .finished(false)
+                .packageType("orchestration_trace")
+                .resultMap(Map.of("orchestrationTrace", Map.of(
+                        "schemaVersion", 1,
+                        "sequence", 2,
+                        "kind", "OUTPUT",
+                        "text", "step output"
+                )))
+                .build();
+        GptProcessResult mainStatus = GptProcessResult.builder()
+                .status("running")
+                .response("")
+                .responseAll("")
+                .finished(false)
+                .packageType("orchestration_trace")
+                .resultMap(Map.of("orchestrationTrace", Map.of(
+                        "schemaVersion", 1,
+                        "sequence", 3,
+                        "kind", "STATUS",
+                        "text", "plan ready"
+                )))
+                .build();
+        GptProcessResult finalResponse = mapper.finalResponse("request-1", "run-1", 4, "final answer", "SUCCESS");
+        StreamSnapshotEnvelope source = new StreamSnapshotEnvelope(
+                1, false, List.of(thought, output, mainStatus, finalResponse)
+        );
+        long maxBytes = pruner.utf8Size(new StreamSnapshotEnvelope(1, false, List.of(output, mainStatus, finalResponse))) + 32;
+
+        StreamSnapshotEnvelope pruned = pruner.prune(source, maxBytes);
+
+        assertTrue(pruned.truncated());
+        assertEquals(List.of("OUTPUT", "STATUS", "FINAL_RESPONSE"), pruned.events().stream()
+                .map(this::traceOrFinalKind)
+                .toList());
+    }
+
     private String eventType(GptProcessResult event) {
         Map<?, ?> details = (Map<?, ?>) event.getResultMap().get("orchestrationEvent");
         return details.get("eventType").toString();
+    }
+
+    private String traceOrFinalKind(GptProcessResult event) {
+        if ("result".equals(event.getPackageType()) || Boolean.TRUE.equals(event.isFinished())) {
+            Map<?, ?> details = (Map<?, ?>) event.getResultMap().get("orchestrationEvent");
+            if (details != null && details.get("eventType") != null) {
+                return details.get("eventType").toString();
+            }
+            return "FINAL_RESPONSE";
+        }
+        Map<?, ?> trace = (Map<?, ?>) event.getResultMap().get("orchestrationTrace");
+        return trace.get("kind").toString();
     }
 }
