@@ -1,0 +1,89 @@
+package com.jd.genie.platform.phase2.configuration.api;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jd.genie.platform.contract.CurrentUser;
+import com.jd.genie.platform.contract.CurrentUserProvider;
+import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewService;
+import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
+import com.jd.genie.platform.phase2.configuration.support.Phase2AMySqlTestSupport;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+abstract class Phase2AApiMySqlTestSupport extends Phase2AMySqlTestSupport {
+    protected final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    protected CurrentUser currentUser = userA();
+    protected final CurrentUserProvider currentUserProvider = () -> currentUser;
+
+    @Autowired protected AgentDefinitionService agentService;
+    @Autowired protected SkillDefinitionService skillService;
+    @Autowired protected ModelCatalogService modelCatalogService;
+    @Autowired protected PromptPreviewService promptPreviewService;
+
+    protected MockMvc agentMvc() {
+        return MockMvcBuilders.standaloneSetup(new Phase2AgentController(agentService, currentUserProvider, objectMapper))
+            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+            .build();
+    }
+
+    protected MockMvc skillMvc() {
+        return MockMvcBuilders.standaloneSetup(new Phase2SkillController(skillService, currentUserProvider, objectMapper))
+            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+            .build();
+    }
+
+    protected MockMvc promptMvc() {
+        return MockMvcBuilders.standaloneSetup(new Phase2PromptPreviewController(promptPreviewService, currentUserProvider))
+            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+            .build();
+    }
+
+    protected JsonNode read(String body) throws Exception {
+        return objectMapper.readTree(body);
+    }
+
+    protected String rawAgentBody(String name) {
+        return """
+            {
+              "name":"%s",
+              "description":"description",
+              "promptMode":"RAW",
+              "promptConfig":null,
+              "systemPrompt":"raw prompt # Skills {\\"json\\":true}",
+              "modelName":"system-default",
+              "skills":[],
+              "capabilityKeys":["builtin:file"]
+            }
+            """.formatted(name);
+    }
+
+    protected String structuredAgentBody(String name, String skillId) {
+        return """
+            {
+              "name":"%s",
+              "description":"description",
+              "promptMode":"STRUCTURED",
+              "promptConfig":"{\\"objective\\":\\"Do research\\",\\"role\\":\\"Assistant\\"}",
+              "systemPrompt":"forged frontend prompt",
+              "modelName":"system-default",
+              "skills":[{"skillId":"%s","sortOrder":1}],
+              "capabilityKeys":["builtin:file"]
+            }
+            """.formatted(name, skillId);
+    }
+
+    protected String skillBody(String name) {
+        return """
+            {
+              "name":"%s",
+              "description":"description",
+              "instruction":"Instruction",
+              "outputRequirement":"Requirement",
+              "capabilityKeys":["builtin:file"]
+            }
+            """.formatted(name);
+    }
+}
