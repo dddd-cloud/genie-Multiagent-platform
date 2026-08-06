@@ -366,17 +366,27 @@ public class MultiAgentServiceImpl implements IMultiAgentService {
         agentRequest.setAgentType(request.getDeepThink() == 0 ? 5 : 3);
         agentRequest.setSopPrompt(
                 agentRequest.getAgentType() == 3
-                        ? genieConfig.getGenieSopPrompt()
+                        ? promptOrDefault(request.getRuntimeSopPrompt(), genieConfig.getGenieSopPrompt())
                         : ""
         );
         agentRequest.setBasePrompt(
                 agentRequest.getAgentType() == 5
-                        ? genieConfig.getGenieBasePrompt()
+                        ? promptOrDefault(request.getRuntimeBasePrompt(), genieConfig.getGenieBasePrompt())
                         : ""
         );
         agentRequest.setIsStream(true);
         agentRequest.setOutputStyle(request.getOutputStyle());
         return agentRequest;
+    }
+
+    private String promptOrDefault(String runtimePrompt, String configuredPrompt) {
+        if (runtimePrompt == null || runtimePrompt.isBlank()) {
+            return configuredPrompt;
+        }
+        if (configuredPrompt == null || configuredPrompt.isBlank()) {
+            return runtimePrompt;
+        }
+        return configuredPrompt + "\n\n" + runtimePrompt;
     }
 
     private GptProcessResult buildHeartbeatData(String requestId) {

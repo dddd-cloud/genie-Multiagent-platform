@@ -15,6 +15,19 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort {
 
+    public enum BuildFailure {
+        PERMISSION_DENIED(MvpErrorCode.TOOL_NOT_BOUND),
+        TIMEOUT(MvpErrorCode.TOOL_TIMEOUT),
+        UNAVAILABLE(MvpErrorCode.MCP_UNAVAILABLE),
+        INVALID_RESPONSE(MvpErrorCode.TOOL_INVALID_RESPONSE);
+
+        private final MvpErrorCode errorCode;
+
+        BuildFailure(MvpErrorCode errorCode) {
+            this.errorCode = errorCode;
+        }
+    }
+
     public record CallRecord(
         String userId,
         String agentId,
@@ -26,6 +39,7 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
     private final List<CallRecord> calls = new CopyOnWriteArrayList<>();
     private volatile ToolCollection toolCollection = new ToolCollection();
     private volatile RuntimeException buildException;
+    private volatile BuildFailure buildFailure;
 
     public void setToolCollection(ToolCollection toolCollection) {
         if (toolCollection == null) {
@@ -39,6 +53,12 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
 
     public void setBuildException(RuntimeException exception) {
         this.buildException = exception;
+        this.buildFailure = null;
+    }
+
+    public void setBuildFailure(BuildFailure failure) {
+        this.buildFailure = failure;
+        this.buildException = null;
     }
 
     public List<CallRecord> getCalls() {
@@ -49,6 +69,7 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
         calls.clear();
         toolCollection = new ToolCollection();
         buildException = null;
+        buildFailure = null;
     }
 
     @Override
@@ -65,6 +86,12 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
         ));
         if (buildException != null) {
             throw buildException;
+        }
+        if (buildFailure != null) {
+            throw new com.jd.genie.platform.agentbridge.AgentBridgeException(
+                    buildFailure.errorCode,
+                    "configured tool collection failure"
+            );
         }
         if (user == null || profile == null || context == null) {
             throw new Phase2ContractException(

@@ -1,0 +1,272 @@
+package com.jd.genie.platform.phase2.runtime.orchestration;
+
+import com.jd.genie.model.response.GptProcessResult;
+import com.jd.genie.platform.agentbridge.AgentBridgeException;
+import com.jd.genie.platform.agentbridge.ConversationStreamObserver;
+import com.jd.genie.platform.contract.CurrentUser;
+import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2.runtime.agent.AgentTaskResult;
+import com.jd.genie.platform.phase2.runtime.event.OrchestrationEventMapper;
+import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
+import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
+import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
+import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
+import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
+import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
+
+public final class Phase2OrchestrationRuntime {
+    private static final int MAX_ATTEMPTS = 3;
+
+    private final OrchestrationModelPort modelPort;
+    private final OrchestrationPlanValidator planValidator;
+    private final SerialOrchestrationService serialService;
+    private final OrchestrationEventMapper eventMapper;
+
+    public Phase2OrchestrationRuntime(
+            OrchestrationModelPort modelPort,
+            OrchestrationPlanValidator planValidator,
+            SerialOrchestrationService serialService,
+            OrchestrationEventMapper eventMapper
+    ) {
+        this.modelPort = modelPort;
+        this.planValidator = planValidator;
+        this.serialService = serialService;
+        this.eventMapper = eventMapper;
+    }
+
+    public RouteDecision selectRoute(
+            String mode,
+            String query,
+            String conversationSummary,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        return selectRouteDecision(mode, query, conversationSummary, candidates);
+    }
+
+    public void execute(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            List<AgentCapabilitySummary> candidates,
+            RouteDecision route,
+            ConversationStreamObserver observer
+    ) {
+        Map<String, String> plannerFailureMetadata = new LinkedHashMap<>();
+        Map<String, String> currentAttemptFailures = new LinkedHashMap<>();
+        AtomicLong sequence = new AtomicLong();
+        try {
+            emit(observer, requestId, runId, sequence, "ROUTE_SELECTED", Map.of(
+                    "route", route.route().name(), "reasonCode", route.reasonCode()
+            ), List.of());
+            if (route.route() != RouteDecision.Route.ORCHESTRATED) {
+                throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "DIRECT route must use the existing V1 execution path");
+            }
+
+            Map<String, String> successes = new LinkedHashMap<>();
+            Map<String, AgentTaskResult> reusableResults = new LinkedHashMap<>();
+            Set<String> failedPlanSignatures = new java.util.HashSet<>();
+            int lastAttemptNo = 1;
+            for (int attemptNo = 1; attemptNo <= MAX_ATTEMPTS; attemptNo++) {
+                lastAttemptNo = attemptNo;
+                OrchestrationPlan plan = planValidator.validate(
+                        modelPort.createPlan(
+                                query,
+                                candidates,
+                                attemptNo,
+                                Map.copyOf(successes),
+                                Map.copyOf(plannerFailureMetadata)
+                        ),
+                        candidates
+                );
+                String planSignature = planSignature(plan, successes, plannerFailureMetadata);
+                if (failedPlanSignatures.contains(planSignature)) {
+                    throw new AgentBridgeException(
+                            MvpErrorCode.ORCHESTRATION_PLAN_INVALID,
+                            "Replanned attempt repeats an unsuccessful plan"
+                    );
+                }
+                List<OrchestrationPlanStepView> steps = plan.steps().stream().map(this::stepView).toList();
+                emit(observer, requestId, runId, sequence, "PLAN_CREATED", Map.of("attemptNo", attemptNo), steps);
+                int currentAttempt = attemptNo;
+                Map<String, AgentTaskResult> results = serialService.execute(
+                        user,
+                        query,
+                        plan.steps(),
+                        (eventType, step, result, details) -> emitStep(
+                                observer, requestId, runId, sequence, eventType, currentAttempt, step, result, details, steps
+                        ),
+                        observer::isTerminal,
+                        reusableResults
+                );
+                currentAttemptFailures.clear();
+                collectResults(results, successes, currentAttemptFailures);
+                if (currentAttemptFailures.isEmpty()) {
+                    complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "SUCCESS", attemptNo);
+                    return;
+                }
+                plannerFailureMetadata.putAll(currentAttemptFailures);
+                failedPlanSignatures.add(planSignature);
+                if (attemptNo < MAX_ATTEMPTS && retryable(results)) {
+                    emit(observer, requestId, runId, sequence, "REPLAN_STARTED", Map.of(
+                            "attemptNo", attemptNo + 1,
+                            "reasonCode", "RETRYABLE_STEP_FAILURE"
+                    ), steps);
+                    continue;
+                }
+                break;
+            }
+            complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "PARTIAL", lastAttemptNo);
+        } catch (RuntimeException error) {
+            if (!observer.isTerminal()) {
+                observer.onError(controlledFailure(error));
+            }
+        }
+    }
+
+    private AgentBridgeException controlledFailure(RuntimeException error) {
+        MvpErrorCode errorCode = error instanceof AgentBridgeException bridgeException
+                ? bridgeException.getErrorCode()
+                : MvpErrorCode.INTERNAL_ERROR;
+        return new AgentBridgeException(errorCode, errorCode.name(), error);
+    }
+
+    private RouteDecision selectRouteDecision(
+            String mode,
+            String query,
+            String conversationSummary,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        if ("ORCHESTRATED".equals(mode)) {
+            return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST");
+        }
+        try {
+            return modelPort.selectRoute(query, conversationSummary, candidates);
+        } catch (RuntimeException ignored) {
+            return new RouteDecision(RouteDecision.Route.DIRECT, "ROUTER_FALLBACK");
+        }
+    }
+
+    private void emitStep(
+            ConversationStreamObserver observer,
+            String requestId,
+            String runId,
+            AtomicLong sequence,
+            String eventType,
+            int attemptNo,
+            OrchestrationStep step,
+            AgentTaskResult result,
+            Map<String, Object> details,
+            List<OrchestrationPlanStepView> steps
+    ) {
+        Map<String, Object> eventDetails = new LinkedHashMap<>(details);
+        eventDetails.put("attemptNo", attemptNo);
+        eventDetails.put("stepId", step.stepId());
+        eventDetails.put("agentId", step.agentId());
+        eventDetails.put("agentName", step.agentId());
+        if (result != null && result.status() == AgentTaskResult.Status.FAILURE) {
+            eventDetails.put("errorCode", result.errorCode());
+        }
+        emit(observer, requestId, runId, sequence, eventType, Map.copyOf(eventDetails), steps);
+    }
+
+    private String planSignature(
+            OrchestrationPlan plan,
+            Map<String, String> successes,
+            Map<String, String> failureMetadata
+    ) {
+        String steps = plan.steps().stream()
+                .map(step -> step.stepId() + "\u0000" + step.agentId() + "\u0000" + step.objective().trim()
+                        + "\u0000" + String.join("\u0001", step.inputRefs()))
+                .collect(java.util.stream.Collectors.joining("\u0002"));
+        return steps + "\u0003" + successes.keySet() + "\u0003" + failureMetadata;
+    }
+
+    private void collectResults(
+            Map<String, AgentTaskResult> results,
+            Map<String, String> successes,
+            Map<String, String> failures
+    ) {
+        results.forEach((stepId, result) -> {
+            if (result.status() == AgentTaskResult.Status.SUCCESS) {
+                successes.put(stepId, result.output());
+            } else {
+                failures.put(stepId, result.errorCode());
+            }
+        });
+    }
+
+    private boolean retryable(Map<String, AgentTaskResult> results) {
+        return results.values().stream().anyMatch(result -> result.status() == AgentTaskResult.Status.FAILURE && result.retryable());
+    }
+
+    private void complete(
+            ConversationStreamObserver observer,
+            String requestId,
+            String runId,
+            AtomicLong sequence,
+            String query,
+            Map<String, String> successes,
+            Map<String, String> failures,
+            String completionStatus,
+            int attemptNo
+    ) {
+        emit(observer, requestId, runId, sequence, "SUMMARY_STARTED", Map.of("attemptNo", attemptNo), List.of());
+        String answer;
+        try {
+            answer = modelPort.summarize(query, Map.copyOf(successes), Map.copyOf(failures));
+            if (answer == null || answer.isBlank()) {
+                throw new AgentBridgeException(MvpErrorCode.SUMMARY_FAILED, "Summary is empty");
+            }
+            emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
+        } catch (RuntimeException ignored) {
+            answer = deterministicSummary(successes, failures);
+            emit(observer, requestId, runId, sequence, "SUMMARY_FALLBACK", Map.of(
+                    "attemptNo", attemptNo, "reasonCode", "SUMMARY_FAILED"
+            ), List.of());
+        }
+        GptProcessResult finalResponse = eventMapper.finalResponse(
+                requestId,
+                runId,
+                sequence.incrementAndGet(),
+                answer,
+                completionStatus
+        );
+        observer.onEvent(finalResponse);
+        observer.onCompleted();
+    }
+
+    private void emit(
+            ConversationStreamObserver observer,
+            String requestId,
+            String runId,
+            AtomicLong sequence,
+            String eventType,
+            Map<String, Object> details,
+            List<OrchestrationPlanStepView> steps
+    ) {
+        observer.onEvent(eventMapper.progress(requestId, runId, sequence.incrementAndGet(), eventType, details, steps));
+    }
+
+    private OrchestrationPlanStepView stepView(OrchestrationStep step) {
+        return new OrchestrationPlanStepView(step.stepId(), step.agentId(), step.agentId(), step.objective(), step.inputRefs());
+    }
+
+    private String deterministicSummary(Map<String, String> successes, Map<String, String> failures) {
+        String completed = successes.isEmpty() ? "无" : String.join("\n", successes.keySet());
+        String results = successes.isEmpty() ? "无" : String.join("\n", successes.values());
+        String unfinished = failures.isEmpty() ? "无" : String.join("\n", failures.keySet());
+        String required = failures.isEmpty() ? "无" : String.join("\n", failures.values());
+        return "## 已完成\n" + completed
+                + "\n\n## 主要结果\n" + results
+                + "\n\n## 未完成\n" + unfinished
+                + "\n\n## 继续完成所需\n" + required;
+    }
+}

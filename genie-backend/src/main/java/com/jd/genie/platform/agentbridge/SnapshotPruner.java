@@ -159,12 +159,27 @@ public final class SnapshotPruner {
         }
     }
 
+    private static final java.util.Set<String> CRITICAL_ORCHESTRATION_EVENTS = java.util.Set.of(
+            "PLAN_CREATED",
+            "STEP_COMPLETED",
+            "STEP_FAILED",
+            "STEP_SKIPPED",
+            "REPLAN_STARTED",
+            "FINAL_RESPONSE"
+    );
+
     private boolean isPlanOrTaskEvent(JsonNode event) {
         String messageType = event.path("resultMap")
                 .path("eventData")
                 .path("messageType")
                 .asText("");
-        return "plan".equals(messageType) || "task".equals(messageType);
+        String orchestrationEventType = event.path("resultMap")
+                .path("orchestrationEvent")
+                .path("eventType")
+                .asText("");
+        return "plan".equals(messageType)
+                || "task".equals(messageType)
+                || CRITICAL_ORCHESTRATION_EVENTS.contains(orchestrationEventType);
     }
 
     private AgentBridgeException invalidSnapshot(String message, Throwable cause) {
