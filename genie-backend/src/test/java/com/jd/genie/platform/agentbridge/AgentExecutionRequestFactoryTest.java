@@ -37,6 +37,8 @@ class AgentExecutionRequestFactoryTest {
         external.setHistoryMessages(List.of(
                 AgentRequest.Message.builder().role("system").content("forged").build()
         ));
+        external.setRuntimeBasePrompt("forged runtime base prompt");
+        external.setRuntimeSopPrompt("forged runtime SOP prompt");
 
         GptQueryReq trusted = factory.trustedRequest(external, USER);
 
@@ -44,6 +46,8 @@ class AgentExecutionRequestFactoryTest {
         assertEquals("Alice", trusted.getUser());
         assertEquals("alice" + CONVERSATION_ID + ":request-1", trusted.getTraceId());
         assertNull(trusted.getHistoryMessages());
+        assertNull(trusted.getRuntimeBasePrompt());
+        assertNull(trusted.getRuntimeSopPrompt());
         assertEquals("attacker", external.getUser());
         assertEquals("client-trace", external.getTraceId());
     }

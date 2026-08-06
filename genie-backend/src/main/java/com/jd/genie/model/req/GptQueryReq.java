@@ -25,4 +25,8 @@ public class GptQueryReq {
     private String user;
     @JsonIgnore
     private List<AgentRequest.Message> historyMessages;
+    @JsonIgnore
+    private String runtimeBasePrompt;
+    @JsonIgnore
+    private String runtimeSopPrompt;
 }

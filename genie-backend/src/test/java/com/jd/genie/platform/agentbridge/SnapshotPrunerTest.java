@@ -167,7 +167,25 @@ class SnapshotPrunerTest {
     }
 
     @Test
-    void truncatesDirectArrayStringsWhenNoFinalEventExists() {
+    void preservesFrozenCriticalOrchestrationEventsAlongsideLegacyPlanTaskEvents() {
+        GptProcessResult planCreated = orchestrationEvent("PLAN_CREATED", "plan", false);
+        GptProcessResult completed = orchestrationEvent("STEP_COMPLETED", "completed", false);
+        GptProcessResult replan = orchestrationEvent("REPLAN_STARTED", "replan", false);
+        GptProcessResult finalEvent = orchestrationEvent("FINAL_RESPONSE", "final", true);
+        GptProcessResult oldTool = event("tool", "x".repeat(3_000), false, "short");
+        StreamSnapshotEnvelope source = envelope(List.of(planCreated, completed, replan, oldTool, finalEvent));
+        long maxBytes = pruner.utf8Size(envelope(List.of(planCreated, completed, replan, finalEvent)));
+
+        StreamSnapshotEnvelope pruned = pruner.prune(source, maxBytes);
+
+        assertEquals(List.of("plan", "completed", "replan", "final"), pruned.events().stream()
+                .map(GptProcessResult::getResponse)
+                .toList());
+    }
+
+
+    @Test
+    void truncatesNestedArraysInNonTerminalEvents() {
         GptProcessResult running = event("tool", "partial", false, "short");
         running.getResultMap().put("logEntries", List.of("x".repeat(SnapshotPruner.LONG_STRING_THRESHOLD + 1)));
         StreamSnapshotEnvelope source = envelope(List.of(running));
@@ -223,6 +241,18 @@ class SnapshotPrunerTest {
                 .packageType("result")
                 .build();
     }
+
+    private GptProcessResult orchestrationEvent(String eventType, String response, boolean finished) {
+        return GptProcessResult.builder()
+                .status(finished ? "success" : "running")
+                .response(response)
+                .responseAll("")
+                .finished(finished)
+                .packageType("orchestration")
+                .resultMap(Map.of("orchestrationEvent", Map.of("eventType", eventType)))
+                .build();
+    }
+
 
     private String messageType(GptProcessResult event) {
         return String.valueOf(((Map<?, ?>) event.getResultMap().get("eventData")).get("messageType"));
