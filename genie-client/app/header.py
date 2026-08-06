@@ -61,9 +61,8 @@ class HeaderEntity:
         Args:
             headers: HTTP头部对象
         """
-        cookie_value = headers.get(self.HEADER_COOKIE)
-        if cookie_value:
-            self.cookies = cookie_value
+        # Browser/session cookies are never forwarded to an MCP server.
+        self.cookies = None
 
     def _set_timeout_config(self, headers: Headers) -> None:
         """
@@ -99,7 +98,7 @@ class HeaderEntity:
             # 分割密钥列表并处理每个密钥
             key_list = [key.strip() for key in server_keys_header.split(",")]
             for key in key_list:
-                if key:
+                if key and key.lower() not in {"authorization", "cookie", "x-server-keys", "x-genie-internal-mcp-token"}:
                     key_value = headers.get(key)
                     if key_value is not None:
                         self.headers[key] = key_value
@@ -145,7 +144,7 @@ class HeaderEntity:
         Returns:
             str: 包含主要属性的字符串描述
         """
-        return (f"HeaderEntity(cookies={self.cookies}, "
+        return (f"HeaderEntity(cookies_present={bool(self.cookies)}, "
                 f"timeout={self.timeout}, "
                 f"sse_read_timeout={self.sse_read_timeout}, "
                 f"headers_count={len(self.headers)})")
