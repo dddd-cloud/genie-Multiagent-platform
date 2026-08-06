@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   createInitialOrchestrationState,
+  preserveOrchestrationFold,
   reduceOrchestrationEvent,
   reduceOrchestrationTrace,
   toggleMasterOpen,
+  toggleStepOpen,
 } from '../orchestrationReducer';
 import type { OrchestrationTrace } from '../parseOrchestrationTrace';
 import type { OrchestrationEvent } from '@/contracts';
@@ -142,6 +144,155 @@ describe('OrchestrationTraceReducerTest', () => {
 
     state = toggleMasterOpen(state);
     expect(state.masterOpen).toBe(true);
+  });
+
+  it('merges PLAN_CREATED objectives into trace placeholder steps', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationTrace(
+      state,
+      trace({
+        sequence: 1,
+        scope: 'STEP',
+        stepId: 's1',
+        agentId: 'a1',
+        agentName: 'b',
+        kind: 'STATUS',
+        text: '开始执行：用 Agent b 写一句话描述夏天。',
+      }),
+    );
+    expect(state.attempts[1].steps.s1.objective).toBe(
+      '用 Agent b 写一句话描述夏天。',
+    );
+
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'plan',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        attemptNo: 1,
+        steps: [
+          {
+            stepId: 's1',
+            agentId: 'a1',
+            agentName: 'b',
+            objective: '用 Agent b 写一句话描述夏天。',
+            inputRefs: [],
+          },
+          {
+            stepId: 's2',
+            agentId: 'a2',
+            agentName: 'a',
+            objective: '用 Agent a 写一句话描述夏天。',
+            inputRefs: [],
+          },
+        ],
+      }),
+    );
+    expect(state.attempts[1].steps.s1.objective).toBe(
+      '用 Agent b 写一句话描述夏天。',
+    );
+    expect(state.attempts[1].steps.s2.objective).toBe(
+      '用 Agent a 写一句话描述夏天。',
+    );
+    expect(state.attempts[1].steps.s1.lines.length).toBeGreaterThan(0);
+  });
+
+  it('preserves user fold choices across SSE re-reduce', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        attemptNo: 1,
+        steps: [
+          {
+            stepId: 's1',
+            agentId: 'a1',
+            agentName: 'Agent A',
+            objective: 'do a',
+            inputRefs: [],
+          },
+        ],
+      }),
+    );
+    state = toggleMasterOpen(state);
+    state = toggleStepOpen(state, 1, 's1');
+    expect(state.masterOpen).toBe(true);
+    expect(state.attempts[1].steps.s1.open).toBe(true);
+
+    // Simulate SSE working-copy that never saw the toggle (still collapsed).
+    let stale = createInitialOrchestrationState();
+    stale = reduceOrchestrationEvent(
+      stale,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    stale = reduceOrchestrationEvent(
+      stale,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        attemptNo: 1,
+        steps: [
+          {
+            stepId: 's1',
+            agentId: 'a1',
+            agentName: 'Agent A',
+            objective: 'do a',
+            inputRefs: [],
+          },
+        ],
+      }),
+    );
+    stale = reduceOrchestrationEvent(
+      stale,
+      event({
+        eventId: 'e3',
+        sequence: 3,
+        eventType: 'STEP_STARTED',
+        attemptNo: 1,
+        stepId: 's1',
+        agentId: 'a1',
+        agentName: 'Agent A',
+      }),
+    );
+    stale = reduceOrchestrationEvent(
+      stale,
+      event({
+        eventId: 'e4',
+        sequence: 4,
+        eventType: 'STEP_COMPLETED',
+        attemptNo: 1,
+        stepId: 's1',
+        agentId: 'a1',
+        agentName: 'Agent A',
+      }),
+    );
+    expect(stale.masterOpen).toBe(false);
+
+    const merged = preserveOrchestrationFold(stale, state);
+    expect(merged.masterOpen).toBe(true);
+    expect(merged.attempts[1].steps.s1.open).toBe(true);
+    expect(merged.attempts[1].steps.s1.status).toBe('COMPLETED');
   });
 
   it('marks phase done on FINAL_RESPONSE', () => {

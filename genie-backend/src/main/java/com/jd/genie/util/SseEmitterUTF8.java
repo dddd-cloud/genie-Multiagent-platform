@@ -17,5 +17,9 @@ public class SseEmitterUTF8 extends SseEmitter {
         if (headers.getContentType() == null) {
             headers.setContentType(new MediaType("text", "event-stream", StandardCharsets.UTF_8));
         }
+        // Prevent proxies (Vite / nginx) from buffering the live orchestration stream.
+        headers.set(HttpHeaders.CACHE_CONTROL, "no-cache, no-transform");
+        headers.set("X-Accel-Buffering", "no");
+        headers.set(HttpHeaders.CONNECTION, "keep-alive");
     }
 }

@@ -21,6 +21,8 @@ public final class ConfiguredReactAgentFactory {
             On failure use:
             {"status":"FAILURE","output":null,"errorCode":"EXECUTION_ERROR","retryable":true}
             Prefer answering without tools when tools are empty or unnecessary.
+            If the user message describes a single step objective for you as one sub-agent, answer ONLY that objective.
+            Do not discuss which other agents are available, and do not rewrite the whole multi-agent plan.
             """;
 
     public ReactImplAgent create(

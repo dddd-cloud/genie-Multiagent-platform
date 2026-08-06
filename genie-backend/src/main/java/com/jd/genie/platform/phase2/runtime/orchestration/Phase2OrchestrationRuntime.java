@@ -236,16 +236,16 @@ public final class Phase2OrchestrationRuntime {
     ) {
         emit(observer, requestId, runId, sequence, "SUMMARY_STARTED", Map.of("attemptNo", attemptNo), List.of());
         traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "正在汇总各 Agent 结果…", false);
+        // Quote real step outputs for 主要结果 — LLM must not rewrite/fabricate them.
+        String factual = labeledDeterministicSummary(successes, failures);
         String answer;
         try {
-            answer = modelPort.summarize(query, Map.copyOf(successes), Map.copyOf(failures));
-            if (answer == null || answer.isBlank()) {
-                throw new AgentBridgeException(MvpErrorCode.SUMMARY_FAILED, "Summary is empty");
-            }
+            String overview = modelPort.summarize(query, Map.copyOf(successes), Map.copyOf(failures));
+            answer = mergeFactualWithOverview(factual, overview);
             emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
             traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总完成", false);
         } catch (RuntimeException ignored) {
-            answer = deterministicSummary(successes, failures);
+            answer = factual;
             emit(observer, requestId, runId, sequence, "SUMMARY_FALLBACK", Map.of(
                     "attemptNo", attemptNo, "reasonCode", "SUMMARY_FAILED"
             ), List.of());
@@ -309,13 +309,61 @@ public final class Phase2OrchestrationRuntime {
     }
 
     private String deterministicSummary(Map<String, String> successes, Map<String, String> failures) {
+        return labeledDeterministicSummary(successes, failures);
+    }
+
+    private String labeledDeterministicSummary(
+            Map<String, String> successes,
+            Map<String, String> failures
+    ) {
         String completed = successes.isEmpty() ? "无" : String.join("\n", successes.keySet());
-        String results = successes.isEmpty() ? "无" : String.join("\n", successes.values());
+        String results;
+        if (successes.isEmpty()) {
+            results = "无";
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (Map.Entry<String, String> entry : successes.entrySet()) {
+                if (!sb.isEmpty()) {
+                    sb.append('\n');
+                }
+                sb.append("- ").append(entry.getKey()).append(": ")
+                        .append(entry.getValue() == null ? "" : entry.getValue());
+            }
+            results = sb.toString();
+        }
         String unfinished = failures.isEmpty() ? "无" : String.join("\n", failures.keySet());
-        String required = failures.isEmpty() ? "无" : String.join("\n", failures.values());
+        String required = failures.isEmpty()
+                ? "无，所有任务均已顺利完成。"
+                : String.join("\n", failures.values());
         return "## 已完成\n" + completed
                 + "\n\n## 主要结果\n" + results
                 + "\n\n## 未完成\n" + unfinished
                 + "\n\n## 继续完成所需\n" + required;
+    }
+
+    private String mergeFactualWithOverview(String factual, String overview) {
+        if (overview == null || overview.isBlank()) {
+            return factual;
+        }
+        String trimmed = overview.trim();
+        String overviewBody = trimmed;
+        int idx = trimmed.indexOf("## 汇总");
+        if (idx >= 0) {
+            overviewBody = trimmed.substring(idx + "## 汇总".length()).trim();
+            int next = overviewBody.indexOf("\n## ");
+            if (next >= 0) {
+                overviewBody = overviewBody.substring(0, next).trim();
+            }
+        } else if (trimmed.startsWith("## ")) {
+            // Full markdown from model — keep only a short prose paragraph if present.
+            overviewBody = trimmed.replaceAll("(?m)^## .*\\R?", "").trim();
+        }
+        if (overviewBody.isBlank()) {
+            return factual;
+        }
+        return factual.replace(
+                "\n\n## 未完成\n",
+                "\n\n## 汇总\n" + overviewBody + "\n\n## 未完成\n"
+        );
     }
 }

@@ -168,14 +168,21 @@ public final class SerialOrchestrationService {
                 return reused;
             }
             List<File> emptyFiles = new ArrayList<>();
-            String objective = step.objective() == null ? "" : step.objective();
-            String safeQuery = query == null ? "" : query;
+            String objective = step.objective() == null ? "" : step.objective().trim();
+            // Sub-agents must run the step objective, NOT the parent orchestration query.
+            // Passing the full user request makes agents invent "only one agent available" answers.
+            String stepQuery = buildStepQuery(
+                    agentName,
+                    profile.description(),
+                    objective,
+                    inputs
+            );
             AgentContext context = AgentContext.builder()
                     .requestId(step.stepId())
                     .sessionId(step.stepId())
-                    .query(safeQuery)
+                    .query(stepQuery)
                     .task(objective)
-                    .basePrompt(objective + "\nReferenced results:\n" + inputs)
+                    .basePrompt(stepQuery)
                     .dateInfo(DateUtil.CurrentDateInfo())
                     .productFiles(emptyFiles)
                     .taskProductFiles(emptyFiles)
@@ -248,6 +255,33 @@ public final class SerialOrchestrationService {
             printer.close();
             runningStepId.set(null);
         }
+    }
+
+    private String buildStepQuery(
+            String agentName,
+            String agentDescription,
+            String objective,
+            Map<String, String> inputs
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是子 Agent「").append(agentName == null ? "" : agentName).append("」。\n");
+        if (agentDescription != null && !agentDescription.isBlank()) {
+            sb.append("你的角色设定：").append(agentDescription.trim()).append('\n');
+        }
+        sb.append("请只完成下面的步骤目标，不要回答编排总问题，也不要讨论还有哪些 Agent 可用。\n");
+        sb.append("请用你自己独特的视角和措辞作答；禁止与其他 Agent 输出相同或高度雷同的句子。\n");
+        sb.append("步骤目标：\n").append(objective == null ? "" : objective);
+        if (inputs != null && !inputs.isEmpty()) {
+            sb.append("\n\n可参考的前置步骤结果：\n");
+            for (Map.Entry<String, String> entry : inputs.entrySet()) {
+                sb.append("- ").append(entry.getKey()).append(": ")
+                        .append(entry.getValue() == null ? "" : entry.getValue())
+                        .append('\n');
+            }
+            sb.append("若本步骤是汇总，请综合上述结果写成新的段落，不要原样复述其中某一条。\n");
+        }
+        sb.append("\n直接给出该步骤的最终答案。");
+        return sb.toString();
     }
 
     private Map<String, String> referencedSuccessfulOutputs(

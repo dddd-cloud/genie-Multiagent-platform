@@ -23,6 +23,7 @@ import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
+import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.service.IGptProcessService;
 import com.jd.genie.service.IMultiAgentService;
 import com.jd.genie.util.SseUtil;
@@ -185,16 +186,25 @@ public class GptProcessServiceImpl implements IGptProcessService {
                 startAgent(withDirectRuntimeContext(request), observer, cancellableCall);
                 return;
             }
-            runtime.execute(
-                    currentUser,
-                    trustedRequest.getRequestId(),
-                    UUID.randomUUID().toString(),
-                    trustedRequest.getQuery(),
-                    request.localContext().conversationSummary(),
-                    candidates,
-                    route,
-                    observer
-            );
+            // Return SseEmitter first; sync execute() would buffer all SSE until the request thread finishes.
+            ThreadUtil.execute(() -> {
+                try {
+                    runtime.execute(
+                            currentUser,
+                            trustedRequest.getRequestId(),
+                            UUID.randomUUID().toString(),
+                            trustedRequest.getQuery(),
+                            request.localContext().conversationSummary(),
+                            candidates,
+                            route,
+                            observer
+                    );
+                } catch (Throwable error) {
+                    if (!observer.isTerminal()) {
+                        observer.onError(error);
+                    }
+                }
+            });
         });
     }
 

@@ -222,12 +222,46 @@ function applyPlanCreated(
     );
   }
   const existing = state.attempts[attemptNo];
+  const attempts = cloneAttempts(state.attempts);
+
+  // Merge when traces already created placeholder steps (empty objective).
+  // Ignoring as "duplicate" left 任务安排 blank until snapshot reload.
   if (existing && Object.keys(existing.steps).length > 0) {
-    return acknowledgeEvent(
-      state,
-      event,
-      `PLAN_CREATED duplicate attempt ignored (${event.eventId})`,
-    );
+    const steps: Record<string, StepUiState> = { ...existing.steps };
+    for (const step of event.steps) {
+      const prev = steps[step.stepId];
+      if (!prev) {
+        steps[step.stepId] = {
+          stepId: step.stepId,
+          agentId: step.agentId,
+          agentName: step.agentName,
+          objective: step.objective,
+          status: 'PLANNED',
+          errorCode: null,
+          lines: [],
+          open: false,
+        };
+        continue;
+      }
+      steps[step.stepId] = {
+        ...prev,
+        agentId: step.agentId || prev.agentId,
+        agentName: preferReadableAgentName(
+          step.agentName,
+          prev.agentName,
+          step.agentId || prev.agentId,
+        ),
+        objective:
+          step.objective && step.objective.trim().length > 0
+            ? step.objective
+            : prev.objective,
+      };
+    }
+    attempts[attemptNo] = { attemptNo, steps };
+    return {
+      ...acknowledgeEvent(state, event),
+      attempts,
+    };
   }
 
   const steps: Record<string, StepUiState> = {};
@@ -244,7 +278,6 @@ function applyPlanCreated(
     };
   }
 
-  const attempts = cloneAttempts(state.attempts);
   attempts[attemptNo] = {
     attemptNo,
     steps
@@ -310,9 +343,26 @@ function applyStepStarted(
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: 'RUNNING',
     agentId: event.agentId ?? step.agentId,
-    agentName: event.agentName ?? step.agentName,
+    agentName: preferReadableAgentName(event.agentName, step.agentName, step.agentId),
   });
   return acknowledgeEvent(next, event);
+}
+
+function preferReadableAgentName(
+  incoming: string | null | undefined,
+  current: string | null | undefined,
+  agentId: string,
+): string {
+  const pick = (value: string | null | undefined): string | null => {
+    if (!value || value.trim().length === 0) return null;
+    const trimmed = value.trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+      return null;
+    }
+    if (trimmed === agentId) return null;
+    return trimmed;
+  };
+  return pick(incoming) ?? pick(current) ?? agentId;
 }
 
 function applyStepTerminal(
@@ -366,7 +416,7 @@ function applyStepTerminal(
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: nextStatus,
     agentId: event.agentId ?? step.agentId,
-    agentName: event.agentName ?? step.agentName,
+    agentName: preferReadableAgentName(event.agentName, step.agentName, step.agentId),
     errorCode: nextStatus === 'FAILED' ? event.errorCode : step.errorCode,
   });
   return acknowledgeEvent(next, event);
@@ -616,10 +666,17 @@ export function reduceOrchestrationTrace(
     lines: [],
     open: false,
   };
+  const objectiveFromStatus =
+    !step.objective &&
+    trace.kind === 'STATUS' &&
+    typeof trace.text === 'string'
+      ? trace.text.match(/^开始执行[：:](.+)$/)?.[1]?.trim() ?? ''
+      : '';
   const patched: StepUiState = {
     ...step,
     agentId: trace.agentId ?? step.agentId,
     agentName: trace.agentName ?? step.agentName,
+    objective: step.objective || objectiveFromStatus,
     lines: appendTraceLine(step.lines, trace),
   };
   if (trace.kind === 'OUTPUT') {
@@ -663,6 +720,42 @@ export function toggleStepOpen(
   const step = attempt?.steps[stepId];
   if (!step) return state;
   return updateStepStatus(state, attemptNo, stepId, { open: !step.open });
+}
+
+/**
+ * Keep user fold choices when SSE reapplies orchestration from a stale working copy.
+ * New steps keep their incoming default (collapsed).
+ */
+export function preserveOrchestrationFold(
+  incoming: OrchestrationUiState,
+  existing: OrchestrationUiState | undefined,
+): OrchestrationUiState {
+  if (!existing) {
+    return incoming;
+  }
+  const attempts = cloneAttempts(incoming.attempts);
+  for (const key of Object.keys(attempts)) {
+    const attemptNo = Number(key);
+    const incomingAttempt = attempts[attemptNo];
+    const existingAttempt = existing.attempts[attemptNo];
+    if (!incomingAttempt || !existingAttempt) {
+      continue;
+    }
+    const steps: Record<string, StepUiState> = { ...incomingAttempt.steps };
+    for (const stepId of Object.keys(steps)) {
+      const existingStep = existingAttempt.steps[stepId];
+      if (existingStep) {
+        steps[stepId] = { ...steps[stepId], open: existingStep.open };
+      }
+    }
+    attempts[attemptNo] = { ...incomingAttempt, steps };
+  }
+  return {
+    ...incoming,
+    masterOpen: existing.masterOpen,
+    main: { ...incoming.main, open: existing.main.open },
+    attempts,
+  };
 }
 
 export function markOrchestrationDone(

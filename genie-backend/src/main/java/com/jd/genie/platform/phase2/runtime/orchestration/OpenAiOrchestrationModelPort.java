@@ -111,9 +111,10 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
             Map<String, String> failureMetadata
     ) {
         String system = """
-                Summarize multi-agent results for the end user in Chinese Markdown.
-                Sections: 已完成 / 主要结果 / 未完成 / 继续完成所需.
-                Do not invent facts beyond the provided step outputs.
+                Write ONLY a short Chinese paragraph under heading "## 汇总".
+                Synthesize the provided step outputs into one coherent paragraph.
+                Do not invent facts, do not list per-step results, and do not claim outputs are identical unless they truly are.
+                Ignore any step text that claims only one agent was available.
                 """;
         String user = "query:\n" + nullToEmpty(query)
                 + "\n\nsuccesses:\n" + mapJson(successfulResultSummaries)
@@ -130,6 +131,10 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - agentId must be from candidates
                 - inputRefs may only reference earlier stepIds
                 - same agentId at most twice
+                - When the user asks multiple agents to each do something (各/分别/每个), assign different candidate agents to those parallel specialist steps
+                - Aggregation/summary steps MUST inputRefs the specialist steps they combine
+                - Each objective must be a self-contained instruction for that one agent; never ask a step to discover which agents are available
+                - Prefer candidate "name" when writing objectives (e.g. "用 Agent a 写一句…"), but agentId field must still be the candidate id
                 - no tool calls, no markdown, no extra fields
                 """;
     }
@@ -183,19 +188,28 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
 
     private OrchestrationPlan heuristicPlan(String query, List<AgentCapabilitySummary> candidates) {
         List<OrchestrationStep> steps = new ArrayList<>();
-        String previous = null;
         int index = 1;
+        List<String> specialistStepIds = new ArrayList<>();
         for (AgentCapabilitySummary candidate : candidates) {
-            if (index > 6) {
+            if (index > 5) {
                 break;
             }
             String stepId = "step-" + index;
-            List<String> refs = previous == null ? List.of() : List.of(previous);
-            String objective = "Using agent \"" + nullToEmpty(candidate.name())
-                    + "\", help fulfill the user request: " + nullToEmpty(query);
-            steps.add(new OrchestrationStep(stepId, candidate.agentId(), objective, refs));
-            previous = stepId;
+            String name = blank(candidate.name()) ? candidate.agentId() : candidate.name();
+            String objective = "作为 Agent「" + name + "」，用你自己独特的一句话完成用户请求中与你相关的部分。"
+                    + "不要复述其他 Agent 的措辞。用户总请求仅作背景：" + nullToEmpty(query);
+            steps.add(new OrchestrationStep(stepId, candidate.agentId(), objective, List.of()));
+            specialistStepIds.add(stepId);
             index++;
+        }
+        if (specialistStepIds.size() >= 2 && index <= 6) {
+            String summaryId = "step-" + index;
+            steps.add(new OrchestrationStep(
+                    summaryId,
+                    candidates.get(0).agentId(),
+                    "汇总前面各 Agent 的结果，写成一段连贯答复。",
+                    List.copyOf(specialistStepIds)
+            ));
         }
         return new OrchestrationPlan(List.copyOf(steps));
     }

@@ -17,6 +17,7 @@ import OrchestrationTimeline from '@/features/phase2/orchestration/Orchestration
 import {
   createInitialOrchestrationState,
   markOrchestrationDone,
+  preserveOrchestrationFold,
   reduceOrchestrationEvent,
   reduceOrchestrationTrace,
   toggleMainOpen,
@@ -617,14 +618,27 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         };
 
       const commitWorkingChat = (working: PersistedChatItem) => {
-        const nextItem: PersistedChatItem = { ...working };
-        currentChat = nextItem;
         setChatList((prev) => {
           const next = [...prev];
           const idx = next.findIndex((c) => c.requestId === requestId);
-          if (idx >= 0) {
-            next[idx] = nextItem;
+          if (idx < 0) {
+            return prev;
           }
+          const existing = next[idx];
+          // User fold toggles update React state; SSE still clones a local
+          // currentChat that may lag — keep fold flags from the latest list item.
+          const nextItem: PersistedChatItem = {
+            ...working,
+            orchestration:
+              working.orchestration && existing.orchestration
+                ? preserveOrchestrationFold(
+                    working.orchestration,
+                    existing.orchestration,
+                  )
+                : working.orchestration,
+          };
+          currentChat = nextItem;
+          next[idx] = nextItem;
           return next;
         });
         if (chatRef.current) {
@@ -666,58 +680,80 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       const handleMessagePhase2 = (data: MESSAGE.Answer) => {
         const { finished, resultMap, packageType } = data;
-        const working = cloneWorkingChat(currentChat);
-
         const orchEvent = extractOrchestrationEventFromResult(data);
-        if (orchEvent) {
-          const prev =
-            working.orchestration ?? createInitialOrchestrationState();
-          working.orchestration = reduceOrchestrationEvent(prev, orchEvent);
-          if (working.orchestration.recoveryWarnings.length > 0) {
-            working.orchestrationRecoveryWarning = true;
-          }
-        }
-
         const orchTrace = extractOrchestrationTraceFromResult(data);
-        if (orchTrace) {
-          const prev =
-            working.orchestration ?? createInitialOrchestrationState();
-          working.orchestration = reduceOrchestrationTrace(prev, orchTrace);
-        }
-
         const isOrchPackage =
           packageType === 'orchestration' ||
           packageType === 'orchestration_trace';
 
-        if (!isOrchPackage) {
-          if (
-            resultMap?.eventData &&
-            typeof resultMap.eventData === 'object' &&
-            !Array.isArray(resultMap.eventData)
-          ) {
-            combineData(resultMap.eventData, working);
+        // Reduce inside setChatList so orchestration always starts from the
+        // latest React item (avoids stale currentChat wiping plan objectives).
+        setChatList((prev) => {
+          const idx = prev.findIndex((c) => c.requestId === requestId);
+          const base =
+            idx >= 0 ? cloneWorkingChat(prev[idx]) : cloneWorkingChat(currentChat);
+          const working: PersistedChatItem = {
+            ...base,
+            multiAgent: structuredClone(
+              currentChat.multiAgent ?? base.multiAgent ?? { tasks: [] },
+            ),
+            tasks: currentChat.tasks ? [...currentChat.tasks] : base.tasks,
+            files: currentChat.files ? [...currentChat.files] : base.files,
+            response: currentChat.response ?? base.response,
+            loading: currentChat.loading,
+          };
+
+          if (orchEvent) {
+            const prevOrch =
+              working.orchestration ?? createInitialOrchestrationState();
+            working.orchestration = reduceOrchestrationEvent(prevOrch, orchEvent);
+            if (working.orchestration.recoveryWarnings.length > 0) {
+              working.orchestrationRecoveryWarning = true;
+            }
           }
 
-          if (packageType === 'result' && finished) {
-            if (data.responseAll) {
-              working.response = data.responseAll;
-            } else if (data.response) {
-              working.response = data.response;
+          if (orchTrace) {
+            const prevOrch =
+              working.orchestration ?? createInitialOrchestrationState();
+            working.orchestration = reduceOrchestrationTrace(prevOrch, orchTrace);
+          }
+
+          if (!isOrchPackage) {
+            if (
+              resultMap?.eventData &&
+              typeof resultMap.eventData === 'object' &&
+              !Array.isArray(resultMap.eventData)
+            ) {
+              combineData(resultMap.eventData, working);
             }
-            working.loading = false;
-            if (working.orchestration) {
-              working.orchestration = markOrchestrationDone(
-                working.orchestration,
-              );
-            }
-          } else if (!orchEvent) {
-            // DIRECT / eventData streams: keep incremental body updates.
-            if (data.responseAll) {
-              working.response = data.responseAll;
-            } else if (data.response) {
-              working.response = data.response;
-            }
-            if (finished) {
+
+            if (packageType === 'result' && finished) {
+              if (data.responseAll) {
+                working.response = data.responseAll;
+              } else if (data.response) {
+                working.response = data.response;
+              }
+              working.loading = false;
+              if (working.orchestration) {
+                working.orchestration = markOrchestrationDone(
+                  working.orchestration,
+                );
+              }
+            } else if (!orchEvent) {
+              if (data.responseAll) {
+                working.response = data.responseAll;
+              } else if (data.response) {
+                working.response = data.response;
+              }
+              if (finished) {
+                working.loading = false;
+                if (working.orchestration) {
+                  working.orchestration = markOrchestrationDone(
+                    working.orchestration,
+                  );
+                }
+              }
+            } else if (finished) {
               working.loading = false;
               if (working.orchestration) {
                 working.orchestration = markOrchestrationDone(
@@ -725,16 +761,34 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 );
               }
             }
-          } else if (finished) {
-            working.loading = false;
-            if (working.orchestration) {
-              working.orchestration = markOrchestrationDone(
-                working.orchestration,
-              );
-            }
           }
 
-          const taskData = handleTaskData(working, deepThink, working.multiAgent);
+          const existing = idx >= 0 ? prev[idx] : undefined;
+          const nextItem: PersistedChatItem = {
+            ...working,
+            orchestration:
+              working.orchestration && existing?.orchestration
+                ? preserveOrchestrationFold(
+                    working.orchestration,
+                    existing.orchestration,
+                  )
+                : working.orchestration,
+          };
+          currentChat = nextItem;
+          if (idx < 0) {
+            return prev;
+          }
+          const next = [...prev];
+          next[idx] = nextItem;
+          return next;
+        });
+
+        if (!isOrchPackage) {
+          const taskData = handleTaskData(
+            currentChat,
+            deepThink,
+            currentChat.multiAgent,
+          );
           setTaskList(taskData.taskList);
           temporaryChangeTask(taskData.taskList);
           if (taskData.plan) {
@@ -743,7 +797,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           openAction(taskData.taskList);
         }
 
-        commitWorkingChat(working);
+        if (chatRef.current) {
+          scrollToTop(chatRef.current);
+        }
       };
 
       const handleMessage = usePhase2 ? handleMessagePhase2 : handleMessageV1;

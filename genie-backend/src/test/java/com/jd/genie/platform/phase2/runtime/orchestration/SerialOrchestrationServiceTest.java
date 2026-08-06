@@ -36,9 +36,11 @@ class SerialOrchestrationServiceTest {
         FakeRuntimeToolCollectionPort tools = new FakeRuntimeToolCollectionPort();
         ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
         List<String> executionOrder = new ArrayList<>();
+        List<String> queries = new ArrayList<>();
         doAnswer(invocation -> {
             AgentContext context = invocation.getArgument(0);
             executionOrder.add(context.getRequestId());
+            queries.add(context.getQuery());
             return AgentTaskResult.success(context.getRequestId().equals("step-1") ? "safe-result" : "final-result");
         }).when(executor).execute(any(), any(), any(), any(Integer.TYPE));
         List<String> eventTypes = new ArrayList<>();
@@ -46,7 +48,7 @@ class SerialOrchestrationServiceTest {
 
         Map<String, AgentTaskResult> results = service.execute(
                 USER,
-                "question",
+                "请用可用 Agent 各用一句话描述春天，然后汇总成一段话。",
                 List.of(
                         new OrchestrationStep("step-1", "agent-a", "first", List.of()),
                         new OrchestrationStep("step-2", "agent-b", "second", List.of("step-1"))
@@ -55,6 +57,13 @@ class SerialOrchestrationServiceTest {
         );
 
         assertEquals(List.of("step-1", "step-2"), executionOrder);
+        // Sub-agent must receive the step objective, not the parent orchestration query.
+        org.junit.jupiter.api.Assertions.assertTrue(queries.get(0).contains("first"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                queries.get(0).contains("请用可用 Agent 各用一句话描述春天，然后汇总成一段话。")
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(queries.get(1).contains("second"));
+        org.junit.jupiter.api.Assertions.assertTrue(queries.get(1).contains("safe-result"));
         assertEquals(List.of("agent-a", "agent-b"), tools.getCalls().stream()
                 .map(FakeRuntimeToolCollectionPort.CallRecord::agentId)
                 .toList());

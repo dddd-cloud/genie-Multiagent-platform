@@ -97,6 +97,50 @@ function CollapsibleBlock({
   );
 }
 
+function looksLikeId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function displayAgentName(step: StepUiState): string {
+  const name = (step.agentName || '').trim();
+  if (name && !looksLikeId(name)) {
+    return name;
+  }
+  const id = (step.agentId || '').trim();
+  if (id && !looksLikeId(id)) {
+    return id;
+  }
+  return name || id || step.stepId;
+}
+
+function liveProgressHint(
+  state: OrchestrationUiState,
+  steps: StepUiState[],
+): string {
+  const running = steps.find((step) => step.status === 'RUNNING');
+  if (running) {
+    const thought = [...running.lines]
+      .reverse()
+      .find((line) => line.kind === 'THOUGHT' || line.kind === 'STATUS');
+    if (thought?.text) {
+      const text = thought.text.replace(/\s+/g, ' ').trim();
+      return `${displayAgentName(running)}：${text.slice(0, 48)}${text.length > 48 ? '…' : ''}`;
+    }
+    return `${displayAgentName(running)} 执行中…`;
+  }
+  const lastMain = [...state.main.lines].reverse().find((line) => line.text);
+  if (lastMain?.text) {
+    const text = lastMain.text.replace(/\s+/g, ' ').trim();
+    return `${text.slice(0, 56)}${text.length > 56 ? '…' : ''}`;
+  }
+  if (steps.length > 0) {
+    return `已安排 ${steps.length} 个步骤`;
+  }
+  return '正在编排…';
+}
+
 function latestAttemptSteps(
   state: OrchestrationUiState,
 ): { attemptNo: number; steps: StepUiState[] } | null {
@@ -127,11 +171,14 @@ export default function OrchestrationTimeline({
     return null;
   }
 
-  const header =
-    state.phaseLabel === 'done' || state.terminalStatus !== 'RUNNING'
-      ? '已完成思考'
-      : '思考中';
+  const thinking =
+    state.phaseLabel !== 'done' && state.terminalStatus === 'RUNNING';
+  const header = thinking ? '思考中' : '已完成思考';
   const latest = latestAttemptSteps(state);
+  const liveHint = thinking ? liveProgressHint(state, latest?.steps ?? []) : '';
+  const stepsHaveObjectives = (latest?.steps ?? []).some(
+    (step) => (step.objective || '').trim().length > 0,
+  );
 
   return (
     <div
@@ -145,7 +192,19 @@ export default function OrchestrationTimeline({
         aria-expanded={state.masterOpen}
         data-testid="orchestration-master-toggle"
       >
-        <span className="text-[13px] text-text-secondary">{header}</span>
+        <span className="flex-1 min-w-0 flex items-center gap-8">
+          <span className="text-[13px] text-text-secondary shrink-0">
+            {header}
+          </span>
+          {liveHint ? (
+            <span
+              className="text-[12px] text-text-tertiary truncate"
+              data-testid="orchestration-live-hint"
+            >
+              {liveHint}
+            </span>
+          ) : null}
+        </span>
         <Caret open={state.masterOpen} />
       </button>
 
@@ -157,13 +216,39 @@ export default function OrchestrationTimeline({
             onToggle={onToggleMain}
             testId="orchestration-main"
           >
-            <TraceBody lines={state.main.lines} />
+            {latest && latest.steps.length > 0 ? (
+              <div
+                className="px-8 pt-6 pb-2 text-[12px] leading-[18px] text-text-secondary"
+                data-testid="orchestration-plan-steps"
+              >
+                <div className="text-text-tertiary mb-4">任务安排</div>
+                {latest.steps.map((step) => (
+                  <div key={step.stepId} className="mb-2">
+                    - [{step.stepId}] {displayAgentName(step)}：{step.objective}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <TraceBody
+              lines={
+                // Hide MAIN "任务安排" text only when structured objectives are present.
+                stepsHaveObjectives
+                  ? state.main.lines.filter(
+                      (line) =>
+                        !(
+                          line.kind === 'OUTPUT' &&
+                          line.text.trimStart().startsWith('任务安排')
+                        ),
+                    )
+                  : state.main.lines
+              }
+            />
           </CollapsibleBlock>
 
           {latest?.steps.map((step) => (
             <CollapsibleBlock
               key={`${latest.attemptNo}-${step.stepId}`}
-              title={step.agentName || step.agentId}
+              title={displayAgentName(step)}
               open={step.open}
               status={step.status}
               onToggle={() => onToggleStep?.(latest.attemptNo, step.stepId)}

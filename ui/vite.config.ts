@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
 import { mvpMockApiPlugin } from './mocks/viteMockPlugin';
+import { sseProxyPlugin } from './vite.sseProxyPlugin';
 
 export default defineConfig(({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -19,6 +20,7 @@ export default defineConfig(({ command, mode, isPreview }) => {
   }
 
   // mvp-mock serves APIs via mvpMockApiPlugin — do not proxy to a dead backend.
+  // SSE streams use sseProxyPlugin; Vite http-proxy buffers text/event-stream.
   const proxy = isMvpMock
     ? undefined
     : {
@@ -37,7 +39,12 @@ export default defineConfig(({ command, mode, isPreview }) => {
     };
 
   return {
-    plugins: [react(), tailwindcss(), mvpMockApiPlugin(isMvpMock)],
+    plugins: [
+      react(),
+      tailwindcss(),
+      mvpMockApiPlugin(isMvpMock),
+      sseProxyPlugin(isMvpMock ? undefined : env.SERVICE_BASE_URL),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, 'src'),
