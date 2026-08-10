@@ -84,8 +84,31 @@ public final class ConfiguredAgentPrinter implements Printer {
         if (text == null || text.isBlank()) {
             return;
         }
+        // ReactImplAgent forwards the final model content as tool_thought when not streaming.
+        // That content is usually the frozen result JSON — never show it as "thinking".
+        if (looksLikeResultContract(text)) {
+            return;
+        }
         traceChannel.emitStep(attemptNo, stepId, agentId, agentName,
                 OrchestrationTraceChannel.KIND_THOUGHT, text, true);
+    }
+
+    static boolean looksLikeResultContract(String text) {
+        String trimmed = text.trim();
+        if (trimmed.startsWith("```")) {
+            int nl = trimmed.indexOf('\n');
+            if (nl > 0) {
+                trimmed = trimmed.substring(nl + 1).trim();
+            }
+        }
+        if (!trimmed.startsWith("{")) {
+            return false;
+        }
+        return trimmed.contains("\"status\"")
+                && (trimmed.contains("\"SUCCESS\"") || trimmed.contains("\"FAILURE\""))
+                && trimmed.contains("\"output\"")
+                && trimmed.contains("\"errorCode\"")
+                && trimmed.contains("\"retryable\"");
     }
 
     private static String extractSafeText(Object message) {

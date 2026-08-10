@@ -58,10 +58,36 @@ public class RuntimeToolCollectionService implements RuntimeToolCollectionPort {
 
     private UserMcpToolAdapter mcpTool(CurrentUser user, String key, AgentContext context) {
         String toolId = CapabilityKeys.mcpToolId(key);
-        return jdbc.query("SELECT t.mcp_server_id,t.runtime_name,t.description,t.input_schema FROM mcp_tool t JOIN mcp_server s ON s.id=t.mcp_server_id WHERE t.id=? AND t.tenant_id=? AND t.owner_id=? AND t.enabled=TRUE AND t.available=TRUE AND s.status='ENABLED' AND s.deleted_at IS NULL", rs -> {
-            if (!rs.next()) throw new ToolCapabilityException("tool is not bound");
-            try { JsonNode schema = mapper.readTree(rs.getString(4)); return new UserMcpToolAdapter(jdbc, client, credentials, urlPolicy, mapper, user, toolId, rs.getString(1), key, rs.getString(2), rs.getString(3), schema); }
-            catch (Exception ex) { throw new Phase2ContractException(MvpErrorCode.TOOL_INVALID_RESPONSE, "tool schema invalid", ex); }
-        }, toolId, user.tenantId(), user.userId());
+        return jdbc.query(
+                "SELECT t.mcp_server_id,t.runtime_name,t.tool_name,t.description,t.input_schema FROM mcp_tool t JOIN mcp_server s ON s.id=t.mcp_server_id WHERE t.id=? AND t.tenant_id=? AND t.owner_id=? AND t.enabled=TRUE AND t.available=TRUE AND s.status='ENABLED' AND s.deleted_at IS NULL",
+                rs -> {
+                    if (!rs.next()) {
+                        throw new ToolCapabilityException("tool is not bound");
+                    }
+                    try {
+                        JsonNode schema = mapper.readTree(rs.getString(5));
+                        return new UserMcpToolAdapter(
+                                jdbc,
+                                client,
+                                credentials,
+                                urlPolicy,
+                                mapper,
+                                user,
+                                toolId,
+                                rs.getString(1),
+                                key,
+                                rs.getString(2),
+                                rs.getString(3),
+                                rs.getString(4),
+                                schema
+                        );
+                    } catch (Exception ex) {
+                        throw new Phase2ContractException(MvpErrorCode.TOOL_INVALID_RESPONSE, "tool schema invalid", ex);
+                    }
+                },
+                toolId,
+                user.tenantId(),
+                user.userId()
+        );
     }
 }

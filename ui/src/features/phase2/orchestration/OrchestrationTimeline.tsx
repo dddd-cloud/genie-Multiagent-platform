@@ -123,7 +123,19 @@ function liveProgressHint(
   if (running) {
     const thought = [...running.lines]
       .reverse()
-      .find((line) => line.kind === 'THOUGHT' || line.kind === 'STATUS');
+      .find((line) => {
+        if (line.kind !== 'THOUGHT' && line.kind !== 'STATUS') return false;
+        const t = (line.text || '').trim();
+        // Hide frozen result-contract JSON leaked as tool_thought.
+        if (
+          t.startsWith('{') &&
+          t.includes('"status"') &&
+          t.includes('"output"')
+        ) {
+          return false;
+        }
+        return t.length > 0;
+      });
     if (thought?.text) {
       const text = thought.text.replace(/\s+/g, ' ').trim();
       return `${displayAgentName(running)}：${text.slice(0, 48)}${text.length > 48 ? '…' : ''}`;

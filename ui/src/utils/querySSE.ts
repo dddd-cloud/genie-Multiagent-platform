@@ -210,15 +210,9 @@ export function querySSE(
       try {
         handleMessage(data);
       } catch (error) {
-        const err =
-          error instanceof Error ? error : new Error(String(error));
-        settle({
-          kind: 'INTERRUPTED',
-          reason: 'FATAL',
-          message: err.message,
-        });
-        handleError?.(err);
-        throw err;
+        // UI reduce/render bugs must not abort the SSE stream; otherwise the
+        // backend sees Broken pipe and persists CLIENT_DISCONNECTED mid-run.
+        console.error('SSE handleMessage failed; continuing stream', error);
       }
 
       if (data.finished === true) {

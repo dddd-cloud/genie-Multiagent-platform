@@ -24,16 +24,32 @@ class McpClientError(Exception):
 
 
 class _PinnedBackend(httpcore.AsyncNetworkBackend):
-    """Resolve and dial the verified IP, while retaining the original TLS host/SNI."""
+    """Resolve and dial the verified IP (httpcore 1.x host/port API)."""
+
     def __init__(self):
         self._delegate = httpcore.AnyIOBackend()
 
-    async def connect_tcp(self, origin, timeout=None, local_address=None, socket_options=None):
-        addresses = resolve_safe_addresses(origin.host.decode() if isinstance(origin.host, bytes) else origin.host, origin.port)
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ):
+        hostname = host.decode() if isinstance(host, bytes) else host
+        addresses = resolve_safe_addresses(hostname, port)
         last_error = None
         for address in addresses:
             try:
-                return await self._delegate.connect_tcp(address, origin.port, timeout, local_address, socket_options)
+                # Dial the pre-validated IP; TLS SNI still comes from the request URL host.
+                return await self._delegate.connect_tcp(
+                    host=address,
+                    port=port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
             except Exception as exc:  # try another already-validated address
                 last_error = exc
         raise McpClientError("MCP_UNAVAILABLE") from last_error
@@ -41,7 +57,7 @@ class _PinnedBackend(httpcore.AsyncNetworkBackend):
     async def connect_unix_socket(self, path, timeout=None, socket_options=None):
         raise McpClientError("MCP_URL_REJECTED")
 
-    async def sleep(self, seconds=0):
+    async def sleep(self, seconds: float = 0):
         await self._delegate.sleep(seconds)
 
 
@@ -153,6 +169,7 @@ class SseClient:
             streams = await streams_context.__aenter__()
             session_context = ClientSession(*streams)
             session = await session_context.__aenter__()
+            await session.initialize()
             yield session
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (301, 302, 303, 307, 308):

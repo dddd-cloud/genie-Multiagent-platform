@@ -97,10 +97,12 @@ const BUILTIN_CAPABILITIES: ToolCapabilityItem[] = [
 ];
 
 function mapToolCapability(tool: Phase2McpToolResponse): ToolCapabilityItem {
+  // Backend CapabilityKeys require mcp:<toolId>, not runtimeName.
+  const toolId = tool.id?.trim();
   return {
-    key: tool.runtimeName || tool.toolName,
-    displayName: tool.toolName,
-    available: tool.available,
+    key: toolId ? `mcp:${toolId}` : '',
+    displayName: tool.toolName ? `MCP · ${tool.toolName}` : `MCP · ${toolId}`,
+    available: Boolean(tool.available && toolId),
   };
 }
 
@@ -212,7 +214,9 @@ export async function listToolCapabilities(signal?: AbortSignal) {
     undefined,
     signal,
   );
-  const mcpItems = (tools ?? []).map(mapToolCapability);
+  const mcpItems = (tools ?? [])
+    .map(mapToolCapability)
+    .filter((item) => item.key.startsWith('mcp:'));
   const seen = new Set(BUILTIN_CAPABILITIES.map((c) => c.key));
   const merged = [...BUILTIN_CAPABILITIES];
   for (const item of mcpItems) {

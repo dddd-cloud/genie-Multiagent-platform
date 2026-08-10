@@ -121,6 +121,11 @@ public final class OrchestrationTraceChannel {
                 .packageType(PACKAGE_TYPE)
                 .resultMap(Map.of("orchestrationTrace", trace))
                 .build();
-        observer.onEvent(packet);
+        // Thoughts are progress-only; a transient write failure must not abort the run.
+        if (KIND_THOUGHT.equals(safeKind)) {
+            observer.onEventBestEffort(packet);
+        } else {
+            observer.onEvent(packet);
+        }
     }
 }

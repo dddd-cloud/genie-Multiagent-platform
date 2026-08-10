@@ -31,6 +31,7 @@ public class ReactImplAgent extends ReActAgent {
 
     private List<ToolCall> toolCalls;
     private Integer maxObserve;
+    private Integer llmTimeoutSeconds = 300;
     private String systemPromptSnapshot;
     private String nextStepPromptSnapshot;
 
@@ -87,12 +88,13 @@ public class ReactImplAgent extends ReActAgent {
             // 获取带工具选项的响应
             context.setStreamMessageType("tool_thought");
 
+            int timeout = llmTimeoutSeconds == null || llmTimeoutSeconds <= 0 ? 300 : llmTimeoutSeconds;
             CompletableFuture<LLM.ToolCallResponse> future = getLlm().askTool(
                     context,
                     getMemory().getMessages(),
                     Message.systemMessage(getSystemPrompt(), null),
                     availableTools,
-                    ToolChoice.AUTO, null, context.getIsStream(), 300
+                    ToolChoice.AUTO, null, context.getIsStream(), timeout
             );
 
             LLM.ToolCallResponse response = future.get();
@@ -114,8 +116,11 @@ public class ReactImplAgent extends ReActAgent {
         } catch (Exception e) {
 
             log.error("{} react think error", context.getRequestId(), e);
+            // Emit a parseable Phase2 FAILURE envelope so orchestration does not map
+            // timeouts to AGENT_INVALID_RESULT.
             getMemory().addMessage(Message.assistantMessage(
-                    "Error encountered while processing: " + e.getMessage(), null));
+                    "{\"status\":\"FAILURE\",\"output\":null,\"errorCode\":\"EXECUTION_ERROR\",\"retryable\":true}",
+                    null));
             setState(AgentState.FINISHED);
             return false;
         }

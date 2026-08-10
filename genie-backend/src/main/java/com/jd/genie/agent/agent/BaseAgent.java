@@ -126,14 +126,32 @@ public abstract class BaseAgent {
             // 执行工具
             Object result = availableTools.execute(name, args);
             log.info("{} execute tool: {} {} result {}", context.getRequestId(), name, args, result);
-            // 格式化结果
             if (Objects.nonNull(result)) {
-                return (String) result;
+                return stringifyToolResult(result, mapper);
             }
         } catch (Exception e) {
             log.error("{} execute tool {} failed ", context.getRequestId(), name, e);
         }
         return "Tool" + name + " Error.";
+    }
+
+    private static final int MAX_TOOL_RESULT_CHARS = 8000;
+
+    private static String stringifyToolResult(Object result, ObjectMapper mapper) {
+        String text;
+        if (result instanceof String stringResult) {
+            text = stringResult;
+        } else {
+            try {
+                text = mapper.writeValueAsString(result);
+            } catch (Exception ignored) {
+                text = String.valueOf(result);
+            }
+        }
+        if (text.length() <= MAX_TOOL_RESULT_CHARS) {
+            return text;
+        }
+        return text.substring(0, MAX_TOOL_RESULT_CHARS) + "\n...(truncated)";
     }
 
     /**

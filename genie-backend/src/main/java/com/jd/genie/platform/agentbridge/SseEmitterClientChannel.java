@@ -12,15 +12,23 @@ import java.util.Objects;
 public final class SseEmitterClientChannel implements ConversationStreamObserver.ClientChannel {
     private final SseEmitter emitter;
     private final String traceId;
+    private final Object sendLock;
 
     public SseEmitterClientChannel(SseEmitter emitter, String traceId) {
+        this(emitter, traceId, new Object());
+    }
+
+    public SseEmitterClientChannel(SseEmitter emitter, String traceId, Object sendLock) {
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.traceId = requireText(traceId, "traceId");
+        this.sendLock = Objects.requireNonNull(sendLock, "sendLock");
     }
 
     @Override
     public void sendEvent(GptProcessResult event) throws IOException {
-        emitter.send(event);
+        synchronized (sendLock) {
+            emitter.send(event);
+        }
     }
 
     @Override
@@ -33,7 +41,9 @@ public final class SseEmitterClientChannel implements ConversationStreamObserver
         failure.setTraceId(traceId);
         failure.setReqId(traceId);
         failure.setErrorMsg(requireText(message, "message"));
-        emitter.send(failure);
+        synchronized (sendLock) {
+            emitter.send(failure);
+        }
         log.warn(
                 "Agent execution failed, traceId: {}, errorCode: {}",
                 traceId,
@@ -43,7 +53,9 @@ public final class SseEmitterClientChannel implements ConversationStreamObserver
 
     @Override
     public void complete() {
-        emitter.complete();
+        synchronized (sendLock) {
+            emitter.complete();
+        }
     }
 
     private static String requireText(String value, String fieldName) {

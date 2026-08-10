@@ -66,7 +66,8 @@ public class SkillDefinitionService {
 
     @Transactional(readOnly = true)
     public SkillResponse getSkill(CurrentUser user, String skillId) {
-        return toResponse(requireOwnedSkill(user, skillId), List.of());
+        SkillDefinitionEntity entity = requireOwnedSkill(user, skillId);
+        return toResponse(entity, skillCapabilityKeys(user, skillId));
     }
 
     @Transactional(readOnly = true)
@@ -79,8 +80,12 @@ public class SkillDefinitionService {
             user.tenantId(), user.userId(), validPageSize + 1, (validPage - 1) * validPageSize);
         boolean hasMore = rows.size() > validPageSize;
         List<SkillDefinitionEntity> items = hasMore ? rows.subList(0, validPageSize) : rows;
-        return new PageResponse<>(items.stream().map(entity -> toResponse(entity, List.of())).toList(),
-            validPage, validPageSize, hasMore);
+        return new PageResponse<>(
+            items.stream().map(entity -> toResponse(entity, skillCapabilityKeys(user, entity.getId()))).toList(),
+            validPage,
+            validPageSize,
+            hasMore
+        );
     }
 
     @Transactional
@@ -108,7 +113,7 @@ public class SkillDefinitionService {
     public SkillResponse enableSkill(CurrentUser user, String skillId, Long version) {
         SkillDefinitionEntity entity = requireOwnedSkill(user, skillId);
         if (SkillStatus.ENABLED.name().equals(entity.getStatus())) {
-            return toResponse(entity, List.of());
+            return toResponse(entity, skillCapabilityKeys(user, skillId));
         }
         int updated = skillMapper.updateStatusOwnedWithVersion(user.tenantId(), user.userId(), skillId,
             requireVersion(version), SkillStatus.ENABLED.name(), Instant.now(clock));
@@ -120,7 +125,7 @@ public class SkillDefinitionService {
     public SkillResponse disableSkill(CurrentUser user, String skillId, Long version) {
         SkillDefinitionEntity entity = requireOwnedSkill(user, skillId);
         if (SkillStatus.DISABLED.name().equals(entity.getStatus())) {
-            return toResponse(entity, List.of());
+            return toResponse(entity, skillCapabilityKeys(user, skillId));
         }
         int updated = skillMapper.updateStatusOwnedWithVersion(user.tenantId(), user.userId(), skillId,
             requireVersion(version), SkillStatus.DISABLED.name(), Instant.now(clock));
@@ -250,6 +255,14 @@ public class SkillDefinitionService {
             throw error(MvpErrorCode.VALIDATION_ERROR);
         }
         return normalized;
+    }
+
+    private List<String> skillCapabilityKeys(CurrentUser user, String skillId) {
+        // resolveBindings requires an agentId; skillId is only used to load skill_tool_binding.
+        return toolBindingPort()
+            .resolveBindings(user, skillId, List.of(skillId))
+            .skillCapabilities()
+            .getOrDefault(skillId, List.of());
     }
 
     private ToolBindingPort toolBindingPort() {

@@ -257,7 +257,8 @@ public class MultiAgentServiceImpl implements IMultiAgentService {
                 return false;
             }
             if (data.startsWith("heartbeat")) {
-                observer.onEvent(buildHeartbeatData(request.getRequestId()));
+                // Heartbeat must never mark CLIENT_DISCONNECTED — keep the agent run alive.
+                observer.onEventBestEffort(buildHeartbeatData(request.getRequestId()));
                 return !observer.isTerminal();
             }
 

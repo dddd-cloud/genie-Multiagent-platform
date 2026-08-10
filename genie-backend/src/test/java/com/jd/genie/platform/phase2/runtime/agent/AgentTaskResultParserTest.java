@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentTaskResultParserTest {
     private final AgentTaskResultParser parser = new AgentTaskResultParser();
@@ -57,5 +58,44 @@ class AgentTaskResultParserTest {
                 () -> parser.parse("{\"status\":\"FAILURE\",\"output\":null,\"errorCode\":\"UNKNOWN\",\"retryable\":false}")
         );
         assertEquals(MvpErrorCode.AGENT_INVALID_RESULT, error.getErrorCode());
+    }
+
+    @Test
+    void recoversSuccessWhenOutputContainsUnescapedQuotes() {
+        // Mirrors the production failure: comparison text embeds ASCII quotes inside output.
+        String dirty = """
+                {"status":"SUCCESS","output":"## 对比评价\\n\\nAgent a 如"顺利完成并上线了全新登录页"，偏概括。\\nAgent b 更优。","errorCode":null,"retryable":false}
+                """;
+
+        AgentTaskResult result = parser.parse(dirty);
+
+        assertEquals(AgentTaskResult.Status.SUCCESS, result.status());
+        assertTrue(result.output().contains("顺利完成并上线了全新登录页"));
+        assertTrue(result.output().contains("Agent b 更优"));
+        assertTrue(result.output().contains("对比评价"));
+    }
+
+    @Test
+    void recoversSuccessWhenOutputContainsMarkdownAndNewlines() {
+        String dirty = """
+                {"status":"SUCCESS","output":"## Agent a 与 Agent b 周报对比评价
+
+                **结论：Agent b 的周报质量明显更优。**
+
+                ### 具体评价理由：
+                1. 信息颗粒度
+                ","errorCode":null,"retryable":false}
+                """;
+
+        AgentTaskResult result = parser.parse(dirty);
+        assertEquals(AgentTaskResult.Status.SUCCESS, result.status());
+        assertTrue(result.output().contains("Agent b 的周报质量明显更优"));
+    }
+
+    @Test
+    void stillAcceptsProperlyEscapedQuotesViaStrictPath() {
+        String clean = "{\"status\":\"SUCCESS\",\"output\":\"引用 \\\"原文\\\" 也可\",\"errorCode\":null,\"retryable\":false}";
+        AgentTaskResult result = parser.parse(clean);
+        assertEquals("引用 \"原文\" 也可", result.output());
     }
 }

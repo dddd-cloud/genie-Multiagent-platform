@@ -173,15 +173,8 @@ export function dataAgentSSE(
       try {
         handleMessage(data);
       } catch (error) {
-        const err =
-          error instanceof Error ? error : new Error(String(error));
-        settle({
-          kind: 'INTERRUPTED',
-          reason: 'FATAL',
-          message: err.message,
-        });
-        handleError?.(err);
-        throw err;
+        // Keep the stream alive; a UI handler bug must not look like CLIENT_DISCONNECTED.
+        console.error('SSE handleMessage failed; continuing stream', error);
       }
 
       if (eventType === 'READY') {

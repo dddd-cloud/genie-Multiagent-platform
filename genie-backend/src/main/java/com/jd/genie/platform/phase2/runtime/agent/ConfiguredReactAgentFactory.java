@@ -16,13 +16,26 @@ public final class ConfiguredReactAgentFactory {
      */
     private static final String RESULT_CONTRACT = """
             
-            You must finish by outputting ONLY one JSON object (no markdown, no extra text):
+            You must finish by outputting ONLY one JSON object (no markdown fence, no extra keys):
             {"status":"SUCCESS","output":"<your final answer>","errorCode":null,"retryable":false}
             On failure use:
             {"status":"FAILURE","output":null,"errorCode":"EXECUTION_ERROR","retryable":true}
-            Prefer answering without tools when tools are empty or unnecessary.
+            Inside output, escape every double-quote as \\" and every newline as \\n.
+            When tools are available, you MUST call them for live/external facts (tickets, schedules, search, dates) instead of guessing or refusing.
+            Prefer answering without tools only when the tool list is empty or the question needs no external data.
+            For train/ticket tools: use trainFilterFlags=G for 高铁, set earliestStartTime/latestStartTime for the requested window, limitedNum=60 (never 0), sortFlag=startTime, format=text.
+            Call get-tickets at most once. Prefer city/station Chinese names; skip station-code lookup unless required.
+            After tools return a 票务查询摘要/schedule block: finish immediately with SUCCESS JSON.
+            If the user asked for count + every departure time, put uniqueTrainCount and the full schedule list into output (one train per line: 车次 出发时间).
+            Do NOT re-query for a fuller timetable. Do NOT invent times missing from schedule.
             If the user message describes a single step objective for you as one sub-agent, answer ONLY that objective.
             Do not discuss which other agents are available, and do not rewrite the whole multi-agent plan.
+            """;
+
+    /** Short nudge only — never re-inject the full system prompt (skills) each step. */
+    private static final String NEXT_STEP_NUDGE = """
+            After the latest tool result: either call one more truly necessary tool, or finish NOW with ONLY the SUCCESS/FAILURE JSON object.
+            If a schedule block is present, answer from it (include all departures when asked). Do not call get-tickets again.
             """;
 
     public ReactImplAgent create(
@@ -53,10 +66,13 @@ public final class ConfiguredReactAgentFactory {
                 + RESULT_CONTRACT;
         agent.setSystemPrompt(prompt);
         agent.setSystemPromptSnapshot(prompt);
-        agent.setNextStepPrompt(prompt);
-        agent.setNextStepPromptSnapshot(prompt);
+        agent.setNextStepPrompt(NEXT_STEP_NUDGE);
+        agent.setNextStepPromptSnapshot(NEXT_STEP_NUDGE);
         agent.setLlm(new LLM(profile.resolvedModelName(), ""));
         agent.setMaxSteps(boundedSteps);
+        // Schedule summaries are compact but may list ~60 trains.
+        agent.setMaxObserve(8000);
+        agent.setLlmTimeoutSeconds(600);
         agent.setAvailableTools(context.getToolCollection());
         return agent;
     }

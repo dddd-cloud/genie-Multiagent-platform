@@ -21,11 +21,17 @@ public class SSEPrinter implements Printer {
     private SseEmitter emitter;
     private AgentRequest request;
     private Integer agentType;
+    private final Object sendLock;
 
     public SSEPrinter(SseEmitter emitter, AgentRequest request, Integer agentType) {
+        this(emitter, request, agentType, new Object());
+    }
+
+    public SSEPrinter(SseEmitter emitter, AgentRequest request, Integer agentType, Object sendLock) {
         this.emitter = emitter;
         this.request = request;
         this.agentType = agentType;
+        this.sendLock = Objects.requireNonNull(sendLock, "sendLock");
     }
 
     @Override
@@ -114,7 +120,9 @@ public class SSEPrinter implements Printer {
                     break;
             }
 
-            emitter.send(response);
+            synchronized (sendLock) {
+                emitter.send(response);
+            }
 
         } catch (Exception e) {
             log.error("sse send error ", e);
@@ -138,7 +146,9 @@ public class SSEPrinter implements Printer {
 
     @Override
     public void close() {
-        emitter.complete();
+        synchronized (sendLock) {
+            emitter.complete();
+        }
     }
 
     @Override

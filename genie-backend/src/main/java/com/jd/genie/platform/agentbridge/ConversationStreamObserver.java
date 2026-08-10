@@ -3,11 +3,13 @@ package com.jd.genie.platform.agentbridge;
 import com.jd.genie.model.response.GptProcessResult;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.contract.StreamSnapshotEnvelope;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+@Slf4j
 public final class ConversationStreamObserver {
     private static final String DEFAULT_DOWNSTREAM_MESSAGE = "Agent downstream stream failed";
     private static final String CLIENT_DISCONNECTED_MESSAGE = "Client disconnected before the Agent stream completed";
@@ -87,6 +89,31 @@ public final class ConversationStreamObserver {
                 return transitionToInterrupted(
                         new Failure(MvpErrorCode.CLIENT_DISCONNECTED, messageOf(error, CLIENT_DISCONNECTED_MESSAGE))
                 );
+            }
+        }
+    }
+
+    /**
+     * Live-trace helper: never mark the stream CLIENT_DISCONNECTED on send failure.
+     * Critical orchestration/result events must still use {@link #onEvent}.
+     */
+    public boolean onEventBestEffort(GptProcessResult event) {
+        synchronized (coordinationLock) {
+            if (state.get() != TerminalState.OPEN) {
+                return false;
+            }
+            try {
+                snapshotBuffer.append(event);
+            } catch (Throwable error) {
+                log.warn("best-effort snapshot append failed: {}", error.toString());
+                return false;
+            }
+            try {
+                clientChannel.sendEvent(event);
+                return true;
+            } catch (Throwable error) {
+                log.warn("best-effort SSE send failed: {}", error.toString());
+                return false;
             }
         }
     }

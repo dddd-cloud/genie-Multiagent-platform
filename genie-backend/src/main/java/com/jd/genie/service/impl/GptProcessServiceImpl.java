@@ -26,6 +26,7 @@ import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.service.IGptProcessService;
 import com.jd.genie.service.IMultiAgentService;
+import com.jd.genie.model.response.GptProcessResult;
 import com.jd.genie.util.SseUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -37,6 +38,7 @@ import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ScheduledFuture;
 
 @Slf4j
 @Service
@@ -322,18 +324,34 @@ public class GptProcessServiceImpl implements IGptProcessService {
             SseEmitter emitter,
             String traceId,
             StreamPersistenceObserver persistence,
-            ConversationStreamObserver observer
+            ConversationStreamObserver observer,
+            ScheduledFuture<?> heartbeatFuture
     ) {
         try {
             SseUtil.registerLifecycle(
                     emitter,
                     traceId,
-                    ignored -> observer.onClientDisconnected()
+                    ignored -> observer.onClientDisconnected(),
+                    heartbeatFuture
             );
         } catch (RuntimeException error) {
             failPreparedExecution(persistence, error);
             throw error;
         }
+    }
+
+    private static GptProcessResult buildConversationHeartbeat(String traceId) {
+        GptProcessResult heartbeat = new GptProcessResult();
+        heartbeat.setFinished(false);
+        heartbeat.setStatus("success");
+        heartbeat.setResponseType("text");
+        heartbeat.setResponse("");
+        heartbeat.setResponseAll("");
+        heartbeat.setTraceId(traceId);
+        heartbeat.setReqId(traceId);
+        heartbeat.setPackageType("heartbeat");
+        heartbeat.setEncrypted(false);
+        return heartbeat;
     }
 
     private void startAgent(
@@ -368,20 +386,28 @@ public class GptProcessServiceImpl implements IGptProcessService {
                 loadHistory(currentUser, request, persistence);
                 SseEmitter emitter = createEmitter(persistence);
                 CancellableAgentCall cancellableCall = new CancellableAgentCall();
+                SseEmitterClientChannel clientChannel =
+                        new SseEmitterClientChannel(emitter, request.getTraceId());
                 ConversationStreamObserver observer = new ConversationStreamObserver(
                         persistence,
-                        new SseEmitterClientChannel(emitter, request.getTraceId()),
+                        clientChannel,
                         maxSnapshotBytes,
                         cancellableCall
                 );
-                registerLifecycle(emitter, request.getTraceId(), persistence, observer);
+                ScheduledFuture<?> heartbeatFuture = SseUtil.startHeartbeat(
+                        request.getTraceId(),
+                        () -> observer.onEventBestEffort(buildConversationHeartbeat(request.getTraceId()))
+                );
+                registerLifecycle(emitter, request.getTraceId(), persistence, observer, heartbeatFuture);
                 try {
                     if (!observer.markStreaming()) {
+                        heartbeatFuture.cancel(false);
                         return emitter;
                     }
                     starter.start(observer, cancellableCall);
                     return emitter;
                 } catch (RuntimeException error) {
+                    heartbeatFuture.cancel(false);
                     failPreparedExecution(persistence, error);
                     throw error;
                 }

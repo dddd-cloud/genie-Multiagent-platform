@@ -111,17 +111,38 @@ const SkillForm: GenieType.FC<SkillFormProps> = memo(
           />
         </div>
         <div>
-          <Text strong>能力（capabilityKeys）</Text>
+          <Text strong>能力（内置 + MCP）</Text>
+          <Text type="secondary" className="mt-4 block">
+            MCP 工具在此多选绑定
+          </Text>
           <Select
             className="mt-6 w-full"
             mode="multiple"
             allowClear
             disabled={locked}
             value={value.capabilityKeys}
-            options={availableCaps.map((c) => ({
-              value: c.key,
-              label: c.displayName || c.key,
-            }))}
+            placeholder="选择内置能力或 MCP 工具"
+            optionFilterProp="label"
+            options={[
+              {
+                label: '内置能力',
+                options: availableCaps
+                  .filter((c) => c.key.startsWith('builtin:'))
+                  .map((c) => ({
+                    value: c.key,
+                    label: c.displayName || c.key,
+                  })),
+              },
+              {
+                label: 'MCP 工具',
+                options: availableCaps
+                  .filter((c) => c.key.startsWith('mcp:'))
+                  .map((c) => ({
+                    value: c.key,
+                    label: c.displayName || c.key,
+                  })),
+              },
+            ]}
             onChange={(keys) => patch({ capabilityKeys: keys })}
             data-testid="skill-capabilities"
           />

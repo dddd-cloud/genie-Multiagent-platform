@@ -50,21 +50,17 @@ public class GenieController {
     private IGptProcessService gptProcessService;
 
     /**
-     * 开启SSE心跳
-     * @param emitter
-     * @param requestId
-     * @return
+     * 开启SSE心跳。与业务 send 共用 sendLock，失败只记日志，绝不掐断连接。
      */
-    private ScheduledFuture<?> startHeartbeat(SseEmitter emitter, String requestId) {
+    private ScheduledFuture<?> startHeartbeat(SseEmitter emitter, String requestId, Object sendLock) {
         return executor.scheduleAtFixedRate(() -> {
             try {
-                // 发送心跳消息
                 log.info("{} send heartbeat", requestId);
-                emitter.send("heartbeat");
+                synchronized (sendLock) {
+                    emitter.send("heartbeat");
+                }
             } catch (Exception e) {
-                // 发送心跳失败，关闭连接
-                log.error("{} heartbeat failed, closing connection", requestId);
-                emitter.completeWithError(e);
+                log.warn("{} heartbeat failed: {}", requestId, e.toString());
             }
         }, HEARTBEAT_INTERVAL, HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
     }
@@ -116,8 +112,9 @@ public class GenieController {
         Long AUTO_AGENT_SSE_TIMEOUT = 60 * 60 * 1000L;
 
         SseEmitter emitter = new SseEmitter(AUTO_AGENT_SSE_TIMEOUT);
-        // SSE心跳
-        ScheduledFuture<?> heartbeatFuture = startHeartbeat(emitter, request.getRequestId());
+        Object sendLock = new Object();
+        // SSE心跳（与 SSEPrinter 共用 sendLock，避免并发写 emitter）
+        ScheduledFuture<?> heartbeatFuture = startHeartbeat(emitter, request.getRequestId(), sendLock);
         // 监听SSE事件
         registerSSEMonitor(emitter, request.getRequestId(), heartbeatFuture);
         // 拼接输出类型
@@ -125,7 +122,7 @@ public class GenieController {
         // 执行调度引擎
         ThreadUtil.execute(() -> {
             try {
-                Printer printer = new SSEPrinter(emitter, request, request.getAgentType());
+                Printer printer = new SSEPrinter(emitter, request, request.getAgentType(), sendLock);
                 AgentContext agentContext = AgentContext.builder()
                         .requestId(request.getRequestId())
                         .sessionId(request.getRequestId())
@@ -147,8 +144,10 @@ public class GenieController {
                 AgentHandlerService handler = agentHandlerFactory.getHandler(agentContext, request);
                 // 执行处理逻辑
                 handler.handle(agentContext, request);
-                // 关闭连接
-                emitter.complete();
+                // 关闭连接（与 heartbeat / printer 共用 sendLock）
+                synchronized (sendLock) {
+                    emitter.complete();
+                }
 
             } catch (Exception e) {
                 log.error("{} auto agent failed", request.getRequestId());

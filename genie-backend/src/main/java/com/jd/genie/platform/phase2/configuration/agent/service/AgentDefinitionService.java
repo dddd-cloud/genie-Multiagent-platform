@@ -97,7 +97,10 @@ public class AgentDefinitionService {
         AgentDefinitionEntity entity = requireOwnedAgent(user, agentId);
         List<String> skillIds = bindingMapper.selectOwnedBindingsByAgent(user.tenantId(), user.userId(), agentId)
             .stream().map(AgentSkillBindingEntity::getSkillId).toList();
-        return toResponse(entity, skillIds, List.of());
+        List<String> capabilityKeys = toolBindingPort()
+            .resolveBindings(user, agentId, skillIds)
+            .directCapabilities();
+        return toResponse(entity, skillIds, capabilityKeys);
     }
 
     @Transactional(readOnly = true)
@@ -110,8 +113,18 @@ public class AgentDefinitionService {
             user.tenantId(), user.userId(), validPageSize + 1, (validPage - 1) * validPageSize);
         boolean hasMore = rows.size() > validPageSize;
         List<AgentDefinitionEntity> items = hasMore ? rows.subList(0, validPageSize) : rows;
-        return new PageResponse<>(items.stream().map(entity -> toResponse(entity, List.of(), List.of())).toList(),
-            validPage, validPageSize, hasMore);
+        return new PageResponse<>(
+            items.stream().map(entity -> {
+                List<String> skillIds = enabledSkillIds(user, entity.getId());
+                List<String> capabilityKeys = toolBindingPort()
+                    .resolveBindings(user, entity.getId(), skillIds)
+                    .directCapabilities();
+                return toResponse(entity, skillIds, capabilityKeys);
+            }).toList(),
+            validPage,
+            validPageSize,
+            hasMore
+        );
     }
 
     @Transactional
@@ -172,7 +185,11 @@ public class AgentDefinitionService {
     public AgentResponse offlineAgent(CurrentUser user, String agentId, Long version) {
         AgentDefinitionEntity entity = requireOwnedAgent(user, agentId);
         if (AgentStatus.OFFLINE.name().equals(entity.getStatus())) {
-            return toResponse(entity, enabledSkillIds(user, agentId), List.of());
+            List<String> skillIds = enabledSkillIds(user, agentId);
+            List<String> capabilityKeys = toolBindingPort()
+                .resolveBindings(user, agentId, skillIds)
+                .directCapabilities();
+            return toResponse(entity, skillIds, capabilityKeys);
         }
         Instant now = Instant.now(clock);
         int updated = agentMapper.updateStatusOwnedWithVersion(user.tenantId(), user.userId(), agentId,

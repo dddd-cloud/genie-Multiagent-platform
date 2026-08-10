@@ -16,8 +16,16 @@ services:
       GENIE_DB_URL: jdbc:mysql://mysql:3306/genie?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
       GENIE_MCP_CREDENTIAL_KEY: ${GENIE_MCP_CREDENTIAL_KEY:-}
       GENIE_INTERNAL_MCP_TOKEN: ${GENIE_INTERNAL_MCP_TOKEN:-}
+      # genie-client runs on the compose network (not shared netns) so SSE MCP DNS works.
+      AUTOBOTS_AUTOAGENT_MCP_CLIENT_URL: http://genie-client:8188
 
   genie-client:
+    # Reset shared netns from mvp.yml — otherwise Python DNS to public MCP hosts fails.
+    network_mode: !reset null
+    networks:
+      - mvp
+    expose:
+      - "8188"
     environment:
       GENIE_INTERNAL_MCP_TOKEN: ${GENIE_INTERNAL_MCP_TOKEN:-}
 

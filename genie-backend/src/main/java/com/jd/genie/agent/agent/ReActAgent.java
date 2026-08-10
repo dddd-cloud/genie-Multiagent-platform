@@ -39,6 +39,10 @@ public abstract class ReActAgent extends BaseAgent {
     public String step() {
         boolean shouldAct = think();
         if (!shouldAct) {
+            Message last = getMemory() == null ? null : getMemory().getLastMessage();
+            if (last != null && StringUtils.isNotBlank(last.getContent())) {
+                return last.getContent();
+            }
             return "Thinking complete - no action needed";
         }
         return act();

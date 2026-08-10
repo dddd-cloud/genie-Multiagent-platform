@@ -50,9 +50,28 @@ public class McpServerService {
         var u=currentUser.requireCurrentUser(); Raw s=raw(u.tenantId(),u.userId(),id); String url=jdbc.queryForObject("SELECT server_url FROM mcp_server WHERE id=? AND tenant_id=? AND owner_id=? AND deleted_at IS NULL",String.class,id,u.tenantId(),u.userId()); urlPolicy.validate(url);
         List<McpClientAdapter.RemoteTool> remote;
         try { remote=client.listTools(url,AuthType.valueOf(s.authType),s.authName,credentials.decrypt(s.credentialEnvelope,u.tenantId(),u.userId(),id,AuthType.valueOf(s.authType))); } catch (Phase2ContractException ex) { markCheck(u.tenantId(),u.userId(),id,"FAILED",ex.errorCode().name()); throw ex; }
-        if(remote==null||remote.size()>200) throw discoveryInvalid(); Set<String> names=new HashSet<>(); List<String> runtimeNames=new ArrayList<>(); for(var tool:remote){ if(tool==null||tool.name()==null||tool.name().isBlank()||!names.add(tool.name())||tool.inputSchema()==null||!tool.inputSchema().isObject()||tool.inputSchema().toString().length()>256*1024) throw discoveryInvalid(); runtimeNames.add(runtimeName(id,tool.name(),runtimeNames)); }
+        if(remote==null||remote.size()>200) throw discoveryInvalid(); Set<String> names=new HashSet<>(); Set<String> usedRuntimes=new HashSet<>(); List<String> runtimeNames=new ArrayList<>(); for(var tool:remote){ if(tool==null||tool.name()==null||tool.name().isBlank()||!names.add(tool.name())||tool.inputSchema()==null||!tool.inputSchema().isObject()||tool.inputSchema().toString().length()>256*1024) throw discoveryInvalid(); runtimeNames.add(runtimeName(id,tool.name(),usedRuntimes)); }
         LocalDateTime now=LocalDateTime.now(clock); for(int i=0;i<remote.size();i++){var t=remote.get(i);String schema;try{schema=objectMapper.writeValueAsString(t.inputSchema());}catch(Exception e){throw discoveryInvalid();}String hash=sha256(schema);int changed=jdbc.update("UPDATE mcp_tool SET runtime_name=?,description=?,input_schema=?,schema_hash=?,available=TRUE,discovered_at=?,updated_at=?,version=version+1 WHERE mcp_server_id=? AND tenant_id=? AND owner_id=? AND tool_name=?",runtimeNames.get(i),t.description(),schema,hash,now,now,id,u.tenantId(),u.userId(),t.name());if(changed==0)jdbc.update("INSERT INTO mcp_tool(id,tenant_id,owner_id,mcp_server_id,tool_name,runtime_name,description,input_schema,schema_hash,enabled,available,version,discovered_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,TRUE,TRUE,0,?,?)",UUID.randomUUID().toString(),u.tenantId(),u.userId(),id,t.name(),runtimeNames.get(i),t.description(),schema,hash,now,now);}
-        if (remote.isEmpty()) jdbc.update("UPDATE mcp_tool SET available=FALSE,updated_at=?,version=version+1 WHERE mcp_server_id=? AND tenant_id=? AND owner_id=?",now,id,u.tenantId(),u.userId()); else jdbc.update("UPDATE mcp_tool SET available=FALSE,updated_at=?,version=version+1 WHERE mcp_server_id=? AND tenant_id=? AND owner_id=? AND tool_name NOT IN ("+String.join(",",java.util.Collections.nCopies(remote.size(),"?"))+")",concat(now,id,u.tenantId(),u.userId(),names.toArray())); markCheck(u.tenantId(),u.userId(),id,"SUCCESS",null); return tools(id);
+        if (remote.isEmpty()) {
+            jdbc.update(
+                    "UPDATE mcp_tool SET available=FALSE,updated_at=?,version=version+1 WHERE mcp_server_id=? AND tenant_id=? AND owner_id=?",
+                    now, id, u.tenantId(), u.userId()
+            );
+        } else {
+            List<Object> staleArgs = new ArrayList<>();
+            staleArgs.add(now);
+            staleArgs.add(id);
+            staleArgs.add(u.tenantId());
+            staleArgs.add(u.userId());
+            staleArgs.addAll(names);
+            jdbc.update(
+                    "UPDATE mcp_tool SET available=FALSE,updated_at=?,version=version+1 WHERE mcp_server_id=? AND tenant_id=? AND owner_id=? AND tool_name NOT IN ("
+                            + String.join(",", java.util.Collections.nCopies(names.size(), "?"))
+                            + ")",
+                    staleArgs.toArray()
+            );
+        }
+        markCheck(u.tenantId(),u.userId(),id,"SUCCESS",null); return tools(id);
     }
     public List<McpToolResponse> tools(String id) { var u=currentUser.requireCurrentUser(); one(u.tenantId(),u.userId(),id); return jdbc.query("SELECT id,tool_name,runtime_name,description,input_schema,enabled,available,version FROM mcp_tool WHERE mcp_server_id=? AND tenant_id=? AND owner_id=? ORDER BY tool_name",(rs,n)->tool(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4),parse(rs.getString(5)),rs.getBoolean(6),rs.getBoolean(7),rs.getLong(8)),id,u.tenantId(),u.userId()); }
     public List<McpToolResponse> capabilities() { var u=currentUser.requireCurrentUser(); return jdbc.query("SELECT id,tool_name,runtime_name,description,input_schema,enabled,available,version FROM mcp_tool WHERE tenant_id=? AND owner_id=? AND enabled=TRUE AND available=TRUE ORDER BY runtime_name",(rs,n)->tool(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4),parse(rs.getString(5)),rs.getBoolean(6),rs.getBoolean(7),rs.getLong(8)),u.tenantId(),u.userId()); }
@@ -65,7 +84,23 @@ public class McpServerService {
     private Object[] concat(Object... values){return values;}
     private void markCheck(String tenant,String owner,String id,String status,String code){jdbc.update("UPDATE mcp_server SET last_check_status=?,last_check_code=?,last_checked_at=?,updated_at=? WHERE id=? AND tenant_id=? AND owner_id=? AND deleted_at IS NULL",status,code,LocalDateTime.now(clock),LocalDateTime.now(clock),id,tenant,owner);}
     private Phase2ContractException discoveryInvalid(){return new Phase2ContractException(MvpErrorCode.MCP_DISCOVERY_INVALID,"MCP discovery response invalid");}
-    private String runtimeName(String serverId,String name,List<String> used){String normalized=name.toLowerCase().replaceAll("[^a-z0-9]+","_").replaceAll("^_+|_+$","");if(normalized.isBlank())throw discoveryInvalid();String base="mcp_"+sha256(serverId).substring(0,12)+"_"+normalized;if(base.length()>320)base=base.substring(0,320);if(used.contains(base))base=base.substring(0,Math.min(311,base.length()))+"_"+sha256(name).substring(0,8);used.add(base);return base;}
+    private String runtimeName(String serverId, String name, Set<String> used) {
+        String normalized = name.toLowerCase().replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        if (normalized.isBlank()) {
+            throw discoveryInvalid();
+        }
+        String base = "mcp_" + sha256(serverId).substring(0, 12) + "_" + normalized;
+        if (base.length() > 320) {
+            base = base.substring(0, 320);
+        }
+        if (!used.add(base)) {
+            base = base.substring(0, Math.min(311, base.length())) + "_" + sha256(name).substring(0, 8);
+            if (!used.add(base)) {
+                throw discoveryInvalid();
+            }
+        }
+        return base;
+    }
     private String sha256(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
     private void validate(CreateMcpServerRequest r){if(r==null)throw validation();validate(r.name(),r.serverUrl(),r.authType(),r.authName());}
     private void validate(String name,String url,AuthType type,String authName){if(name==null||name.isBlank()||name.length()>128||url==null||url.isBlank()||url.length()>2048||type==null)throw validation();if(type==AuthType.QUERY_PARAM&&(authName==null||authName.isBlank()))throw validation();if(type==AuthType.NONE&&authName!=null&&!authName.isBlank())throw validation();}
