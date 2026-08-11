@@ -85,7 +85,8 @@ describe('McpEditorPage deletion', () => {
     renderEditor();
 
     fireEvent.click(await screen.findByTestId('mcp-delete'));
-    const deleteButtons = await screen.findAllByRole('button', { name: '删除' });
+    // Ant Design spaces CJK label glyphs in the accessible name ("删 除").
+    const deleteButtons = await screen.findAllByRole('button', { name: /删\s*除/ });
     fireEvent.click(deleteButtons[deleteButtons.length - 1]!);
 
     await waitFor(() => {

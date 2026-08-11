@@ -9,6 +9,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       connection-init-sql: "SET time_zone = '+00:00'"
+# Test-only AES key (32 zero bytes, Base64). Required by CredentialEnvelopeService fail-closed ctor.
+GENIE_MCP_CREDENTIAL_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 server:
   servlet:
     session:

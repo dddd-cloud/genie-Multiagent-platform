@@ -11,6 +11,7 @@ final class Phase2ConversationTestConfigurationExcludeFilter extends TypeExclude
     private static final Set<String> EXCLUDED_CLASS_NAMES = Set.of(
         "com.jd.genie.platform.phase2contract.Phase2ContractIntegrationTestApplication",
         "com.jd.genie.platform.security.Phase3IntegrationTestApplication",
+        "com.jd.genie.platform.phase2.configuration.support.Phase2AMySqlTestSupport$TestApplication",
         "com.jd.genie.platform.conversation.ConversationCrudApiTest$TestConfig",
         "com.jd.genie.platform.conversation.ConversationExecutionServiceTest$TestConfig",
         "com.jd.genie.platform.conversation.ConversationHistoryServiceTest$TestConfig",

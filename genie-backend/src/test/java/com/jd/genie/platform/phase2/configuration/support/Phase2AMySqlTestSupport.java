@@ -17,9 +17,9 @@ import com.jd.genie.platform.phase2contract.support.FakeToolBindingPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -82,7 +82,12 @@ public abstract class Phase2AMySqlTestSupport {
         return new CurrentUser("tenant-b", "owner-a", "owner-a", "Tenant B", UserRole.USER);
     }
 
-    @SpringBootConfiguration
+    /**
+     * Must be {@link TestConfiguration} (not {@code @SpringBootConfiguration}) so full-app
+     * integration tests that component-scan {@code com.jd.genie} do not also register the
+     * Fake {@code toolBindingPort} bean alongside production {@code ToolBindingService}.
+     */
+    @TestConfiguration
     @EnableAutoConfiguration
     @Import({
         AgentDefinitionService.class,
