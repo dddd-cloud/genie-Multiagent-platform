@@ -1,4 +1,4 @@
-package com.jd.genie.platform.phase2.configuration.api;
+package com.jd.genie.platform.phase2.configuration.memory.api;
 
 import com.jd.genie.platform.contract.ApiResponse;
 import com.jd.genie.platform.contract.CurrentUserProvider;

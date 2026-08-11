@@ -4,7 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.CurrentUserProvider;
 import com.jd.genie.platform.contract.UserRole;
+import com.jd.genie.platform.phase2.configuration.agent.api.AgentApiExceptionHandler;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
+import com.jd.genie.platform.phase2.configuration.memory.api.MemoryApiExceptionHandler;
+import com.jd.genie.platform.phase2.configuration.model.api.ModelApiExceptionHandler;
+import com.jd.genie.platform.phase2.configuration.prompt.api.PromptApiExceptionHandler;
+import com.jd.genie.platform.phase2.configuration.skill.api.SkillApiExceptionHandler;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -19,7 +24,13 @@ abstract class Phase2AApiTestSupport {
 
     protected MockMvc mvc(Object... controllers) {
         return MockMvcBuilders.standaloneSetup(controllers)
-            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+            .setControllerAdvice(
+                new AgentApiExceptionHandler(),
+                new SkillApiExceptionHandler(),
+                new MemoryApiExceptionHandler(),
+                new ModelApiExceptionHandler(),
+                new PromptApiExceptionHandler()
+            )
             .build();
     }
 

@@ -1,11 +1,9 @@
-package com.jd.genie.platform.phase2.configuration.api;
+package com.jd.genie.platform.phase2.configuration.agent.api;
 
 import com.jd.genie.platform.contract.ApiResponse;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.configuration.agent.exception.AgentConfigurationException;
-import com.jd.genie.platform.phase2.configuration.memory.exception.MemoryAnalysisException;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptValidationException;
-import com.jd.genie.platform.phase2.configuration.skill.exception.SkillConfigurationException;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.error.Phase2ErrorHttpStatus;
 import org.springframework.dao.DataAccessException;
@@ -18,26 +16,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(basePackages = "com.jd.genie.platform.phase2.configuration.api")
-public class Phase2ConfigurationApiExceptionHandler {
+@RestControllerAdvice(basePackages = "com.jd.genie.platform.phase2.configuration.agent.api")
+public class AgentApiExceptionHandler {
 
     @ExceptionHandler(AgentConfigurationException.class)
     ResponseEntity<ApiResponse<Void>> agent(AgentConfigurationException exception) {
         return error(safeCode(exception.code()));
     }
 
-    @ExceptionHandler(SkillConfigurationException.class)
-    ResponseEntity<ApiResponse<Void>> skill(SkillConfigurationException exception) {
-        return error(safeCode(exception.code()));
-    }
-
     @ExceptionHandler(PromptValidationException.class)
     ResponseEntity<ApiResponse<Void>> prompt(PromptValidationException exception) {
-        return error(safeCode(exception.code()));
-    }
-
-    @ExceptionHandler(MemoryAnalysisException.class)
-    ResponseEntity<ApiResponse<Void>> memory(MemoryAnalysisException exception) {
         return error(safeCode(exception.code()));
     }
 

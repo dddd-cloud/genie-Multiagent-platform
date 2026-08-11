@@ -1,19 +1,17 @@
-package com.jd.genie.platform.phase2.configuration.api;
+package com.jd.genie.platform.phase2.configuration.agent.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
-import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
-import com.jd.genie.platform.phase2.configuration.prompt.PromptSkillFragmentView;
 
 import java.time.Instant;
 import java.util.List;
 
-final class Phase2ApiAssembler {
+final class AgentApiAssembler {
     private final ObjectMapper objectMapper;
 
-    Phase2ApiAssembler(ObjectMapper objectMapper) {
+    AgentApiAssembler(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
@@ -35,21 +33,6 @@ final class Phase2ApiAssembler {
         );
     }
 
-    SkillView skill(SkillResponse response) {
-        return new SkillView(
-            response.id(),
-            response.name(),
-            response.description(),
-            response.instruction(),
-            response.outputRequirement(),
-            response.status(),
-            response.version(),
-            List.copyOf(response.capabilityKeys()),
-            response.createdAt(),
-            response.updatedAt()
-        );
-    }
-
     private JsonNode promptConfig(String promptConfig) {
         if (promptConfig == null || promptConfig.isBlank()) {
             return null;
@@ -61,7 +44,7 @@ final class Phase2ApiAssembler {
         }
     }
 
-    record AgentView(
+    public record AgentView(
         String id,
         String name,
         String description,
@@ -76,37 +59,9 @@ final class Phase2ApiAssembler {
         Instant createdAt,
         Instant updatedAt
     ) {
-        AgentView {
+        public AgentView {
             skillIds = skillIds == null ? List.of() : List.copyOf(skillIds);
             capabilityKeys = capabilityKeys == null ? List.of() : List.copyOf(capabilityKeys);
-        }
-    }
-
-    record SkillView(
-        String id,
-        String name,
-        String description,
-        String instruction,
-        String outputRequirement,
-        String status,
-        Long version,
-        List<String> capabilityKeys,
-        Instant createdAt,
-        Instant updatedAt
-    ) {
-        SkillView {
-            capabilityKeys = capabilityKeys == null ? List.of() : List.copyOf(capabilityKeys);
-        }
-    }
-
-    record PromptPreviewView(
-        String compiledSystemPromptTemplate,
-        List<PromptSkillFragmentView> skillFragments,
-        String resolvedModelName,
-        int codePointLength
-    ) {
-        PromptPreviewView {
-            skillFragments = skillFragments == null ? List.of() : List.copyOf(skillFragments);
         }
     }
 }

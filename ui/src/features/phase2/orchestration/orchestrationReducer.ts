@@ -233,8 +233,8 @@ function applyPlanCreated(
       if (!prev) {
         steps[step.stepId] = {
           stepId: step.stepId,
-          agentId: step.agentId,
-          agentName: step.agentName,
+          agentId: step.agentId ?? '',
+          agentName: step.agentName ?? '',
           objective: step.objective,
           status: 'PLANNED',
           errorCode: null,
@@ -249,7 +249,7 @@ function applyPlanCreated(
         agentName: preferReadableAgentName(
           step.agentName,
           prev.agentName,
-          step.agentId || prev.agentId,
+          step.agentId || prev.agentId || '',
         ),
         objective:
           step.objective && step.objective.trim().length > 0
@@ -268,8 +268,8 @@ function applyPlanCreated(
   for (const step of event.steps) {
     steps[step.stepId] = {
       stepId: step.stepId,
-      agentId: step.agentId,
-      agentName: step.agentName,
+      agentId: step.agentId ?? '',
+      agentName: step.agentName ?? '',
       objective: step.objective,
       status: 'PLANNED',
       errorCode: null,
@@ -556,6 +556,15 @@ const HANDLERS: Record<
   SUMMARY_COMPLETED: applySummaryCompleted,
   SUMMARY_FALLBACK: applySummaryFallback,
   FINAL_RESPONSE: applyFinalResponse,
+  // C0: v2 event types are parseable; Timeline business rendering belongs to MEMORY-UI.
+  PARALLEL_STARTED: (s, e) => acknowledgeEvent(s, e),
+  SUBTASK_STARTED: (s, e) => acknowledgeEvent(s, e),
+  SUBTASK_COMPLETED: (s, e) => acknowledgeEvent(s, e),
+  SUBTASK_FAILED: (s, e) => acknowledgeEvent(s, e),
+  STEP_REVIEW_STARTED: (s, e) => acknowledgeEvent(s, e),
+  STEP_RETRY_STARTED: (s, e) => acknowledgeEvent(s, e),
+  STEP_FALLBACK_STARTED: (s, e) => acknowledgeEvent(s, e),
+  STEP_DEGRADED: (s, e) => applyStepTerminal(s, e, 'COMPLETED'),
 };
 
 /**

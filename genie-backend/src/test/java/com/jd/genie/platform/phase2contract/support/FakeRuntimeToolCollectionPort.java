@@ -1,6 +1,7 @@
 package com.jd.genie.platform.phase2contract.support;
 
 import com.jd.genie.agent.agent.AgentContext;
+import com.jd.genie.agent.tool.BaseTool;
 import com.jd.genie.agent.tool.ToolCollection;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
@@ -76,7 +77,8 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
     public ToolCollection build(
         CurrentUser user,
         AgentRuntimeProfile profile,
-        AgentContext context
+        AgentContext context,
+        List<BaseTool> additionalTools
     ) {
         calls.add(new CallRecord(
             user == null ? null : user.userId(),
@@ -97,6 +99,12 @@ public class FakeRuntimeToolCollectionPort implements RuntimeToolCollectionPort 
             throw new Phase2ContractException(
                 MvpErrorCode.VALIDATION_ERROR,
                 "user, profile and context must not be null"
+            );
+        }
+        if (additionalTools == null) {
+            throw new Phase2ContractException(
+                MvpErrorCode.VALIDATION_ERROR,
+                "additionalTools must not be null"
             );
         }
         ToolCollection result = toolCollection;

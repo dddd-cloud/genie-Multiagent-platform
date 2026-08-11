@@ -9,7 +9,9 @@ import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionS
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewService;
+import com.jd.genie.platform.phase2.configuration.skill.binding.JdbcAgentSkillBindingPort;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
+import com.jd.genie.platform.phase2.skillruntime.LegacyCompatibleSkillRuntimeService;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import com.jd.genie.platform.phase2contract.support.FakeToolBindingPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,11 +90,14 @@ public abstract class Phase2AMySqlTestSupport {
         SkillDefinitionService.class,
         AgentPromptCompiler.class,
         ModelCatalogService.class,
-        PromptPreviewService.class
+        PromptPreviewService.class,
+        JdbcAgentSkillBindingPort.class,
+        LegacyCompatibleSkillRuntimeService.class
     })
     @MapperScan({
         "com.jd.genie.platform.phase2.configuration.agent.mapper",
-        "com.jd.genie.platform.phase2.configuration.skill.mapper"
+        "com.jd.genie.platform.phase2.configuration.skill.mapper",
+        "com.jd.genie.platform.phase2.configuration.skill.binding.mapper"
     })
     static class TestApplication {
         @Bean

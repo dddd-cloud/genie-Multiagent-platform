@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "eventId": "request-c0-legacy:1",
+  "sequence": 1,
+  "eventType": "ROUTE_SELECTED",
+  "requestId": "request-c0-legacy",
+  "runId": "run-c0-legacy",
+  "attemptNo": null,
+  "stepId": null,
+  "agentId": null,
+  "agentName": null,
+  "route": "ORCHESTRATED",
+  "reasonCode": "MULTI_STEP",
+  "errorCode": null,
+  "steps": [],
+  "completionStatus": null
+}

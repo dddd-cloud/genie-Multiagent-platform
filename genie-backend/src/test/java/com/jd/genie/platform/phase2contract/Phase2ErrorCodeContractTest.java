@@ -61,7 +61,12 @@ class Phase2ErrorCodeContractTest {
         "AGENT_INVALID_RESULT",
         "CONTEXT_BUDGET_EXCEEDED",
         "MEMORY_ANALYSIS_FAILED",
-        "SUMMARY_FAILED"
+        "SUMMARY_FAILED",
+        "SKILL_PACKAGE_INVALID",
+        "SKILL_RESOURCE_NOT_FOUND",
+        "SKILL_ENTRYPOINT_NOT_FOUND",
+        "SKILL_EXECUTION_FAILED",
+        "SKILL_EXECUTION_TIMEOUT"
     );
 
     @Test
@@ -101,5 +106,10 @@ class Phase2ErrorCodeContractTest {
         assertEquals(502, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.MCP_UNAVAILABLE));
         assertEquals(504, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.TOOL_TIMEOUT));
         assertEquals(502, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SUMMARY_FAILED));
+        assertEquals(422, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_PACKAGE_INVALID));
+        assertEquals(404, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND));
+        assertEquals(404, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND));
+        assertEquals(502, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_EXECUTION_FAILED));
+        assertEquals(504, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_EXECUTION_TIMEOUT));
     }
 }

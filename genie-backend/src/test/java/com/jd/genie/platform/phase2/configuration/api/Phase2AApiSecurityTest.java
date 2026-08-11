@@ -1,5 +1,6 @@
 package com.jd.genie.platform.phase2.configuration.api;
 
+import com.jd.genie.platform.phase2.configuration.agent.api.Phase2AgentController;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import org.junit.jupiter.api.Test;

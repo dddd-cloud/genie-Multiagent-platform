@@ -3,7 +3,7 @@ package com.jd.genie.platform.phase2.configuration.skill.service;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.contract.PageResponse;
-import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentSkillBindingMapper;
+import com.jd.genie.platform.phase2.configuration.skill.binding.mapper.AgentSkillBindingMapper;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillCreateRequest;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillUpdateRequest;

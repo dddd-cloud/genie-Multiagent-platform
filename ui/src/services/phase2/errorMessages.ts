@@ -45,6 +45,11 @@ const PHASE2_ERROR_MESSAGES: Record<MvpErrorCode | string, string> = {
   CONTEXT_BUDGET_EXCEEDED: '上下文预算已超限',
   MEMORY_ANALYSIS_FAILED: '记忆分析失败，请稍后重试',
   SUMMARY_FAILED: '会话摘要生成失败，请稍后重试',
+  SKILL_PACKAGE_INVALID: 'Skill 包无效或格式不合法',
+  SKILL_RESOURCE_NOT_FOUND: 'Skill 资源不存在',
+  SKILL_ENTRYPOINT_NOT_FOUND: 'Skill 入口不存在',
+  SKILL_EXECUTION_FAILED: 'Skill 执行失败',
+  SKILL_EXECUTION_TIMEOUT: 'Skill 执行超时',
 };
 
 const DEFAULT_MESSAGE = '操作失败，请稍后重试';

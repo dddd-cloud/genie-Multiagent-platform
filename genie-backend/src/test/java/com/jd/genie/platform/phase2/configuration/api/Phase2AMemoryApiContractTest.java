@@ -1,6 +1,7 @@
 package com.jd.genie.platform.phase2.configuration.api;
 
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2.configuration.memory.api.Phase2MemoryController;
 import com.jd.genie.platform.phase2.configuration.memory.dto.MemoryAnalysisRequest;
 import com.jd.genie.platform.phase2.configuration.memory.dto.MemoryPatchItem;
 import com.jd.genie.platform.phase2.configuration.memory.dto.MemoryPatchResponse;

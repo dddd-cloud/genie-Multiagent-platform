@@ -68,14 +68,15 @@ for path in "${expected_files[@]}"; do
   expected_set["${path}"]=1
 done
 
-if [[ "${#expected_files[@]}" -ne 18 ]]; then
-  echo "FAIL: generate --list must return exactly 18 paths"
+EXPECTED_COUNT="${#expected_files[@]}"
+if [[ "${EXPECTED_COUNT}" -ne 29 ]]; then
+  echo "FAIL: generate --list must return exactly 29 paths, got ${EXPECTED_COUNT}"
   overall_fail
 fi
 
 mapfile -t baseline_lines < <(grep -v '^[[:space:]]*$' "${BASELINE_FILE}" || true)
-if [[ "${#baseline_lines[@]}" -ne 18 ]]; then
-  echo "FAIL: baseline must contain exactly 18 non-empty entries, found ${#baseline_lines[@]}"
+if [[ "${#baseline_lines[@]}" -ne 29 ]]; then
+  echo "FAIL: baseline must contain exactly 29 non-empty entries, found ${#baseline_lines[@]}"
   overall_fail
 fi
 
@@ -138,8 +139,8 @@ for line in "${baseline_lines[@]}"; do
   echo "${path}: OK"
 done
 
-if [[ "${#seen_paths[@]}" -ne 18 ]]; then
-  echo "FAIL: baseline path set size is ${#seen_paths[@]}, expected 18"
+if [[ "${#seen_paths[@]}" -ne 29 ]]; then
+  echo "FAIL: baseline path set size is ${#seen_paths[@]}, expected 29"
   overall_fail
 fi
 

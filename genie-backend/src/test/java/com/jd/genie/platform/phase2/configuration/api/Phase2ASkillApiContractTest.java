@@ -2,6 +2,7 @@ package com.jd.genie.platform.phase2.configuration.api;
 
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.contract.PageResponse;
+import com.jd.genie.platform.phase2.configuration.skill.api.Phase2SkillController;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillCreateRequest;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillUpdateRequest;
 import com.jd.genie.platform.phase2.configuration.skill.exception.SkillConfigurationException;
@@ -35,7 +36,7 @@ class Phase2ASkillApiContractTest extends Phase2AApiTestSupport {
         when(service.updateSkill(any(), eq("skill-1"), any())).thenReturn(skill("skill-1", "ENABLED", 1));
         when(service.enableSkill(any(), eq("skill-1"), eq(1L))).thenReturn(skill("skill-1", "ENABLED", 1));
         when(service.disableSkill(any(), eq("skill-1"), eq(1L))).thenReturn(skill("skill-1", "DISABLED", 2));
-        var mvc = mvc(new Phase2SkillController(service, currentUserProvider, objectMapper));
+        var mvc = mvc(new Phase2SkillController(service, currentUserProvider));
 
         mvc.perform(post("/api/v2/skills").contentType(MediaType.APPLICATION_JSON).content(json(new SkillCreateRequest(
                 "Summarize", "Summarize source material", "Produce a concise summary.",
@@ -72,7 +73,7 @@ class Phase2ASkillApiContractTest extends Phase2AApiTestSupport {
             .thenThrow(new SkillConfigurationException(MvpErrorCode.VERSION_CONFLICT, "db version text"));
         doThrow(new SkillConfigurationException(MvpErrorCode.SKILL_IN_USE, "referenced by agent"))
             .when(service).deleteSkill(any(), eq("skill-1"), eq(1L));
-        var mvc = mvc(new Phase2SkillController(service, currentUserProvider, objectMapper));
+        var mvc = mvc(new Phase2SkillController(service, currentUserProvider));
 
         mvc.perform(put("/api/v2/skills/skill-1").contentType(MediaType.APPLICATION_JSON).content(json(new SkillUpdateRequest(
                 0L, "Summarize", "Desc", "Instruction", null, List.of()))))

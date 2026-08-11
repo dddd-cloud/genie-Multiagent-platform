@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/orchestration-trace-v2.schema.json",
+  "title": "Orchestration Trace V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sequence",
+    "requestId",
+    "runId",
+    "scope",
+    "kind",
+    "text",
+    "append",
+    "truncated"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "requestId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "scope": {
+      "type": "string",
+      "enum": ["MAIN", "STEP", "SUBTASK"]
+    },
+    "attemptNo": {
+      "type": ["integer", "null"],
+      "enum": [1, null]
+    },
+    "stepId": { "type": ["string", "null"] },
+    "subTaskId": { "type": ["string", "null"] },
+    "agentId": { "type": ["string", "null"] },
+    "agentName": { "type": ["string", "null"] },
+    "retryNo": {
+      "type": ["integer", "null"],
+      "enum": [0, 1, null]
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["STATUS", "THOUGHT", "OUTPUT", "ERROR"]
+    },
+    "text": { "type": "string" },
+    "append": { "type": "boolean" },
+    "truncated": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "scope": { "const": "SUBTASK" } }, "required": ["scope"] },
+      "then": {
+        "required": ["subTaskId"],
+        "properties": {
+          "subTaskId": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  ]
+}

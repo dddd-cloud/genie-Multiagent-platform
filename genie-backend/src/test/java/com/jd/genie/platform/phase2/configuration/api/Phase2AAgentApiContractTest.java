@@ -2,6 +2,7 @@ package com.jd.genie.platform.phase2.configuration.api;
 
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.contract.PageResponse;
+import com.jd.genie.platform.phase2.configuration.agent.api.Phase2AgentController;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentUpdateRequest;

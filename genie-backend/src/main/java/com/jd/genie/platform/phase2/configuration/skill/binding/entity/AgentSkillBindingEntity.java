@@ -1,4 +1,4 @@
-package com.jd.genie.platform.phase2.configuration.agent.entity;
+package com.jd.genie.platform.phase2.configuration.skill.binding.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;

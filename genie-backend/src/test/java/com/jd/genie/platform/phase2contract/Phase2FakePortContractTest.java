@@ -10,7 +10,9 @@ import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.dto.ToolBindingView;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.support.FakeAgentRuntimeCatalogPort;
+import com.jd.genie.platform.phase2contract.support.FakeAgentSkillBindingPort;
 import com.jd.genie.platform.phase2contract.support.FakeRuntimeToolCollectionPort;
+import com.jd.genie.platform.phase2contract.support.FakeSkillRuntimePort;
 import com.jd.genie.platform.phase2contract.support.FakeToolBindingPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.stereotype.Component;
@@ -39,6 +41,8 @@ class Phase2FakePortContractTest {
         assertFalse(FakeAgentRuntimeCatalogPort.class.isAnnotationPresent(Service.class));
         assertFalse(FakeToolBindingPort.class.isAnnotationPresent(Component.class));
         assertFalse(FakeRuntimeToolCollectionPort.class.isAnnotationPresent(Component.class));
+        assertFalse(FakeAgentSkillBindingPort.class.isAnnotationPresent(Component.class));
+        assertFalse(FakeSkillRuntimePort.class.isAnnotationPresent(Component.class));
     }
 
     @Test

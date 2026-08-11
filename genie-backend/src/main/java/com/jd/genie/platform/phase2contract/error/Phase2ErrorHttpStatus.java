@@ -58,6 +58,8 @@ public final class Phase2ErrorHttpStatus {
 
         // 404
         map.put(MvpErrorCode.RESOURCE_NOT_FOUND, 404);
+        map.put(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND, 404);
+        map.put(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND, 404);
 
         // 409
         map.put(MvpErrorCode.VERSION_CONFLICT, 409);
@@ -82,6 +84,9 @@ public final class Phase2ErrorHttpStatus {
         map.put(MvpErrorCode.CLIENT_DISCONNECTED, CLIENT_CLOSED_REQUEST);
         map.put(MvpErrorCode.SERVICE_RESTARTED, CLIENT_CLOSED_REQUEST);
 
+        // 422
+        map.put(MvpErrorCode.SKILL_PACKAGE_INVALID, 422);
+
         // 502
         map.put(MvpErrorCode.MCP_AUTH_INVALID, 502);
         map.put(MvpErrorCode.MCP_UNAVAILABLE, 502);
@@ -91,12 +96,14 @@ public final class Phase2ErrorHttpStatus {
         map.put(MvpErrorCode.AGENT_DOWNSTREAM_ERROR, 502);
         map.put(MvpErrorCode.AGENT_NO_FINAL_EVENT, 502);
         map.put(MvpErrorCode.AGENT_STREAM_INTERRUPTED, 502);
+        map.put(MvpErrorCode.SKILL_EXECUTION_FAILED, 502);
 
         // 503
         map.put(MvpErrorCode.DATABASE_UNAVAILABLE, 503);
 
         // 504
         map.put(MvpErrorCode.TOOL_TIMEOUT, 504);
+        map.put(MvpErrorCode.SKILL_EXECUTION_TIMEOUT, 504);
 
         // 500
         map.put(MvpErrorCode.INTERNAL_ERROR, 500);

@@ -10,6 +10,8 @@ import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,6 +45,17 @@ public abstract class RuntimeToolCollectionPortContractTest {
     @Test
     final void buildNeverReturnsNull() {
         ToolCollection collection = port().build(currentUser(), profile(), context());
+        assertNotNull(collection);
+    }
+
+    @Test
+    final void fourArgEmptyAdditionalToolsWorks() {
+        ToolCollection collection = port().build(
+            currentUser(),
+            profile(),
+            context(),
+            List.of()
+        );
         assertNotNull(collection);
     }
 

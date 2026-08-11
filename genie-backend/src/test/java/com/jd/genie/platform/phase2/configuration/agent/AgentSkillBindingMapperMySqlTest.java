@@ -1,7 +1,7 @@
 package com.jd.genie.platform.phase2.configuration.agent;
 
-import com.jd.genie.platform.phase2.configuration.agent.entity.AgentSkillBindingEntity;
-import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentSkillBindingMapper;
+import com.jd.genie.platform.phase2.configuration.skill.binding.entity.AgentSkillBindingEntity;
+import com.jd.genie.platform.phase2.configuration.skill.binding.mapper.AgentSkillBindingMapper;
 import com.jd.genie.platform.phase2.configuration.support.Phase2AMySqlTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

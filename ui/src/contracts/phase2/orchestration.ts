@@ -5,6 +5,14 @@ export const ORCHESTRATION_ROUTES = [
 
 export type OrchestrationRoute = (typeof ORCHESTRATION_ROUTES)[number];
 
+export const STEP_MODES = [
+  'MAIN_ONLY',
+  'SINGLE_AGENT',
+  'PARALLEL_AGENTS',
+] as const;
+
+export type StepMode = (typeof STEP_MODES)[number];
+
 export const ORCHESTRATION_EVENT_TYPES = [
   'ROUTE_SELECTED',
   'PLAN_CREATED',
@@ -17,6 +25,14 @@ export const ORCHESTRATION_EVENT_TYPES = [
   'SUMMARY_COMPLETED',
   'SUMMARY_FALLBACK',
   'FINAL_RESPONSE',
+  'PARALLEL_STARTED',
+  'SUBTASK_STARTED',
+  'SUBTASK_COMPLETED',
+  'SUBTASK_FAILED',
+  'STEP_REVIEW_STARTED',
+  'STEP_RETRY_STARTED',
+  'STEP_FALLBACK_STARTED',
+  'STEP_DEGRADED',
 ] as const;
 
 export type OrchestrationEventType = (typeof ORCHESTRATION_EVENT_TYPES)[number];
@@ -44,16 +60,25 @@ export const ORCHESTRATION_COMPLETION_STATUSES = [
 export type OrchestrationCompletionStatus =
   (typeof ORCHESTRATION_COMPLETION_STATUSES)[number];
 
-export interface OrchestrationPlanStepView {
-  stepId: string;
+export interface OrchestrationSubTaskView {
+  subTaskId: string;
   agentId: string;
   agentName: string;
   objective: string;
+}
+
+export interface OrchestrationPlanStepView {
+  stepId: string;
+  agentId: string | null;
+  agentName: string | null;
+  objective: string;
   inputRefs: string[];
+  mode?: StepMode | null;
+  subTasks?: OrchestrationSubTaskView[];
 }
 
 export interface OrchestrationEvent {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   eventId: string;
   sequence: number;
   eventType: OrchestrationEventType;
@@ -68,4 +93,7 @@ export interface OrchestrationEvent {
   errorCode: AgentTaskErrorCode | null;
   steps: OrchestrationPlanStepView[];
   completionStatus: OrchestrationCompletionStatus | null;
+  subTaskId?: string | null;
+  stepMode?: StepMode | null;
+  retryNo?: number | null;
 }

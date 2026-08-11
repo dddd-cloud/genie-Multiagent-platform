@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "sequence": 1,
+  "requestId": "request-c0-trace-v1",
+  "runId": "run-c0-trace-v1",
+  "scope": "STEP",
+  "attemptNo": 1,
+  "stepId": "step-1",
+  "agentId": "agent-research-001",
+  "agentName": "Research Agent",
+  "kind": "THOUGHT",
+  "text": "Considering sources for step-1.",
+  "append": false,
+  "truncated": false
+}

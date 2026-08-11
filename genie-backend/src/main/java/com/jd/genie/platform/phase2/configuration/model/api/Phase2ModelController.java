@@ -1,6 +1,5 @@
-package com.jd.genie.platform.phase2.configuration.api;
+package com.jd.genie.platform.phase2.configuration.model.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.ApiResponse;
 import com.jd.genie.platform.contract.CurrentUserProvider;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogItem;

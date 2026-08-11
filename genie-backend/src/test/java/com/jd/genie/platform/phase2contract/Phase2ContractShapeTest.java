@@ -17,7 +17,9 @@ import com.jd.genie.platform.phase2contract.enums.OrchestrationCompletionStatus;
 import com.jd.genie.platform.phase2contract.enums.OrchestrationEventType;
 import com.jd.genie.platform.phase2contract.enums.OrchestrationRoute;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
+import com.jd.genie.platform.phase2contract.port.AgentSkillBindingPort;
 import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
+import com.jd.genie.platform.phase2contract.port.SkillRuntimePort;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.stereotype.Component;
@@ -79,10 +81,43 @@ class Phase2ContractShapeTest {
     }
 
     @Test
+    void agentSkillBindingPortSignatureAndTransactions() throws NoSuchMethodException {
+        Method load = AgentSkillBindingPort.class.getMethod(
+            "loadForAgent", CurrentUser.class, String.class);
+        assertEquals(List.class, load.getReturnType());
+        for (String methodName : List.of("replaceForAgent", "removeForAgent")) {
+            Method method = Arrays.stream(AgentSkillBindingPort.class.getMethods())
+                .filter(item -> item.getName().equals(methodName))
+                .findFirst()
+                .orElseThrow();
+            Transactional transactional = method.getAnnotation(Transactional.class);
+            assertTrue(transactional != null, methodName + " must be @Transactional");
+            assertEquals(Propagation.REQUIRED, transactional.propagation());
+        }
+    }
+
+    @Test
+    void skillRuntimePortSignature() throws NoSuchMethodException {
+        Method resolveBindings = SkillRuntimePort.class.getMethod(
+            "resolveForBindings", CurrentUser.class, List.class, boolean.class);
+        assertEquals(List.class, resolveBindings.getReturnType());
+        Method resolveAgent = SkillRuntimePort.class.getMethod(
+            "resolveForAgent", CurrentUser.class, String.class, boolean.class);
+        assertEquals(List.class, resolveAgent.getReturnType());
+        Method buildTools = SkillRuntimePort.class.getMethod(
+            "buildRuntimeTools", CurrentUser.class, AgentRuntimeProfile.class, AgentContext.class);
+        assertEquals(List.class, buildTools.getReturnType());
+    }
+
+    @Test
     void runtimeToolCollectionPortSignature() throws NoSuchMethodException {
-        Method build = RuntimeToolCollectionPort.class.getMethod(
+        Method build3 = RuntimeToolCollectionPort.class.getMethod(
             "build", CurrentUser.class, AgentRuntimeProfile.class, AgentContext.class);
-        assertEquals(ToolCollection.class, build.getReturnType());
+        assertEquals(ToolCollection.class, build3.getReturnType());
+        Method build4 = RuntimeToolCollectionPort.class.getMethod(
+            "build", CurrentUser.class, AgentRuntimeProfile.class, AgentContext.class, List.class);
+        assertEquals(ToolCollection.class, build4.getReturnType());
+        assertTrue(build3.isDefault(), "3-arg build must remain default compatibility");
     }
 
     @Test
@@ -90,7 +125,8 @@ class Phase2ContractShapeTest {
         assertRecordComponents(AgentCapabilitySummary.class,
             "agentId", "agentVersion", "name", "description");
         assertRecordComponents(AgentRuntimeSkill.class,
-            "skillId", "skillVersion", "sortOrder", "instruction", "outputRequirement");
+            "skillId", "skillVersion", "sortOrder", "instruction", "outputRequirement",
+            "skillKey", "packageMode", "packageVersion", "packageHash", "capabilityKeys", "entrypoints");
         assertRecordComponents(AgentRuntimeProfile.class,
             "agentId", "agentVersion", "name", "description",
             "compiledSystemPromptTemplate", "resolvedModelName", "skills", "capabilityKeys");
@@ -102,11 +138,11 @@ class Phase2ContractShapeTest {
             "sessionId", "requestId", "query", "executionMode",
             "deepThink", "outputStyle", "allowedAgentIds", "localContext");
         assertRecordComponents(OrchestrationPlanStepView.class,
-            "stepId", "agentId", "agentName", "objective", "inputRefs");
+            "stepId", "agentId", "agentName", "objective", "inputRefs", "mode", "subTasks");
         assertRecordComponents(OrchestrationEvent.class,
             "schemaVersion", "eventId", "sequence", "eventType", "requestId", "runId",
             "attemptNo", "stepId", "agentId", "agentName", "route", "reasonCode",
-            "errorCode", "steps", "completionStatus");
+            "errorCode", "steps", "completionStatus", "subTaskId", "stepMode", "retryNo");
     }
 
     @Test
@@ -116,7 +152,9 @@ class Phase2ContractShapeTest {
         assertArrayEquals(new String[]{
             "ROUTE_SELECTED", "PLAN_CREATED", "STEP_STARTED", "STEP_COMPLETED", "STEP_FAILED",
             "STEP_SKIPPED", "REPLAN_STARTED", "SUMMARY_STARTED", "SUMMARY_COMPLETED",
-            "SUMMARY_FALLBACK", "FINAL_RESPONSE"
+            "SUMMARY_FALLBACK", "FINAL_RESPONSE",
+            "PARALLEL_STARTED", "SUBTASK_STARTED", "SUBTASK_COMPLETED", "SUBTASK_FAILED",
+            "STEP_REVIEW_STARTED", "STEP_RETRY_STARTED", "STEP_FALLBACK_STARTED", "STEP_DEGRADED"
         }, enumNames(OrchestrationEventType.class));
         assertArrayEquals(new String[]{
             "INVALID_INPUT", "AGENT_OFFLINE", "TOOL_PERMISSION_DENIED", "TOOL_TIMEOUT",
@@ -132,6 +170,8 @@ class Phase2ContractShapeTest {
             AgentRuntimeCatalogPort.class,
             ToolBindingPort.class,
             RuntimeToolCollectionPort.class,
+            AgentSkillBindingPort.class,
+            SkillRuntimePort.class,
             AgentCapabilitySummary.class,
             AgentRuntimeSkill.class,
             AgentRuntimeProfile.class,
@@ -165,9 +205,13 @@ class Phase2ContractShapeTest {
         assertUniqueSimpleName(root, "AgentRuntimeCatalogPort.java");
         assertUniqueSimpleName(root, "ToolBindingPort.java");
         assertUniqueSimpleName(root, "RuntimeToolCollectionPort.java");
+        assertUniqueSimpleName(root, "AgentSkillBindingPort.java");
+        assertUniqueSimpleName(root, "SkillRuntimePort.java");
         assertUniqueSimpleName(root, "AgentRuntimeProfile.java");
         assertUniqueSimpleName(root, "ToolBindingView.java");
         assertUniqueSimpleName(root, "OrchestrationEvent.java");
+        assertUniqueSimpleName(root, "AgentSkillBindingMapper.java");
+        assertUniqueSimpleName(root, "AgentSkillBindingEntity.java");
     }
 
     private static void assertUniqueSimpleName(Path root, String fileName) throws IOException {

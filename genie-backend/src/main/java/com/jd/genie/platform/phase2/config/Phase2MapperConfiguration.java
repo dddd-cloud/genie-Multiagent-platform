@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
     basePackages = {
         "com.jd.genie.platform.phase2.configuration.agent.mapper",
         "com.jd.genie.platform.phase2.configuration.skill.mapper",
+        "com.jd.genie.platform.phase2.configuration.skill.binding.mapper",
         "com.jd.genie.platform.phase2.tooling",
     },
     annotationClass = Mapper.class

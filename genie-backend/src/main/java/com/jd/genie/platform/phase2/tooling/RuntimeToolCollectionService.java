@@ -37,7 +37,7 @@ public class RuntimeToolCollectionService implements RuntimeToolCollectionPort {
     }
 
     @Override
-    public ToolCollection build(CurrentUser user, AgentRuntimeProfile profile, AgentContext context) {
+    public ToolCollection build(CurrentUser user, AgentRuntimeProfile profile, AgentContext context, List<BaseTool> additionalTools) {
         if (user == null || profile == null || context == null) throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, "user, profile and context are required");
         ToolBindingView view = bindings.resolveBindings(user, profile.agentId(), profile.skills().stream().map(s -> s.skillId()).toList());
         Set<String> selected = new LinkedHashSet<>();
@@ -55,6 +55,14 @@ public class RuntimeToolCollectionService implements RuntimeToolCollectionPort {
         for (String key : selected) {
             if (catalog.contains(key)) { tools.add(builtins.get(key)); continue; }
             if (CapabilityKeys.isMcp(key)) tools.add(mcpTool(user, key, context));
+        }
+        if (additionalTools != null) {
+            for (BaseTool extra : additionalTools) {
+                if (extra == null) {
+                    throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, "additional tool must not be null");
+                }
+                tools.add(extra);
+            }
         }
         AuthorizedToolCollection result = new AuthorizedToolCollection(tools);
         result.setAgentContext(context); context.setToolCollection(result);

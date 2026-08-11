@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "sequence": 1,
+  "requestId": "request-c0-trace-invalid",
+  "runId": "run-c0-trace-invalid",
+  "scope": "PARALLEL",
+  "attemptNo": 1,
+  "stepId": "step-1",
+  "subTaskId": null,
+  "agentId": null,
+  "agentName": null,
+  "retryNo": null,
+  "kind": "STATUS",
+  "text": "invalid scope",
+  "append": false,
+  "truncated": false
+}

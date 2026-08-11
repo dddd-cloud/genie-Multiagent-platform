@@ -6,7 +6,9 @@ SHELL := /bin/bash
 
 .PHONY: mvp-unit mvp-integration mvp-ui mvp-e2e mvp-acceptance \
 	phase2-contract-acceptance phase2-a-acceptance phase2-b-acceptance \
-	phase2-c-acceptance phase2-d-acceptance phase2-acceptance
+	phase2-c-acceptance phase2-d-acceptance phase2-acceptance \
+	phase2-agent-005-acceptance phase2-skill-005-acceptance \
+	phase2-memory-ui-005-acceptance phase2-005-acceptance
 
 # Fixed A/B/C script whitelist — plan §18.3. Do not glob arbitrary *.sh.
 A_SCRIPTS := \
@@ -103,3 +105,21 @@ phase2-acceptance:
 	@test -f scripts/acceptance/phase2/run_all.sh || \
 	  { echo "BLOCKED: scripts/acceptance/phase2/run_all.sh missing"; exit 2; }
 	bash scripts/acceptance/phase2/run_all.sh
+
+phase2-agent-005-acceptance:
+	@test -f scripts/acceptance/phase2/agent/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/agent/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/agent/run.sh
+
+phase2-skill-005-acceptance:
+	@test -f scripts/acceptance/phase2/skill/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/skill/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/skill/run.sh
+
+phase2-memory-ui-005-acceptance:
+	@test -f scripts/acceptance/phase2/memory-ui/run.sh || \
+	  { echo "BLOCKED: scripts/acceptance/phase2/memory-ui/run.sh missing"; exit 2; }
+	bash scripts/acceptance/phase2/memory-ui/run.sh
+
+phase2-005-acceptance: mvp-acceptance phase2-contract-acceptance phase2-b-acceptance \
+	phase2-agent-005-acceptance phase2-skill-005-acceptance phase2-memory-ui-005-acceptance

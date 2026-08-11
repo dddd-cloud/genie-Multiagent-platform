@@ -2,6 +2,7 @@ package com.jd.genie.platform.phase2.configuration.api;
 
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewRequest;
+import com.jd.genie.platform.phase2.configuration.prompt.api.Phase2PromptPreviewController;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewResponse;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewService;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptSkillFragmentView;

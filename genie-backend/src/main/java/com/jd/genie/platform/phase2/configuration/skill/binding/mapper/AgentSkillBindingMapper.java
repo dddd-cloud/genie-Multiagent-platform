@@ -1,7 +1,7 @@
-package com.jd.genie.platform.phase2.configuration.agent.mapper;
+package com.jd.genie.platform.phase2.configuration.skill.binding.mapper;
 
-import com.jd.genie.platform.phase2.configuration.agent.entity.AgentSkillBindingEntity;
-import com.jd.genie.platform.phase2.configuration.agent.runtime.AgentRuntimeSkillSnapshot;
+import com.jd.genie.platform.phase2.configuration.skill.binding.AgentRuntimeSkillSnapshot;
+import com.jd.genie.platform.phase2.configuration.skill.binding.entity.AgentSkillBindingEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;

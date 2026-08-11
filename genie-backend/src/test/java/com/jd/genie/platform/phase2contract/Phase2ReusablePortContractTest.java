@@ -115,6 +115,23 @@ class Phase2ReusablePortContractTest {
         protected void resetContractFixture() {
             fake.reset();
         }
+
+        @org.junit.jupiter.api.Test
+        void nullAdditionalToolsIsValidationErrorOnFake() {
+            var error = org.junit.jupiter.api.Assertions.assertThrows(
+                com.jd.genie.platform.phase2contract.error.Phase2ContractException.class,
+                () -> fake.build(
+                    USER,
+                    profileFixture(),
+                    AgentContext.builder().requestId("request-contract").build(),
+                    null
+                )
+            );
+            org.junit.jupiter.api.Assertions.assertEquals(
+                com.jd.genie.platform.contract.MvpErrorCode.VALIDATION_ERROR,
+                error.errorCode()
+            );
+        }
     }
 
     private static AgentRuntimeProfile profileFixture() {

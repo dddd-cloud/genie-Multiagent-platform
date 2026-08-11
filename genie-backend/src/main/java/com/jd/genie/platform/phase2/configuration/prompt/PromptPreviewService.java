@@ -6,9 +6,9 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingReq
 import com.jd.genie.platform.phase2.configuration.agent.exception.AgentConfigurationException;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.model.ModelResolutionResult;
-import com.jd.genie.platform.phase2.configuration.skill.entity.SkillDefinitionEntity;
-import com.jd.genie.platform.phase2.configuration.skill.mapper.SkillDefinitionMapper;
-import com.jd.genie.platform.phase2.configuration.skill.model.SkillStatus;
+import com.jd.genie.platform.phase2contract.dto.AgentSkillBindingSpec;
+import com.jd.genie.platform.phase2contract.dto.SkillRuntimePackage;
+import com.jd.genie.platform.phase2contract.port.SkillRuntimePort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +24,7 @@ public class PromptPreviewService {
 
     private final AgentPromptCompiler promptCompiler;
     private final ModelCatalogService modelCatalogService;
-    private final SkillDefinitionMapper skillMapper;
+    private final SkillRuntimePort skillRuntimePort;
 
     @Transactional(readOnly = true)
     public PromptPreviewResponse preview(CurrentUser user, PromptPreviewRequest request) {
@@ -36,8 +33,26 @@ public class PromptPreviewService {
             throw error(MvpErrorCode.VALIDATION_ERROR);
         }
         List<AgentSkillBindingRequest> bindings = normalizeSkillBindings(request.skills());
-        Map<String, SkillDefinitionEntity> skillsById = loadOwnedSkills(user, bindings.stream().map(AgentSkillBindingRequest::skillId).toList());
-        List<PromptSkillFragment> fragments = buildEnabledFragments(bindings, skillsById);
+        List<SkillRuntimePackage> packages;
+        try {
+            packages = skillRuntimePort.resolveForBindings(
+                user,
+                bindings.stream().map(b -> new AgentSkillBindingSpec(b.skillId(), b.sortOrder())).toList(),
+                true
+            );
+        } catch (com.jd.genie.platform.phase2contract.error.Phase2ContractException ex) {
+            throw error(ex.errorCode());
+        }
+        List<PromptSkillFragment> fragments = packages.stream()
+            .map(pkg -> new PromptSkillFragment(
+                pkg.skillId(),
+                pkg.skillVersion(),
+                pkg.name(),
+                pkg.sortOrder(),
+                pkg.instructionMarkdown(),
+                pkg.outputRequirement()
+            ))
+            .toList();
         ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(request.modelName());
         PromptCompilationResult compiled = promptCompiler.compile(new PromptCompilationRequest(
             request.promptMode(),
@@ -50,29 +65,6 @@ public class PromptPreviewService {
             .toList();
         return new PromptPreviewResponse(compiled.compiledSystemPromptTemplate(), views,
             model.resolvedModelName(), compiled.codePointLength());
-    }
-
-    private List<PromptSkillFragment> buildEnabledFragments(List<AgentSkillBindingRequest> bindings,
-                                                            Map<String, SkillDefinitionEntity> skillsById) {
-        return bindings.stream().map(binding -> {
-            SkillDefinitionEntity skill = skillsById.get(binding.skillId());
-            if (skill == null) {
-                throw error(MvpErrorCode.RESOURCE_NOT_FOUND);
-            }
-            if (!SkillStatus.ENABLED.name().equals(skill.getStatus())) {
-                throw error(MvpErrorCode.AGENT_INVALID_STATE);
-            }
-            return new PromptSkillFragment(skill.getId(), skill.getVersion(), skill.getName(), binding.sortOrder(),
-                skill.getInstruction(), skill.getOutputRequirement());
-        }).toList();
-    }
-
-    private Map<String, SkillDefinitionEntity> loadOwnedSkills(CurrentUser user, List<String> skillIds) {
-        if (skillIds.isEmpty()) {
-            return Map.of();
-        }
-        return skillMapper.selectOwnedByIds(user.tenantId(), user.userId(), skillIds).stream()
-            .collect(Collectors.toMap(SkillDefinitionEntity::getId, Function.identity()));
     }
 
     private List<AgentSkillBindingRequest> normalizeSkillBindings(List<AgentSkillBindingRequest> raw) {

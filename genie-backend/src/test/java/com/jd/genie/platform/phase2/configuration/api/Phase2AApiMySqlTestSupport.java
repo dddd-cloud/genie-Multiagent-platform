@@ -4,9 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.CurrentUserProvider;
+import com.jd.genie.platform.phase2.configuration.agent.api.AgentApiExceptionHandler;
+import com.jd.genie.platform.phase2.configuration.agent.api.Phase2AgentController;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewService;
+import com.jd.genie.platform.phase2.configuration.prompt.api.Phase2PromptPreviewController;
+import com.jd.genie.platform.phase2.configuration.prompt.api.PromptApiExceptionHandler;
+import com.jd.genie.platform.phase2.configuration.skill.api.Phase2SkillController;
+import com.jd.genie.platform.phase2.configuration.skill.api.SkillApiExceptionHandler;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
 import com.jd.genie.platform.phase2.configuration.support.Phase2AMySqlTestSupport;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,19 +31,19 @@ abstract class Phase2AApiMySqlTestSupport extends Phase2AMySqlTestSupport {
 
     protected MockMvc agentMvc() {
         return MockMvcBuilders.standaloneSetup(new Phase2AgentController(agentService, currentUserProvider, objectMapper))
-            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+            .setControllerAdvice(new AgentApiExceptionHandler())
             .build();
     }
 
     protected MockMvc skillMvc() {
-        return MockMvcBuilders.standaloneSetup(new Phase2SkillController(skillService, currentUserProvider, objectMapper))
-            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+        return MockMvcBuilders.standaloneSetup(new Phase2SkillController(skillService, currentUserProvider))
+            .setControllerAdvice(new SkillApiExceptionHandler())
             .build();
     }
 
     protected MockMvc promptMvc() {
         return MockMvcBuilders.standaloneSetup(new Phase2PromptPreviewController(promptPreviewService, currentUserProvider))
-            .setControllerAdvice(new Phase2ConfigurationApiExceptionHandler())
+            .setControllerAdvice(new PromptApiExceptionHandler())
             .build();
     }
 

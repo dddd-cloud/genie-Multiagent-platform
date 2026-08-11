@@ -36,6 +36,18 @@ export interface AgentRuntimeSkill {
   sortOrder: number;
   instruction: string;
   outputRequirement: string;
+  skillKey?: string | null;
+  packageMode?: string | null;
+  packageVersion?: string | null;
+  packageHash?: string | null;
+  capabilityKeys?: string[];
+  entrypoints?: Array<{
+    name: string;
+    runtime: string;
+    script: string;
+    description?: string | null;
+    inputSchemaJson?: string | null;
+  }>;
 }
 
 export interface AgentRuntimeProfile {

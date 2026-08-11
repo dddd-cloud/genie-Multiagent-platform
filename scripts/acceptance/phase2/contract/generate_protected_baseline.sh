@@ -23,7 +23,18 @@ list_protected_files() {
     genie-backend/src/main/resources/db/migration/V001__legacy_schema.sql \
     genie-backend/src/main/resources/db/migration/V002__identity_and_session.sql \
     genie-backend/src/main/resources/db/migration/V003__conversation.sql \
-    ui/src/utils/querySSE.ts
+    ui/src/utils/querySSE.ts \
+    docs/document/phase2/00_JoyAgent_二次开发前统一契约冻结基线_MVP-CONTRACT-005.md \
+    genie-backend/src/main/resources/db/migration/V004__agent_and_skill.sql \
+    genie-backend/src/main/resources/db/migration/V005__mcp_and_tool_binding.sql \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2/tooling/RuntimeToolCollectionService.java \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2/tooling/AuthorizedToolCollection.java \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2contract/dto/OrchestrationEvent.java \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2contract/port/RuntimeToolCollectionPort.java \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2contract/port/AgentSkillBindingPort.java \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2contract/port/SkillRuntimePort.java \
+    genie-backend/src/main/java/com/jd/genie/platform/contract/MvpErrorCode.java \
+    genie-backend/src/main/java/com/jd/genie/platform/phase2contract/error/Phase2ErrorHttpStatus.java
 }
 
 if [[ "${1:-}" == "--list" ]]; then

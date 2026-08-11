@@ -167,7 +167,12 @@ class ContractShapeTest {
             "AGENT_INVALID_RESULT",
             "CONTEXT_BUDGET_EXCEEDED",
             "MEMORY_ANALYSIS_FAILED",
-            "SUMMARY_FAILED"
+            "SUMMARY_FAILED",
+            "SKILL_PACKAGE_INVALID",
+            "SKILL_RESOURCE_NOT_FOUND",
+            "SKILL_ENTRYPOINT_NOT_FOUND",
+            "SKILL_EXECUTION_FAILED",
+            "SKILL_EXECUTION_TIMEOUT"
         }, enumNames(MvpErrorCode.class));
     }
 

@@ -50,7 +50,24 @@ describe('SnapshotOrchestrationHydrateTest', () => {
     // extract returns null for missing orchestrationEvent.
     expect(extractOrchestrationEventFromResult({ resultMap: {} })).toBeNull();
     expect(
-      extractOrchestrationEventFromResult({resultMap: { orchestrationEvent: { schemaVersion: 2 } },}),
+      extractOrchestrationEventFromResult({
+        resultMap: { orchestrationEvent: { schemaVersion: 99 } },
+      }),
+    ).toBeNull();
+    expect(
+      extractOrchestrationEventFromResult({
+        resultMap: {
+          orchestrationEvent: {
+            schemaVersion: 2,
+            eventId: 'x:1',
+            sequence: 1,
+            // missing eventType
+            requestId: 'x',
+            runId: 'y',
+            steps: [],
+          },
+        },
+      }),
     ).toBeNull();
 
     const state = replayOrchestrationEvents(events);

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "sequence": 3,
+  "requestId": "request-c0-trace-v2",
+  "runId": "run-c0-trace-v2",
+  "scope": "SUBTASK",
+  "attemptNo": 1,
+  "stepId": "step-1",
+  "subTaskId": "step-1-memory",
+  "agentId": "agent-memory-001",
+  "agentName": "Memory Agent",
+  "retryNo": 0,
+  "kind": "OUTPUT",
+  "text": "Subtask memory probe complete.",
+  "append": true,
+  "truncated": false
+}

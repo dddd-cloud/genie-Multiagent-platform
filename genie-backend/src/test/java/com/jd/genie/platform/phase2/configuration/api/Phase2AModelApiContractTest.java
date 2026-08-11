@@ -2,6 +2,7 @@ package com.jd.genie.platform.phase2.configuration.api;
 
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogItem;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
+import com.jd.genie.platform.phase2.configuration.model.api.Phase2ModelController;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

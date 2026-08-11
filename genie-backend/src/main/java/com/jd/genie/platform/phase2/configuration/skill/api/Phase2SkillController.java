@@ -1,6 +1,5 @@
-package com.jd.genie.platform.phase2.configuration.api;
+package com.jd.genie.platform.phase2.configuration.skill.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.ApiResponse;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.CurrentUserProvider;
@@ -9,6 +8,7 @@ import com.jd.genie.platform.phase2.configuration.skill.dto.SkillCreateRequest;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillUpdateRequest;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
+import com.jd.genie.platform.phase2contract.dto.VersionRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,15 +29,14 @@ public class Phase2SkillController {
 
     private final SkillDefinitionService skillService;
     private final CurrentUserProvider currentUserProvider;
-    private final ObjectMapper objectMapper;
 
     @PostMapping
-    public ApiResponse<Phase2ApiAssembler.SkillView> create(@RequestBody(required = false) SkillCreateRequest request) {
+    public ApiResponse<SkillApiAssembler.SkillView> create(@RequestBody(required = false) SkillCreateRequest request) {
         return success(assembler().skill(skillService.createSkill(currentUser(), request)));
     }
 
     @GetMapping
-    public ApiResponse<PageResponse<Phase2ApiAssembler.SkillView>> list(
+    public ApiResponse<PageResponse<SkillApiAssembler.SkillView>> list(
         @RequestParam(defaultValue = "1") Integer page,
         @RequestParam(defaultValue = "20") Integer pageSize
     ) {
@@ -51,12 +50,12 @@ public class Phase2SkillController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<Phase2ApiAssembler.SkillView> detail(@PathVariable String id) {
+    public ApiResponse<SkillApiAssembler.SkillView> detail(@PathVariable String id) {
         return success(assembler().skill(skillService.getSkill(currentUser(), id)));
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Phase2ApiAssembler.SkillView> update(@PathVariable String id,
+    public ApiResponse<SkillApiAssembler.SkillView> update(@PathVariable String id,
                                                              @RequestBody(required = false) SkillUpdateRequest request) {
         return success(assembler().skill(skillService.updateSkill(currentUser(), id, request)));
     }
@@ -68,13 +67,13 @@ public class Phase2SkillController {
     }
 
     @PostMapping("/{id}/enable")
-    public ApiResponse<Phase2ApiAssembler.SkillView> enable(@PathVariable String id,
+    public ApiResponse<SkillApiAssembler.SkillView> enable(@PathVariable String id,
                                                              @RequestBody(required = false) VersionRequest request) {
         return success(assembler().skill(skillService.enableSkill(currentUser(), id, version(request))));
     }
 
     @PostMapping("/{id}/disable")
-    public ApiResponse<Phase2ApiAssembler.SkillView> disable(@PathVariable String id,
+    public ApiResponse<SkillApiAssembler.SkillView> disable(@PathVariable String id,
                                                               @RequestBody(required = false) VersionRequest request) {
         return success(assembler().skill(skillService.disableSkill(currentUser(), id, version(request))));
     }
@@ -87,8 +86,8 @@ public class Phase2SkillController {
         return currentUserProvider.requireCurrentUser();
     }
 
-    private Phase2ApiAssembler assembler() {
-        return new Phase2ApiAssembler(objectMapper);
+    private SkillApiAssembler assembler() {
+        return new SkillApiAssembler();
     }
 
     private <T> ApiResponse<T> success(T data) {

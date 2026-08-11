@@ -6,7 +6,7 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentUpdateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.exception.AgentConfigurationException;
-import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentSkillBindingMapper;
+import com.jd.genie.platform.phase2.configuration.skill.binding.mapper.AgentSkillBindingMapper;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillCreateRequest;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;

@@ -1,4 +1,4 @@
-package com.jd.genie.platform.phase2.configuration.agent.runtime;
+package com.jd.genie.platform.phase2.configuration.skill.binding;
 
 import lombok.Data;
 

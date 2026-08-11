@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/orchestration-event-v2.schema.json",
+  "title": "Orchestration Event V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "sequence",
+    "eventType",
+    "requestId",
+    "runId",
+    "steps"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "eventId": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "eventType": {
+      "type": "string",
+      "enum": [
+        "ROUTE_SELECTED",
+        "PLAN_CREATED",
+        "STEP_STARTED",
+        "STEP_COMPLETED",
+        "STEP_FAILED",
+        "STEP_SKIPPED",
+        "REPLAN_STARTED",
+        "SUMMARY_STARTED",
+        "SUMMARY_COMPLETED",
+        "SUMMARY_FALLBACK",
+        "FINAL_RESPONSE",
+        "PARALLEL_STARTED",
+        "SUBTASK_STARTED",
+        "SUBTASK_COMPLETED",
+        "SUBTASK_FAILED",
+        "STEP_REVIEW_STARTED",
+        "STEP_RETRY_STARTED",
+        "STEP_FALLBACK_STARTED",
+        "STEP_DEGRADED"
+      ]
+    },
+    "requestId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "attemptNo": {
+      "type": ["integer", "null"],
+      "enum": [1, null]
+    },
+    "stepId": { "type": ["string", "null"] },
+    "subTaskId": { "type": ["string", "null"] },
+    "stepMode": {
+      "type": ["string", "null"],
+      "enum": ["MAIN_ONLY", "SINGLE_AGENT", "PARALLEL_AGENTS", null]
+    },
+    "agentId": { "type": ["string", "null"] },
+    "agentName": { "type": ["string", "null"] },
+    "route": {
+      "type": ["string", "null"],
+      "enum": ["DIRECT", "ORCHESTRATED", null]
+    },
+    "retryNo": {
+      "type": ["integer", "null"],
+      "enum": [0, 1, null]
+    },
+    "reasonCode": { "type": ["string", "null"] },
+    "errorCode": {
+      "type": ["string", "null"],
+      "enum": [
+        "INVALID_INPUT",
+        "AGENT_OFFLINE",
+        "TOOL_PERMISSION_DENIED",
+        "TOOL_TIMEOUT",
+        "TOOL_UNAVAILABLE",
+        "TOOL_INVALID_RESPONSE",
+        "AGENT_INVALID_RESULT",
+        "CONTEXT_BUDGET_EXCEEDED",
+        "EXECUTION_ERROR",
+        "CANCELLED",
+        null
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/planStep" }
+    },
+    "completionStatus": {
+      "type": ["string", "null"],
+      "enum": ["SUCCESS", "PARTIAL", null]
+    }
+  },
+  "$defs": {
+    "planStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepId", "objective", "inputRefs"],
+      "properties": {
+        "stepId": { "type": "string", "minLength": 1 },
+        "agentId": { "type": ["string", "null"] },
+        "agentName": { "type": ["string", "null"] },
+        "objective": { "type": "string", "minLength": 1 },
+        "inputRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "mode": {
+          "type": ["string", "null"],
+          "enum": ["MAIN_ONLY", "SINGLE_AGENT", "PARALLEL_AGENTS", null]
+        },
+        "subTasks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/subTask" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "MAIN_ONLY" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "agentId": { "type": "null" },
+              "subTasks": { "type": "array", "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "SINGLE_AGENT" } }, "required": ["mode"] },
+          "then": {
+            "required": ["agentId"],
+            "properties": {
+              "agentId": { "type": "string", "minLength": 1 },
+              "subTasks": { "type": "array", "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "PARALLEL_AGENTS" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "agentId": { "type": "null" },
+              "subTasks": { "type": "array", "minItems": 2, "maxItems": 4 }
+            },
+            "required": ["subTasks"]
+          }
+        }
+      ]
+    },
+    "subTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subTaskId", "agentId", "agentName", "objective"],
+      "properties": {
+        "subTaskId": { "type": "string", "minLength": 1 },
+        "agentId": { "type": "string", "minLength": 1 },
+        "agentName": { "type": "string" },
+        "objective": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "eventType": { "const": "ROUTE_SELECTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["route", "reasonCode"],
+        "properties": {
+          "route": { "type": "string" },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "PLAN_CREATED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "steps"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "steps": { "type": "array", "minItems": 1, "maxItems": 6 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_COMPLETED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_FAILED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "errorCode"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 },
+          "errorCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_SKIPPED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "reasonCode"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "REPLAN_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "reasonCode"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUMMARY_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo"],
+        "properties": { "attemptNo": { "const": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUMMARY_COMPLETED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo"],
+        "properties": { "attemptNo": { "const": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUMMARY_FALLBACK" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "reasonCode"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "reasonCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "FINAL_RESPONSE" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["completionStatus"],
+        "properties": {
+          "completionStatus": { "type": "string", "enum": ["SUCCESS", "PARTIAL"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "PARALLEL_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "stepMode"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 },
+          "stepMode": { "const": "PARALLEL_AGENTS" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "enum": ["SUBTASK_STARTED", "SUBTASK_COMPLETED", "SUBTASK_FAILED"]
+          }
+        },
+        "required": ["eventType"]
+      },
+      "then": {
+        "required": ["attemptNo", "stepId", "subTaskId", "agentId", "agentName"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 },
+          "subTaskId": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 },
+          "agentName": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "SUBTASK_FAILED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["errorCode"],
+        "properties": { "errorCode": { "type": "string", "minLength": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_REVIEW_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "STEP_RETRY_STARTED" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["attemptNo", "stepId", "retryNo"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 },
+          "retryNo": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eventType": { "enum": ["STEP_FALLBACK_STARTED", "STEP_DEGRADED"] }
+        },
+        "required": ["eventType"]
+      },
+      "then": {
+        "required": ["attemptNo", "stepId"],
+        "properties": {
+          "attemptNo": { "const": 1 },
+          "stepId": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  ]
+}

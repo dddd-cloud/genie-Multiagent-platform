@@ -4,7 +4,6 @@ import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.configuration.agent.entity.AgentDefinitionEntity;
 import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentDefinitionMapper;
-import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentSkillBindingMapper;
 import com.jd.genie.platform.phase2.configuration.agent.model.AgentStatus;
 import com.jd.genie.platform.phase2.configuration.agent.model.PromptMode;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
@@ -14,14 +13,15 @@ import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationReques
 import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationResult;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptSkillFragment;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptValidationException;
-import com.jd.genie.platform.phase2.configuration.skill.model.SkillStatus;
 import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeSkill;
+import com.jd.genie.platform.phase2contract.dto.SkillRuntimePackage;
 import com.jd.genie.platform.phase2contract.dto.ToolBindingView;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
+import com.jd.genie.platform.phase2contract.port.SkillRuntimePort;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -30,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +37,7 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
     private static final int MAX_ALLOWED_AGENT_IDS = 20;
 
     private final AgentDefinitionMapper agentMapper;
-    private final AgentSkillBindingMapper bindingMapper;
+    private final SkillRuntimePort skillRuntimePort;
     private final AgentPromptCompiler promptCompiler;
     private final ModelCatalogService modelCatalogService;
     private final ObjectProvider<ToolBindingPort> toolBindingPortProvider;
@@ -78,18 +77,16 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
             throw error(MvpErrorCode.AGENT_OFFLINE);
         }
 
-        List<AgentRuntimeSkillSnapshot> enabledSkills = bindingMapper
-            .selectOwnedRuntimeSkillSnapshots(user.tenantId(), user.userId(), agent.getId())
-            .stream()
-            .filter(skill -> SkillStatus.ENABLED.name().equals(skill.getStatus()))
-            .toList();
+        // Preserve V1/004 runtime behavior: disabled bound skills are ignored at profile load.
+        // Online transition still fail-closes via resolveForBindings(..., true).
+        List<SkillRuntimePackage> enabledSkills = skillRuntimePort.resolveForAgent(user, agent.getId(), false);
         PromptCompilationResult prompt = recompilePrompt(agent, enabledSkills);
         ModelResolutionResult model = modelCatalogService.resolveForStorage(agent.getModelName());
         if (!model.available() || model.resolvedModelName() == null || model.resolvedModelName().isBlank()) {
             throw error(MvpErrorCode.MODEL_NOT_AVAILABLE);
         }
 
-        List<String> enabledSkillIds = enabledSkills.stream().map(AgentRuntimeSkillSnapshot::getSkillId).toList();
+        List<String> enabledSkillIds = enabledSkills.stream().map(SkillRuntimePackage::skillId).toList();
         ToolBindingView bindings = toolBindingPort().resolveBindings(user, agent.getId(), enabledSkillIds);
         if (bindings == null || !bindings.invalidCapabilities().isEmpty()) {
             throw error(MvpErrorCode.AGENT_INVALID_STATE);
@@ -97,11 +94,17 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
         List<String> capabilityKeys = mergeCapabilities(bindings, enabledSkills);
         List<AgentRuntimeSkill> skills = enabledSkills.stream()
             .map(skill -> new AgentRuntimeSkill(
-                skill.getSkillId(),
-                skill.getSkillVersion(),
-                skill.getSortOrder(),
-                skill.getInstruction(),
-                skill.getOutputRequirement()
+                skill.skillId(),
+                skill.skillVersion(),
+                skill.sortOrder(),
+                skill.instructionMarkdown(),
+                skill.outputRequirement(),
+                skill.skillKey(),
+                skill.packageMode() == null ? null : skill.packageMode().name(),
+                skill.packageVersion(),
+                skill.packageHash(),
+                skill.capabilityKeys(),
+                skill.entrypoints()
             ))
             .toList();
 
@@ -131,15 +134,15 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
         return List.copyOf(deduplicated);
     }
 
-    private PromptCompilationResult recompilePrompt(AgentDefinitionEntity agent, List<AgentRuntimeSkillSnapshot> skills) {
+    private PromptCompilationResult recompilePrompt(AgentDefinitionEntity agent, List<SkillRuntimePackage> skills) {
         List<PromptSkillFragment> fragments = skills.stream()
             .map(skill -> new PromptSkillFragment(
-                skill.getSkillId(),
-                skill.getSkillVersion(),
-                skill.getSkillName(),
-                skill.getSortOrder(),
-                skill.getInstruction(),
-                skill.getOutputRequirement()
+                skill.skillId(),
+                skill.skillVersion(),
+                skill.name(),
+                skill.sortOrder(),
+                skill.instructionMarkdown(),
+                skill.outputRequirement()
             ))
             .toList();
         try {
@@ -157,12 +160,12 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
         }
     }
 
-    private List<String> mergeCapabilities(ToolBindingView bindings, List<AgentRuntimeSkillSnapshot> enabledSkills) {
+    private List<String> mergeCapabilities(ToolBindingView bindings, List<SkillRuntimePackage> enabledSkills) {
         LinkedHashSet<String> merged = new LinkedHashSet<>();
         addCapabilities(merged, bindings.directCapabilities());
-        Map<String, List<String>> skillCapabilities = bindings.skillCapabilities();
-        for (AgentRuntimeSkillSnapshot skill : enabledSkills) {
-            addCapabilities(merged, skillCapabilities.get(skill.getSkillId()));
+        for (SkillRuntimePackage skill : enabledSkills) {
+            addCapabilities(merged, bindings.skillCapabilities().get(skill.skillId()));
+            addCapabilities(merged, skill.capabilityKeys());
         }
         return List.copyOf(merged);
     }

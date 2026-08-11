@@ -1,4 +1,4 @@
-package com.jd.genie.platform.phase2.configuration.api;
+package com.jd.genie.platform.phase2.configuration.agent.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.ApiResponse;
@@ -9,6 +9,7 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentUpdateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2contract.dto.VersionRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,12 +33,12 @@ public class Phase2AgentController {
     private final ObjectMapper objectMapper;
 
     @PostMapping
-    public ApiResponse<Phase2ApiAssembler.AgentView> create(@RequestBody(required = false) AgentCreateRequest request) {
+    public ApiResponse<AgentApiAssembler.AgentView> create(@RequestBody(required = false) AgentCreateRequest request) {
         return success(assembler().agent(agentService.createAgent(currentUser(), request)));
     }
 
     @GetMapping
-    public ApiResponse<PageResponse<Phase2ApiAssembler.AgentView>> list(
+    public ApiResponse<PageResponse<AgentApiAssembler.AgentView>> list(
         @RequestParam(defaultValue = "1") Integer page,
         @RequestParam(defaultValue = "20") Integer pageSize
     ) {
@@ -51,12 +52,12 @@ public class Phase2AgentController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<Phase2ApiAssembler.AgentView> detail(@PathVariable String id) {
+    public ApiResponse<AgentApiAssembler.AgentView> detail(@PathVariable String id) {
         return success(assembler().agent(agentService.getAgent(currentUser(), id)));
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Phase2ApiAssembler.AgentView> update(@PathVariable String id,
+    public ApiResponse<AgentApiAssembler.AgentView> update(@PathVariable String id,
                                                              @RequestBody(required = false) AgentUpdateRequest request) {
         return success(assembler().agent(agentService.updateAgent(currentUser(), id, request)));
     }
@@ -68,13 +69,13 @@ public class Phase2AgentController {
     }
 
     @PostMapping("/{id}/online")
-    public ApiResponse<Phase2ApiAssembler.AgentView> online(@PathVariable String id,
+    public ApiResponse<AgentApiAssembler.AgentView> online(@PathVariable String id,
                                                              @RequestBody(required = false) VersionRequest request) {
         return success(assembler().agent(agentService.onlineAgent(currentUser(), id, version(request))));
     }
 
     @PostMapping("/{id}/offline")
-    public ApiResponse<Phase2ApiAssembler.AgentView> offline(@PathVariable String id,
+    public ApiResponse<AgentApiAssembler.AgentView> offline(@PathVariable String id,
                                                               @RequestBody(required = false) VersionRequest request) {
         return success(assembler().agent(agentService.offlineAgent(currentUser(), id, version(request))));
     }
@@ -87,8 +88,8 @@ public class Phase2AgentController {
         return currentUserProvider.requireCurrentUser();
     }
 
-    private Phase2ApiAssembler assembler() {
-        return new Phase2ApiAssembler(objectMapper);
+    private AgentApiAssembler assembler() {
+        return new AgentApiAssembler(objectMapper);
     }
 
     private <T> ApiResponse<T> success(T data) {

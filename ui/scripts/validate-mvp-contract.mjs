@@ -100,6 +100,11 @@ const EXPECTED_ERROR_CODES = [
   'CONTEXT_BUDGET_EXCEEDED',
   'MEMORY_ANALYSIS_FAILED',
   'SUMMARY_FAILED',
+  'SKILL_PACKAGE_INVALID',
+  'SKILL_RESOURCE_NOT_FOUND',
+  'SKILL_ENTRYPOINT_NOT_FOUND',
+  'SKILL_EXECUTION_FAILED',
+  'SKILL_EXECUTION_TIMEOUT',
 ];
 
 const MODULE_DOCS = [
@@ -113,8 +118,12 @@ const PHASE2_SCHEMA_FILES = [
   'phase2-gpt-query-v1.schema.json',
   'agent-capability-summary-v1.schema.json',
   'agent-runtime-profile-v1.schema.json',
+  'agent-runtime-profile-v2.schema.json',
   'tool-binding-view-v1.schema.json',
   'orchestration-event-v1.schema.json',
+  'orchestration-event-v2.schema.json',
+  'orchestration-trace-v1.schema.json',
+  'orchestration-trace-v2.schema.json',
   'memory-patch-v1.schema.json',
   'management-api-v1.schema.json',
 ];
@@ -130,6 +139,14 @@ const PHASE2_PROGRESS_EVENT_TYPES = new Set([
   'SUMMARY_STARTED',
   'SUMMARY_COMPLETED',
   'SUMMARY_FALLBACK',
+  'PARALLEL_STARTED',
+  'SUBTASK_STARTED',
+  'SUBTASK_COMPLETED',
+  'SUBTASK_FAILED',
+  'STEP_REVIEW_STARTED',
+  'STEP_RETRY_STARTED',
+  'STEP_FALLBACK_STARTED',
+  'STEP_DEGRADED',
 ]);
 
 const PHASE2_REQUIRED_FIXTURES = [
@@ -159,6 +176,18 @@ const PHASE2_REQUIRED_FIXTURES = [
   'snapshot-orchestrated-success.json',
   'snapshot-orchestrated-truncated.json',
   'snapshot-orchestrated-malformed.txt',
+  'c0/event-v1-legacy.json',
+  'c0/event-v2-serial.json',
+  'c0/event-v2-parallel-two-agents.json',
+  'c0/event-v2-parallel-same-agent.json',
+  'c0/event-v2-subtask-retry.json',
+  'c0/event-v2-main-fallback.json',
+  'c0/event-v2-degraded-partial.json',
+  'c0/snapshot-v1-replan-restore.json',
+  'c0/trace-v1.json',
+  'c0/trace-v2-subtask.json',
+  'c0/event-v2-invalid-attempt.json',
+  'c0/trace-v2-invalid-scope.json',
 ];
 
 const PHASE2_MANAGEMENT_FIXTURES = [
@@ -1246,6 +1275,72 @@ function validatePhase2OrchestrationSequence(events, label) {
   pass(`${label}: orchestration sequence consistency ok`);
 }
 
+function validatePhase2C0Fixtures(validators) {
+  const eventV1 = validators['orchestration-event-v1.schema.json'];
+  const eventV2 = validators['orchestration-event-v2.schema.json'];
+  const traceV1 = validators['orchestration-trace-v1.schema.json'];
+  const traceV2 = validators['orchestration-trace-v2.schema.json'];
+  if (!eventV1 || !eventV2 || !traceV1 || !traceV2) {
+    fail('C0 orchestration event/trace schema validators unavailable');
+    return;
+  }
+
+  const c0Dir = join(phase2FixturesDir, 'c0');
+  const readC0 = (name) => JSON.parse(readText(join(c0Dir, name)));
+
+  const assertEventValid = (data, validate, label) => {
+    if (!validate(data)) {
+      fail(`${label} must pass schema: ${JSON.stringify(validate.errors)}`);
+    } else {
+      pass(`${label}: schema ok`);
+    }
+  };
+
+  const assertEventsValid = (data, validate, label) => {
+    if (!Array.isArray(data)) {
+      fail(`${label} must be an events array`);
+      return;
+    }
+    data.forEach((event, index) => assertEventValid(event, validate, `${label}[${index}]`));
+  };
+
+  assertEventValid(readC0('event-v1-legacy.json'), eventV1, 'c0/event-v1-legacy.json');
+  assertEventsValid(readC0('event-v2-serial.json'), eventV2, 'c0/event-v2-serial.json');
+  assertEventsValid(
+    readC0('event-v2-parallel-two-agents.json'),
+    eventV2,
+    'c0/event-v2-parallel-two-agents.json'
+  );
+  assertEventsValid(
+    readC0('event-v2-parallel-same-agent.json'),
+    eventV2,
+    'c0/event-v2-parallel-same-agent.json'
+  );
+  assertEventsValid(readC0('event-v2-subtask-retry.json'), eventV2, 'c0/event-v2-subtask-retry.json');
+  assertEventsValid(readC0('event-v2-main-fallback.json'), eventV2, 'c0/event-v2-main-fallback.json');
+  assertEventsValid(
+    readC0('event-v2-degraded-partial.json'),
+    eventV2,
+    'c0/event-v2-degraded-partial.json'
+  );
+  assertEventValid(readC0('trace-v1.json'), traceV1, 'c0/trace-v1.json');
+  assertEventValid(readC0('trace-v2-subtask.json'), traceV2, 'c0/trace-v2-subtask.json');
+
+  const invalidAttempt = readC0('event-v2-invalid-attempt.json');
+  if (eventV2(invalidAttempt)) {
+    fail('c0/event-v2-invalid-attempt.json must fail orchestration-event-v2 schema');
+  } else {
+    pass('c0/event-v2-invalid-attempt.json rejected by event-v2 schema');
+  }
+
+  const invalidTrace = readC0('trace-v2-invalid-scope.json');
+  if (traceV2(invalidTrace)) {
+    fail('c0/trace-v2-invalid-scope.json must fail orchestration-trace-v2 schema');
+  } else {
+    pass('c0/trace-v2-invalid-scope.json rejected by trace-v2 schema');
+  }
+}
+
 function validatePhase2ProtectedBaselineContent() {
   const content = readText(phase2ProtectedBaseline);
   if (content.includes('\r')) {
@@ -1253,8 +1348,9 @@ function validatePhase2ProtectedBaselineContent() {
     return;
   }
   const lines = content.split('\n').filter((line) => line.trim().length > 0);
-  if (lines.length !== 18) {
-    fail(`Phase2 protected baseline must contain exactly 18 entries, found ${lines.length}`);
+  const expectedCount = 29;
+  if (lines.length !== expectedCount) {
+    fail(`Phase2 protected baseline must contain exactly ${expectedCount} entries, found ${lines.length}`);
   }
   const paths = [];
   for (const line of lines) {
@@ -1267,8 +1363,8 @@ function validatePhase2ProtectedBaselineContent() {
   }
   if (new Set(paths).size !== paths.length) {
     fail('Phase2 protected baseline contains duplicate paths');
-  } else {
-    pass('Phase2 protected baseline content validated (18 entries, LF, unique paths)');
+  } else if (lines.length === expectedCount) {
+    pass(`Phase2 protected baseline content validated (${expectedCount} entries, LF, unique paths)`);
   }
 }
 
@@ -1303,9 +1399,15 @@ function validatePhase2SchemasAndFixtures(ajv) {
 
   validatePhase2MemoryPatchFixtures(memoryValidate);
   validatePhase2ErrorFixtures();
+  validatePhase2C0Fixtures(validators);
 
   for (const filePath of jsonFixtures) {
+    const relative = filePath.slice(phase2FixturesDir.length).replace(/^[/\\]/, '').replace(/\\/g, '/');
     const name = filePath.split(/[\\/]/).pop();
+    // C0 event/trace fixtures are validated explicitly above (raw event/trace payloads).
+    if (relative.startsWith('c0/') && !name.startsWith('snapshot-')) {
+      continue;
+    }
     let data;
     try {
       data = JSON.parse(readText(filePath));
