@@ -28,7 +28,7 @@ class TableAgent:
         request_id,
     ):
 
-        self.model_name = os.getenv("TR_EXTRACT_SYS_WSD_MODEL_NAME", "gpt-4o-0806")
+        self.model_name = os.getenv("TR_EXTRACT_SYS_WSD_MODEL_NAME", "deepseek-v4-flash")
         self.max_tokens = 4096
         self.temperature = 0
         self.top_p =  0.95

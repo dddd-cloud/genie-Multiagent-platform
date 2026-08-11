@@ -327,7 +327,7 @@ async def cal_engine(body: CalEngineRequest):
         data=body.data,
     )
 
-    async for chunk in ask_llm(messages=prompt, model=os.getenv("CAL_ENGINE_MODEL", "gpt-4.1"), only_content=True):
+    async for chunk in ask_llm(messages=prompt, model=os.getenv("CAL_ENGINE_MODEL", "deepseek-v4-flash"), only_content=True):
         expression = chunk
     return {"code": 200, "expression": expression, "request_id": body.request_id, "query": body.query}
 

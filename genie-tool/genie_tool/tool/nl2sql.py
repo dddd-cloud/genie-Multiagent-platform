@@ -25,7 +25,7 @@ class NL2SQLAgent:
         self.nl2sql_llm_name = os.getenv("NL2SQL_MODEL_NAME")
         self.rewrite_llm_name = os.getenv("REWRITE_MODEL_NAME")
         self.think_llm_name = os.getenv("THINK_MODEL_NAME")
-        self.default_model: str = "gpt-4.1"
+        self.default_model: str = "deepseek-v4-flash"
         self.temperature: float = 0.0
         self.top_p: float = 0.0
 

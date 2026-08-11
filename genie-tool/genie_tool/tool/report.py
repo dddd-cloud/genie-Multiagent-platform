@@ -26,7 +26,7 @@ load_dotenv()
 async def report(
         task: str,
         file_names: Optional[List[str]] = tuple(),
-        model: str = "gpt-4.1",
+        model: str = "deepseek-v4-flash",
         file_type: Literal["markdown", "html", "ppt"] = "markdown",
         template_type: str = "html",
 ) -> AsyncGenerator:
@@ -35,7 +35,7 @@ async def report(
         "markdown": markdown_report,
         "html": html_report,
     }
-    model = os.getenv("REPORT_MODEL", "gpt-4.1")
+    model = os.getenv("REPORT_MODEL", "deepseek-v4-flash")
     if file_type.lower() == "html":
         async for chunk in html_report(task, file_names, model, template_type=template_type):
             yield chunk
@@ -48,7 +48,7 @@ async def report(
 async def ppt_report(
         task: str,
         file_names: Optional[List[str]] = tuple(),
-        model: str = "gpt-4.1",
+        model: str = "deepseek-v4-flash",
         temperature: float = None,
         top_p: float = 0.6,
 ) -> AsyncGenerator:
@@ -78,7 +78,7 @@ async def ppt_report(
 async def markdown_report(
         task,
         file_names: Optional[List[str]] = tuple(),
-        model: str = "gpt-4.1",
+        model: str = "deepseek-v4-flash",
         temperature: float = 0,
         top_p: float = 0.9,
 ) -> AsyncGenerator:
@@ -104,7 +104,7 @@ async def markdown_report(
 async def html_report(
         task,
         file_names: Optional[List[str]] = tuple(),
-        model: str = "gpt-4.1",
+        model: str = "deepseek-v4-flash",
         temperature: float = 0,
         top_p: float = 0.9,
         template_type: str = "html",

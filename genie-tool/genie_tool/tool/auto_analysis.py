@@ -154,7 +154,7 @@ def create_agent(
         max_steps: int = 10,
         return_full_result: bool = False,
 ) -> CodeAgent:
-    model = os.getenv("ANALYSIS_MODEL", "gpt-4.1")
+    model = os.getenv("ANALYSIS_MODEL", "deepseek-v4-flash")
     base_url = os.getenv("OPENAI_BASE_URL")
     api_key = os.getenv("OPENAI_API_KEY")
     _model = OpenAIServerModel(

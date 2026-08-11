@@ -67,6 +67,12 @@ public final class AgentTaskResultParser {
         throw invalid();
     }
 
+    String extractDisplaySuccess(String raw) {
+        String candidate = extractJsonObject(raw);
+        AgentTaskResult recovered = recoverSuccess(candidate);
+        return recovered == null ? null : recovered.output();
+    }
+
     private AgentTaskResult tryParseStrict(String candidate) {
         try {
             JsonNode root = objectMapper.readTree(candidate);

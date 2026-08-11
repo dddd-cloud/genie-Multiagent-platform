@@ -11,6 +11,7 @@ import os
 from loguru import logger
 from abc import ABC, abstractmethod
 from typing import List
+from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 from bs4 import BeautifulSoup
 
@@ -157,22 +158,29 @@ class JinaSearch(BingSearch):
                         ) for item in result.get("search_result", [])
                     ]
         else:
+            if not self._api_key:
+                logger.warning(f"[{self._engine}] JINA_SEARCH_API_KEY 未配置，跳过 Jina 搜索")
+                return []
             headers = {
                 "Accept": "application/json",
                 "Authorization": f"Bearer {self._api_key}"
             }
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self._url}?q={query}", headers=headers, timeout=self._timeout) as response:
-                    result = json.loads(await response.text())
-                    return [
-                        Doc(
-                            doc_type="web_page",
-                            content=item.get("content", ""),
-                            title=item.get("title", ""),
-                            link=item.get("url", ""),
-                            data={"search_engine": self._engine},
-                        ) for item in result.get("data", [])
-                    ]
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"{self._url}?q={query}", headers=headers, timeout=self._timeout) as response:
+                        result = json.loads(await response.text())
+                        return [
+                            Doc(
+                                doc_type="web_page",
+                                content=item.get("content", ""),
+                                title=item.get("title", ""),
+                                link=item.get("url", ""),
+                                data={"search_engine": self._engine},
+                            ) for item in result.get("data", [])
+                        ]
+            except Exception as e:
+                logger.warning(f"[{self._engine}] Jina 搜索失败: query=[{query}] error={e}")
+                return []
 
 
 class SogouSearch(JinaSearch):
@@ -218,6 +226,54 @@ class SerperSearch(JinaSearch):
                 ]
 
 
+class DuckDuckGoSearch(SearchBase):
+    """DuckDuckGo HTML 端点搜索，免费且无需 API key"""
+
+    def __init__(self):
+        super().__init__()
+        self._engine = "ddg"
+        self._url = os.getenv("DDG_SEARCH_URL", "https://html.duckduckgo.com/html/")
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        }
+
+    @staticmethod
+    def _resolve_link(href: str) -> str:
+        """DDG 结果链接是 //duckduckgo.com/l/?uddg=<encoded> 跳转格式，还原真实地址"""
+        if href and href.startswith("//duckduckgo.com/l/"):
+            params = parse_qs(urlparse(href).query)
+            if params.get("uddg"):
+                return unquote(params["uddg"][0])
+        return href
+
+    async def search(self, query: str, request_id: str = None, *args, **kwargs) -> List[Doc]:
+        params = {"q": query, "kl": "cn-zh"}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self._url, params=params, headers=self.headers, timeout=self._timeout) as response:
+                    html = await response.text()
+        except Exception as e:
+            logger.warning(f"[{self._engine}] DuckDuckGo 搜索失败: query=[{query}] error={e}")
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        docs = []
+        for result in soup.select(".result"):
+            link_tag = result.select_one(".result__a")
+            if not link_tag:
+                continue
+            snippet_tag = result.select_one(".result__snippet")
+            docs.append(
+                Doc(
+                    doc_type="web_page",
+                    content=snippet_tag.get_text(strip=True) if snippet_tag else "",
+                    title=link_tag.get_text(strip=True),
+                    link=self._resolve_link(link_tag.get("href", "")),
+                    data={"search_engine": self._engine},
+                )
+            )
+        return docs
+
+
 class MixSearch(BingSearch):
 
     def __init__(self):
@@ -227,12 +283,13 @@ class MixSearch(BingSearch):
         self._jina_engine = JinaSearch()
         self._sogou_engine = SogouSearch()
         self._serp_engine = SerperSearch()
+        self._ddg_engine = DuckDuckGoSearch()
 
     async def search(
             self, query: str, request_id: str = None,
             use_bing: bool = True, use_jina: bool = True, use_sogou: bool = True,
-            use_serp: bool = True, *args, **kwargs) -> List[Doc]:
-        assert use_bing or use_jina or use_sogou or use_serp
+            use_serp: bool = True, use_ddg: bool = True, *args, **kwargs) -> List[Doc]:
+        assert use_bing or use_jina or use_sogou or use_serp or use_ddg
         engines = []
         if use_bing:
             engines.append(self._bing_engine)
@@ -242,6 +299,8 @@ class MixSearch(BingSearch):
             engines.append(self._sogou_engine)
         if use_serp:
             engines.append(self._serp_engine)
+        if use_ddg:
+            engines.append(self._ddg_engine)
         async with asyncio.TaskGroup() as tg:
             tasks = [tg.create_task(engine.search_and_dedup(query=query, request_id=request_id)) for engine in engines]
         results = [task.result() for task in tasks]

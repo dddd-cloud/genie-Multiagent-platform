@@ -11,7 +11,6 @@
 #
 # Optional overrides:
 #   SPRING_PROFILES_ACTIVE (default: mvp-acceptance)
-#   MVP_FAKE_AGENT_MODE / MVP_FAKE_AGENT_EVENT_COUNT / MVP_FAKE_AGENT_DELAY_MS
 #   GENIE_SESSION_TIMEOUT / GENIE_STREAM_SNAPSHOT_MAX_BYTES / …
 #
 # Phase2 Stage 2 (optional — keep :- so Stage 1 MVP still starts without them;
@@ -20,9 +19,9 @@
 #   GENIE_MCP_CREDENTIAL_KEY          (32-byte base64)
 #   GENIE_INTERNAL_MCP_TOKEN
 #
-# Ready checks (from genie-backend network namespace — tool/client use network_mode: service:genie-backend):
-#   curl -fsS http://127.0.0.1:1601/openapi.json
-#   curl -fsS http://127.0.0.1:8188/health
+# Ready checks from genie-backend:
+#   curl -fsS http://genie-tool:1601/openapi.json
+#   curl -fsS http://genie-client:8188/health
 # Host publish: ONLY ui :3000. MySQL/backend/tool/client stay on the compose network.
 
 name: joyagent-mvp
@@ -76,9 +75,6 @@ services:
       GENIE_INTERNAL_MCP_TOKEN: ${GENIE_INTERNAL_MCP_TOKEN:-}
       MVP_ACCEPTANCE_USER_PASSWORD: ${MVP_ACCEPTANCE_USER_PASSWORD:?required}
       MVP_ACCEPTANCE_ADMIN_PASSWORD: ${MVP_ACCEPTANCE_ADMIN_PASSWORD:?required}
-      MVP_FAKE_AGENT_MODE: ${MVP_FAKE_AGENT_MODE:-SUCCESS}
-      MVP_FAKE_AGENT_EVENT_COUNT: ${MVP_FAKE_AGENT_EVENT_COUNT:-5}
-      MVP_FAKE_AGENT_DELAY_MS: ${MVP_FAKE_AGENT_DELAY_MS:-50}
       GENIE_SESSION_TIMEOUT: ${GENIE_SESSION_TIMEOUT:-12h}
       GENIE_STREAM_SNAPSHOT_MAX_BYTES: ${GENIE_STREAM_SNAPSHOT_MAX_BYTES:-8388608}
       GENIE_HISTORY_MAX_TURNS: ${GENIE_HISTORY_MAX_TURNS:-6}
@@ -116,14 +112,17 @@ services:
     networks:
       - mvp
 
-  # Shares genie-backend netns → reachable as 127.0.0.1:1601 from backend.
+  # Services communicate through Compose DNS. This survives an individual container restart.
   genie-tool:
     image: python:3.11
     working_dir: /workspace/genie-tool
     volumes:
       - ../genie-tool:/workspace/genie-tool
       - mvp_uv_tool_cache:/root/.cache/uv
-    network_mode: "service:genie-backend"
+    expose:
+      - "1601"
+    networks:
+      - mvp
     environment:
       UV_LINK_MODE: copy
     depends_on:
@@ -139,14 +138,16 @@ services:
         uv run python -m genie_tool.db.db_engine
         exec uv run python server.py
 
-  # Shares genie-backend netns → reachable as 127.0.0.1:8188 from backend.
   genie-client:
     image: python:3.11
     working_dir: /workspace/genie-client
     volumes:
       - ../genie-client:/workspace/genie-client
       - mvp_uv_client_cache:/root/.cache/uv
-    network_mode: "service:genie-backend"
+    expose:
+      - "8188"
+    networks:
+      - mvp
     environment:
       UV_LINK_MODE: copy
       GENIE_INTERNAL_MCP_TOKEN: ${GENIE_INTERNAL_MCP_TOKEN:-}

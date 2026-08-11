@@ -58,7 +58,7 @@ class _LLMModelInfoFactory:
 
 LLMModelInfoFactory = _LLMModelInfoFactory()
 
-LLMModelInfoFactory.register(LLMModelInfo(model="gpt-4.1", context_length=1000000, max_output=32000))
+LLMModelInfoFactory.register(LLMModelInfo(model="deepseek-v4-flash", context_length=128000, max_output=16384))
 LLMModelInfoFactory.register(LLMModelInfo(model="DeepSeek-V3", context_length=64000, max_output=8000))
 
 

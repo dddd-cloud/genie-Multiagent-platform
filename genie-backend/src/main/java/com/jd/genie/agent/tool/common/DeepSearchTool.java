@@ -174,25 +174,27 @@ public class DeepSearchTool implements BaseTool {
                                 fileTool.setAgentContext(agentContext);
                                 // 上传搜索内容到文件中
                                 if (searchResponse.getIsFinal()) {
-                                    if (agentContext.getIsStream()) {
-                                        searchResponse.setAnswer(stringBuilderAll.toString());
+                                    String finalAnswer = searchResponse.getAnswer();
+                                    if ((finalAnswer == null || finalAnswer.isBlank()) && !stringBuilderAll.isEmpty()) {
+                                        finalAnswer = stringBuilderAll.toString();
                                     }
-                                    if (searchResponse.getAnswer().isEmpty()) {
+                                    if (finalAnswer == null || finalAnswer.isBlank()) {
                                         log.error("{} deep search answer empty", agentContext.getRequestId());
                                         break;
                                     }
+                                    searchResponse.setAnswer(finalAnswer);
                                     String fileName = StringUtil.removeSpecialChars(searchResponse.getQuery() + "的搜索结果.md");
-                                    String fileDesc = searchResponse.getAnswer()
-                                            .substring(0, Math.min(searchResponse.getAnswer().length(), genieConfig.getDeepSearchToolFileDescTruncateLen())) + "...";
+                                    String fileDesc = finalAnswer
+                                            .substring(0, Math.min(finalAnswer.length(), genieConfig.getDeepSearchToolFileDescTruncateLen())) + "...";
                                     FileRequest fileRequest = FileRequest.builder()
                                             .requestId(agentContext.getRequestId())
                                             .fileName(fileName)
                                             .description(fileDesc)
-                                            .content(searchResponse.getAnswer())
+                                            .content(finalAnswer)
                                             .build();
                                     fileTool.uploadFile(fileRequest, false, false);
-                                    result = searchResponse.getAnswer().
-                                            substring(0, Math.min(searchResponse.getAnswer().length(), genieConfig.getDeepSearchToolMessageTruncateLen()));
+                                    result = finalAnswer
+                                            .substring(0, Math.min(finalAnswer.length(), genieConfig.getDeepSearchToolMessageTruncateLen()));
 
                                     agentContext.getPrinter().send(messageId, "deep_search", searchResponse, digitalEmployee, true);
 

@@ -44,7 +44,12 @@ public class RuntimeToolCollectionService implements RuntimeToolCollectionPort {
         selected.addAll(view.directCapabilities());
         for (String skillId : profile.skills().stream().map(s -> s.skillId()).toList()) selected.addAll(view.skillCapabilities().getOrDefault(skillId, List.of()));
         Set<String> requested = new LinkedHashSet<>(profile.capabilityKeys());
-        if (!requested.isEmpty()) selected.retainAll(requested);
+        if (!requested.isEmpty()) {
+            selected.retainAll(requested);
+        }
+        if (selected.isEmpty() && requested.isEmpty()) {
+            selected.add(CapabilityKeys.BUILTIN_DEEP_SEARCH);
+        }
         List<BaseTool> tools = new ArrayList<>();
         var builtins = catalog.create(context);
         for (String key : selected) {

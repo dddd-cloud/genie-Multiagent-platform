@@ -22,8 +22,8 @@ async def query_decompose(
         query: str,
         **kwargs
 ):
-    model = os.getenv("QUERY_DECOMPOSE_MODEL", "gpt-4.1")
-    think_model = os.getenv("QUERY_DECOMPOSE_THINK_MODEL", "gpt-4.1")
+    model = os.getenv("QUERY_DECOMPOSE_MODEL", "deepseek-v4-flash")
+    think_model = os.getenv("QUERY_DECOMPOSE_THINK_MODEL", "deepseek-v4-flash")
     current_date = time.strftime("%Y-%m-%d", time.localtime())
     decompose_prompt = get_prompt("deepsearch")
     # think

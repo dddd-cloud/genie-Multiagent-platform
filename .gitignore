@@ -1,2 +1,32 @@
 .env
+.env.*
+!.env.example
 results/
+
+# Local env overrides (never commit these)
+*.local
+.env.local
+.env.*.local
+
+# Local package caches and runtime state
+node_modules/
+**/.pnpm-store/
+**/data/
+**/uploads/
+**/logs/
+**/file_db_dir/
+*.db
+*.sqlite
+*.sqlite3
+
+# Session, memory, and local browser state (never commit)
+**/session*
+**/*.session
+**/.joycode/
+**/local-memory*
+**/opfs-state*
+
+# IDE workspace state (local only)
+.vscode/settings.json
+.vscode/launch.json
+*.code-workspace

@@ -67,13 +67,13 @@ public class GenieConfig {
         });
     }
 
-    @Value("${autobots.autoagent.planner.model_name:gpt-4o-0806}")
+    @Value("${autobots.autoagent.planner.model_name:deepseek-v4-flash}")
     private String plannerModelName;
 
-    @Value("${autobots.autoagent.executor.model_name:gpt-4o-0806}")
+    @Value("${autobots.autoagent.executor.model_name:deepseek-v4-flash}")
     private String executorModelName;
 
-    @Value("${autobots.autoagent.react.model_name:gpt-4o-0806}")
+    @Value("${autobots.autoagent.react.model_name:deepseek-v4-flash}")
     private String reactModelName;
 
     @Value("${autobots.autoagent.tool.plan_tool.desc:}")

@@ -17,7 +17,7 @@ from genie_tool.util.prompt_util import get_prompt
 async def answer_question(query: str, search_content: str):
     prompt_template = get_prompt("deepsearch")["answer_prompt"]
 
-    model = os.getenv("SEARCH_ANSWER_MODEL", "gpt-4.1")
+    model = os.getenv("SEARCH_ANSWER_MODEL", "deepseek-v4-flash")
     answer_length = os.getenv("SEARCH_ANSWER_LENGTH", "10000")
 
     prompt = prompt_template.format(

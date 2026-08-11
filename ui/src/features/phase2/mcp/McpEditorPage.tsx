@@ -44,6 +44,10 @@ const McpEditorPage: GenieType.FC = memo(() => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    version: number;
+  } | null>(null);
 
   const clearCredential = useCallback(() => {
     setCredential('');
@@ -259,34 +263,42 @@ const McpEditorPage: GenieType.FC = memo(() => {
   };
 
   const handleDelete = () => {
-    if (!serverId || form.version == null) return;
-    Modal.confirm({
-      title: '确认删除该 MCP Server？',
-      okType: 'danger',
-      onOk: async () => {
-        if (versionConflict) {
-          message.warning('请先重新加载服务器版本');
-          return;
-        }
-        setSaving(true);
-        setError(null);
-        try {
-          await deleteMcpServer(serverId, { version: form.version! });
-          clearCredential();
-          message.success('已删除');
-          navigate('/app/mcp');
-        } catch (err: unknown) {
-          if (isVersionConflict(err)) {
-            setVersionConflict(true);
-            setError(phase2ErrorMessage(err));
-            return;
-          }
-          setError(phase2ErrorMessage(err));
-        } finally {
-          setSaving(false);
-        }
-      },
-    });
+    if (!serverId) {
+      setError('MCP Server 标识缺失，请返回列表后重新进入');
+      return;
+    }
+    if (versionConflict) {
+      message.warning('请先重新加载服务器版本');
+      return;
+    }
+    if (form.version == null) {
+      setError('MCP Server 详情尚未加载完成，请稍候重试');
+      return;
+    }
+    setDeleteTarget({ id: serverId, version: form.version });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteMcpServer(deleteTarget.id, { version: deleteTarget.version });
+      clearCredential();
+      setDeleteTarget(null);
+      message.success('已删除');
+      navigate('/app/mcp');
+    } catch (err: unknown) {
+      if (isVersionConflict(err)) {
+        setVersionConflict(true);
+        setDeleteTarget(null);
+        setError(phase2ErrorMessage(err));
+        return;
+      }
+      setError(phase2ErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -350,6 +362,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
               danger
               disabled={versionConflict || saving}
               onClick={handleDelete}
+              data-testid="mcp-delete"
             >
               删除
             </Button>
@@ -402,6 +415,22 @@ const McpEditorPage: GenieType.FC = memo(() => {
           ) : null}
         </div>
       </Spin>
+      <Modal
+        title="确认删除该 MCP Server？"
+        open={deleteTarget !== null}
+        okText="删除"
+        cancelText="取消"
+        okType="danger"
+        confirmLoading={saving}
+        maskClosable={!saving}
+        closable={!saving}
+        onOk={() => void confirmDelete()}
+        onCancel={() => {
+          if (!saving) setDeleteTarget(null);
+        }}
+      >
+        <Text>删除后，已发现的 MCP 工具将同时停用。</Text>
+      </Modal>
     </div>
   );
 });

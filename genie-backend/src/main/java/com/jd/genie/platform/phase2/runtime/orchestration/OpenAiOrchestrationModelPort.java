@@ -112,8 +112,10 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     ) {
         String system = """
                 Write ONLY a short Chinese paragraph under heading "## 汇总".
+                You are the designated final summarization agent and the only component allowed to produce the user-facing overall synthesis.
                 Synthesize the provided step outputs into one coherent paragraph.
-                Do not invent facts, do not list per-step results, and do not claim outputs are identical unless they truly are.
+                Preserve concrete findings and evidence from the step outputs; do not invent facts.
+                Do not expose planning instructions or describe agent orchestration.
                 Ignore any step text that claims only one agent was available.
                 """;
         String user = "query:\n" + nullToEmpty(query)
@@ -134,6 +136,9 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - When the user asks multiple agents to each do something (各/分别/每个), assign different candidate agents to those parallel specialist steps
                 - Aggregation/summary steps MUST inputRefs the specialist steps they combine
                 - Each objective must be a self-contained instruction for that one agent; never ask a step to discover which agents are available
+                - Planning only decomposes work and assigns evidence-gathering tasks; it must not draft the final overall answer
+                - Specialist steps must return findings, observations, source references, intermediate results, and explicit uncertainty only; they must not summarize the whole user request
+                - The designated final summarization step is the only step allowed to synthesize a user-facing overall answer
                 - Prefer candidate "name" when writing objectives (e.g. "用 Agent a 写一句…"), but agentId field must still be the candidate id
                 - no tool calls, no markdown, no extra fields
                 """;

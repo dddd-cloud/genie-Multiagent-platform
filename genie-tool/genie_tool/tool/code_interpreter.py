@@ -160,7 +160,7 @@ def create_ci_agent(
 ) -> CIAgent:
     model = LiteLLMModel(
         max_tokens=max_tokens,
-        model_id=os.getenv("CODE_INTEPRETER_MODEL","gpt-4.1")
+        model_id=os.getenv("CODE_INTEPRETER_MODEL","deepseek-v4-flash")
     )
 
     return CIAgent(

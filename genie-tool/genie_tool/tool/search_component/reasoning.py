@@ -22,7 +22,7 @@ async def search_reasoning(
     if not request_id or not query or not content:
         return {}
 
-    model = os.getenv("SEARCH_REASONING_MODEL", "gpt-4.1")
+    model = os.getenv("SEARCH_REASONING_MODEL", "deepseek-v4-flash")
     prompt = get_prompt("deepsearch")["reasoning_prompt"]
     prompt_content = prompt.format(
         query=query,

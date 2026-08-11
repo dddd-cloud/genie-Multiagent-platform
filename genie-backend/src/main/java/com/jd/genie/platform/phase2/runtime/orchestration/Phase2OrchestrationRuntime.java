@@ -51,12 +51,30 @@ public final class Phase2OrchestrationRuntime {
         return selectRouteDecision(mode, query, conversationSummary, candidates);
     }
 
+    /**
+     * Compatibility boundary for callers that do not yet provide local memory context.
+     * The orchestration data flow remains identical; absent context is represented explicitly.
+     */
     public void execute(
             CurrentUser user,
             String requestId,
             String runId,
             String query,
             String conversationSummary,
+            List<AgentCapabilitySummary> candidates,
+            RouteDecision route,
+            ConversationStreamObserver observer
+    ) {
+        execute(user, requestId, runId, query, conversationSummary, null, candidates, route, observer);
+    }
+
+    public void execute(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
             List<AgentCapabilitySummary> candidates,
             RouteDecision route,
             ConversationStreamObserver observer
@@ -109,6 +127,7 @@ public final class Phase2OrchestrationRuntime {
                 Map<String, AgentTaskResult> results = serialService.execute(
                         user,
                         query,
+                        longTermMemory,
                         plan.steps(),
                         (eventType, step, result, details) -> emitStep(
                                 observer, requestId, runId, sequence, eventType, currentAttempt, step, result, details, steps

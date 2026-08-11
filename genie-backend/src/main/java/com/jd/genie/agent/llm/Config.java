@@ -41,7 +41,7 @@ public class Config {
 
         // 创建默认配置
         return LLMSettings.builder()
-                .model(props.getProperty("llm.default.model", "gpt-4o-0806"))
+                .model(props.getProperty("llm.default.model", "deepseek-v4-flash"))
                 .maxTokens(Integer.parseInt(props.getProperty("llm.default.max_tokens", "16384")))
                 .temperature(Double.parseDouble(props.getProperty("llm.default.temperature", "0")))
                 .baseUrl(props.getProperty("llm.default.base_url", ""))

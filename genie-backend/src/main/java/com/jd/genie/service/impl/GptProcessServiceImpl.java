@@ -169,7 +169,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
             ValidatedPhase2Request request,
             List<AgentCapabilitySummary> candidates
     ) {
-        GptQueryReq trustedRequest = request.trustedRequest();
+        GptQueryReq trustedRequest = withDirectRuntimeContext(request);
         return executePreparedRequest(currentUser, trustedRequest, (observer, cancellableCall) -> {
             Phase2OrchestrationRuntime runtime = orchestrationRuntimeProvider.getIfAvailable();
             if (runtime == null) {
@@ -197,6 +197,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             UUID.randomUUID().toString(),
                             trustedRequest.getQuery(),
                             request.localContext().conversationSummary(),
+                            request.localContext().longTermMemory(),
                             candidates,
                             route,
                             observer
