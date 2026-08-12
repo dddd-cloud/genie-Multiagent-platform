@@ -41,3 +41,7 @@ skills/users/
 gate-*.txt
 tmp-*
 ui/test-results/
+
+# Local acceptance evidence dumps
+evidence/
+
