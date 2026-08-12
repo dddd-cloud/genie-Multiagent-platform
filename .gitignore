@@ -33,3 +33,11 @@ skills/users/
 .vscode/settings.json
 .vscode/launch.json
 *.code-workspace
+
+# Local toolchain cache (portable Maven/pnpm helpers; never commit)
+.tools/
+
+# Local acceptance / scratch artifacts
+gate-*.txt
+tmp-*
+ui/test-results/
