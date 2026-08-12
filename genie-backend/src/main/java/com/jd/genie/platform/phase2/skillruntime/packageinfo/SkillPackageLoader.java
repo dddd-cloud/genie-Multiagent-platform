@@ -50,7 +50,7 @@ public class SkillPackageLoader {
             List<String> resources = files.stream().map(SkillPackageHasher.PackageFile::relativePath)
                 .filter(path -> !path.equals("SKILL.md")).toList();
             return Optional.of(new LoadedSkillPackage(manifest.version(), manifest.name(), manifest.description(),
-                manifest.instructionMarkdown(), hasher.filesystemHash(files), resources, manifest.entrypoints()));
+                manifest.instructionMarkdown(), hasher.filesystemHash(files), resources, manifest.entrypoints(), files));
         } catch (Phase2ContractException e) { throw e; }
         catch (IOException | RuntimeException e) { throw invalid("skill package cannot be read", e); }
     }

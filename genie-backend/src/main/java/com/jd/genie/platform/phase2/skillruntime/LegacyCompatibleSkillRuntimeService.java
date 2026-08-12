@@ -1,5 +1,7 @@
 package com.jd.genie.platform.phase2.skillruntime;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.jd.genie.agent.agent.AgentContext;
 import com.jd.genie.agent.tool.BaseTool;
 import com.jd.genie.platform.contract.CurrentUser;
@@ -23,6 +25,10 @@ import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.LoadedSkillPackage;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageHasher;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageLoader;
+import com.jd.genie.platform.phase2.skillruntime.execution.BrowserPyodideSkillTool;
+import com.jd.genie.platform.phase2.skillruntime.execution.BrowserSkillExecutionCoordinator;
+import com.jd.genie.platform.phase2.skillruntime.execution.SkillPackageBytesSnapshot;
+import com.jd.genie.platform.phase2contract.enums.SkillEntrypointRuntime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -48,6 +54,8 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
     private final ObjectProvider<ToolBindingPort> toolBindingPortProvider;
     private final SkillPackageLoader packageLoader;
     private final SkillPackageHasher packageHasher;
+    private final BrowserSkillExecutionCoordinator executionCoordinator;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -125,21 +133,56 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
 
     @Override
     public List<BaseTool> buildRuntimeTools(CurrentUser user, AgentRuntimeProfile profile, AgentContext context) {
-        // C0: no script tools from LEGACY_SYNTHETIC packages.
-        return List.of();
+        requireUser(user);
+        if (profile == null || context == null)
+            throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, "profile and context required");
+        List<BaseTool> tools = new ArrayList<>();
+        java.util.HashSet<String> names = new java.util.HashSet<>();
+        for (var skill : profile.skills()) {
+            if (!SkillPackageMode.FILESYSTEM.name().equals(skill.packageMode())) continue;
+            LoadedSkillPackage loaded = packageLoader.load(user, skill.skillId())
+                .orElseThrow(() -> new Phase2ContractException(MvpErrorCode.SKILL_PACKAGE_INVALID, "filesystem package missing"));
+            if (!java.util.Objects.equals(skill.packageHash(), loaded.packageHash()))
+                throw new Phase2ContractException(MvpErrorCode.SKILL_PACKAGE_INVALID, "filesystem package changed after profile snapshot");
+            SkillPackageBytesSnapshot snapshot = new SkillPackageBytesSnapshot(loaded.packageHash(), loaded.files());
+            for (var entrypoint : skill.entrypoints()) {
+                String name = runtimeName(skill.skillId(), entrypoint.name());
+                if (!names.add(name)) throw new Phase2ContractException(MvpErrorCode.TOOL_BINDING_INVALID, "skill tool runtime name conflict");
+                if (entrypoint.runtime() == SkillEntrypointRuntime.pyodide)
+                    tools.add(new BrowserPyodideSkillTool(name, skill.skillId(), user, context, snapshot, entrypoint,
+                        executionCoordinator, objectMapper,
+                        com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageLimits.DEFAULT_EXECUTION_TIMEOUT_MS));
+                else tools.add(new UnavailableSkillTool(name, entrypoint));
+            }
+        }
+        return List.copyOf(tools);
     }
 
     @Override
     public SkillExecutionResult executeEntrypoint(CurrentUser user, SkillExecutionCommand command) {
         requireUser(user);
-        return new SkillExecutionResult(
-            false,
-            "",
-            "",
-            null,
-            MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND,
-            "legacy synthetic skill does not execute entrypoints"
-        );
+        if (command == null || command.skillId() == null || command.entrypointName() == null)
+            throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, "entrypoint command invalid");
+        LoadedSkillPackage loaded = packageLoader.load(user, command.skillId())
+            .orElseThrow(() -> new Phase2ContractException(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND, "skill package missing"));
+        var entrypoint = loaded.entrypoints().stream().filter(e -> e.name().equals(command.entrypointName())).findFirst()
+            .orElseThrow(() -> new Phase2ContractException(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND, "entrypoint not found"));
+        throw new Phase2ContractException(MvpErrorCode.SKILL_ENTRYPOINT_NOT_AVAILABLE,
+            entrypoint.runtime() + " entrypoint requires runtime tool execution");
+    }
+
+    private String runtimeName(String skillId, String entrypointName) {
+        String digest = packageHasher.legacyHash(skillId + "\u0000" + entrypointName, 0, "", "", "", "", List.of());
+        return "skill_" + digest.substring(0, 24);
+    }
+
+    private static final class UnavailableSkillTool implements BaseTool {
+        private final String name; private final com.jd.genie.platform.phase2contract.dto.SkillEntrypointView entrypoint;
+        private UnavailableSkillTool(String name, com.jd.genie.platform.phase2contract.dto.SkillEntrypointView entrypoint) { this.name=name; this.entrypoint=entrypoint; }
+        public String getName(){ return name; }
+        public String getDescription(){ return entrypoint.description() == null ? "Unavailable native Skill entrypoint" : entrypoint.description(); }
+        public Map<String,Object> toParams(){ return Map.of("type","object"); }
+        public Object execute(Object input){ throw new Phase2ContractException(MvpErrorCode.SKILL_ENTRYPOINT_NOT_AVAILABLE, "native Skill runtime not implemented"); }
     }
 
     private SkillRuntimePackage toLegacyPackage(SkillDefinitionEntity skill, int sortOrder, List<String> capabilityKeys) {

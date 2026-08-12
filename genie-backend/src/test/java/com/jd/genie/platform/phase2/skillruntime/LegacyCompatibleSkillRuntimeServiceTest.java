@@ -10,6 +10,8 @@ import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillManifestParser
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageHasher;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageLoader;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageValidator;
+import com.jd.genie.platform.phase2.skillruntime.execution.BrowserSkillExecutionCoordinator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.phase2contract.dto.AgentSkillBindingSpec;
 import com.jd.genie.platform.phase2contract.dto.SkillRuntimePackage;
 import com.jd.genie.platform.phase2contract.enums.SkillPackageMode;
@@ -87,7 +89,8 @@ class LegacyCompatibleSkillRuntimeServiceTest {
         SkillPackageHasher hasher = new SkillPackageHasher();
         SkillPackageLoader loader = new SkillPackageLoader(temp.toString(), new SkillManifestParser(),
             new SkillPackageValidator(), hasher);
-        return new LegacyCompatibleSkillRuntimeService(skillMapper, bindingMapper, provider, loader, hasher);
+        return new LegacyCompatibleSkillRuntimeService(skillMapper, bindingMapper, provider, loader, hasher,
+            new BrowserSkillExecutionCoordinator(), new ObjectMapper());
     }
 
     private SkillDefinitionEntity skill() {

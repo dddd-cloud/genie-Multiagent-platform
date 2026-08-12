@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 @Component
 public class SkillManifestParser {
-    private static final Pattern PACKAGE_SPEC = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9_.-]*(?:[<>=!~]{1,2}[A-Za-z0-9][A-Za-z0-9_.+*-]*)?$");
+    private static final Pattern PACKAGE_SPEC = Pattern.compile("^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?(?:[<>=!~]{1,2}[A-Za-z0-9](?:[A-Za-z0-9.*+_-]*[A-Za-z0-9*])?)?$");
     private static final int MAX_ENTRYPOINTS = 32;
     private static final int MAX_PACKAGES = 32;
 
@@ -77,7 +77,11 @@ public class SkillManifestParser {
     }
 
     private void validatePackageSpec(String spec) {
-        if (spec.length() > 128 || !PACKAGE_SPEC.matcher(spec).matches()) throw invalid("invalid pyodide package spec");
+        String lower = spec.toLowerCase(java.util.Locale.ROOT);
+        if (spec.length() > 128 || lower.endsWith(".whl") || lower.contains("http") || lower.contains("file:")
+            || lower.contains("git+") || spec.contains("/") || spec.contains("\\") || spec.contains("@")
+            || spec.contains(":") || spec.contains("..") || !PACKAGE_SPEC.matcher(spec).matches())
+            throw invalid("invalid pyodide package spec");
     }
     private void putScalar(Map<String, String> values, String line) {
         int colon = line.indexOf(':');

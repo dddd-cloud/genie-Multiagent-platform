@@ -11,6 +11,9 @@ public final class SkillPackageLimits {
     public static final int MAX_OUTPUT_JSON_BYTES = 2 * 1024 * 1024;
     public static final int MAX_STDOUT_BYTES = 256 * 1024;
     public static final int MAX_STDERR_BYTES = 256 * 1024;
+    public static final int MAX_MESSAGE_BYTES = 64 * 1024;
+    public static final int DEFAULT_EXECUTION_TIMEOUT_MS = 60_000;
+    public static final int MAX_EXECUTION_TIMEOUT_MS = 300_000;
 
     private SkillPackageLimits() {}
 }
