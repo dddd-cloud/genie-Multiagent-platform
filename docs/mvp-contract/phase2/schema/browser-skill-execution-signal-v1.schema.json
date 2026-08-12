@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/browser-skill-execution-signal-v1.schema.json",
+  "title": "Browser Skill Execution Signal V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "executionId",
+    "skillId",
+    "entrypointName",
+    "packageHash",
+    "timeoutMs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "executionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "skillId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "entrypointName": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "packageHash": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 600000 }
+  }
+}

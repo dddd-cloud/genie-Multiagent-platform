@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "executionId": "exec-11111111-1111-1111-1111-111111111111",
+  "entrypointName": "run",
+  "scriptRelativePath": "scripts/run.py",
+  "packages": ["numpy", "micropip"],
+  "inputJson": "{\"query\":\"hello\"}"
+}

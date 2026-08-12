@@ -30,12 +30,21 @@ export type {
 export {
   SKILL_PACKAGE_MODES,
   SKILL_ENTRYPOINT_RUNTIMES,
+  BrowserSkillExecutionContract,
+  BROWSER_SKILL_EXECUTION_SCHEMA_VERSION,
+  BROWSER_SKILL_PRINTER_MESSAGE_TYPE,
+  BROWSER_SKILL_SSE_PACKAGE_TYPE,
+  BROWSER_SKILL_RESULT_MAP_KEY,
+  BROWSER_SKILL_EXECUTION_MANIFEST_PATH,
 } from './skill-runtime';
 export type {
   SkillPackageMode,
   SkillEntrypointRuntime,
   SkillEntrypointView,
   SkillRuntimePackage,
+  BrowserSkillExecutionSignal,
+  BrowserSkillExecutionManifest,
+  BrowserSkillExecutionResult,
 } from './skill-runtime';
 
 export { MEMORY_PATCH_OPERATIONS, LONG_TERM_MEMORY_SECTIONS } from './memory';

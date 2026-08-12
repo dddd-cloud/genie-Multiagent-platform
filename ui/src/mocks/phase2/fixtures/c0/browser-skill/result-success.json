@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "executionId": "exec-11111111-1111-1111-1111-111111111111",
+  "success": true,
+  "outputJson": "{\"answer\":42}",
+  "stdout": "ok\n",
+  "stderr": "",
+  "errorCode": null,
+  "message": null
+}

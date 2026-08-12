@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "executionId": "exec-11111111-1111-1111-1111-111111111111",
+  "success": false,
+  "outputJson": null,
+  "stdout": "",
+  "stderr": "Traceback: boom",
+  "errorCode": "SKILL_EXECUTION_FAILED",
+  "message": "pyodide entrypoint failed"
+}

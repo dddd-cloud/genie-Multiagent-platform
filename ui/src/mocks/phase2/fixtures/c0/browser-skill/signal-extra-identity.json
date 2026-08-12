@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "executionId": "exec-11111111-1111-1111-1111-111111111111",
+  "skillId": "skill-demo",
+  "entrypointName": "run",
+  "packageHash": "abc123def456",
+  "timeoutMs": 120000,
+  "tenantId": "tenant-x",
+  "ownerId": "owner-y",
+  "userId": "user-z"
+}

@@ -126,6 +126,9 @@ const PHASE2_SCHEMA_FILES = [
   'orchestration-trace-v2.schema.json',
   'memory-patch-v1.schema.json',
   'management-api-v1.schema.json',
+  'browser-skill-execution-signal-v1.schema.json',
+  'browser-skill-execution-manifest-v1.schema.json',
+  'browser-skill-execution-result-v1.schema.json',
 ];
 
 const PHASE2_PROGRESS_EVENT_TYPES = new Set([
@@ -188,6 +191,14 @@ const PHASE2_REQUIRED_FIXTURES = [
   'c0/trace-v2-subtask.json',
   'c0/event-v2-invalid-attempt.json',
   'c0/trace-v2-invalid-scope.json',
+  'c0/browser-skill/signal-valid.json',
+  'c0/browser-skill/manifest-valid.json',
+  'c0/browser-skill/result-success.json',
+  'c0/browser-skill/result-failure.json',
+  'c0/browser-skill/signal-extra-identity.json',
+  'c0/browser-skill/manifest-absolute-script.json',
+  'c0/browser-skill/manifest-invalid-version.json',
+  'c0/browser-skill/result-execution-id-missing.json',
 ];
 
 const PHASE2_MANAGEMENT_FIXTURES = [
@@ -1339,6 +1350,46 @@ function validatePhase2C0Fixtures(validators) {
   } else {
     pass('c0/trace-v2-invalid-scope.json rejected by trace-v2 schema');
   }
+
+  validatePhase2BrowserSkillFixtures(validators);
+}
+
+function validatePhase2BrowserSkillFixtures(validators) {
+  const signalValidate = validators['browser-skill-execution-signal-v1.schema.json'];
+  const manifestValidate = validators['browser-skill-execution-manifest-v1.schema.json'];
+  const resultValidate = validators['browser-skill-execution-result-v1.schema.json'];
+  if (!signalValidate || !manifestValidate || !resultValidate) {
+    fail('browser skill schema validators unavailable');
+    return;
+  }
+
+  const browserDir = join(phase2FixturesDir, 'c0/browser-skill');
+  const readBrowser = (name) => JSON.parse(readText(join(browserDir, name)));
+
+  const assertValid = (data, validate, label) => {
+    if (!validate(data)) {
+      fail(`${label} must pass schema: ${JSON.stringify(validate.errors)}`);
+    } else {
+      pass(`${label}: schema ok`);
+    }
+  };
+  const assertInvalid = (data, validate, label) => {
+    if (validate(data)) {
+      fail(`${label} must fail schema`);
+    } else {
+      pass(`${label}: rejected by schema`);
+    }
+  };
+
+  assertValid(readBrowser('signal-valid.json'), signalValidate, 'c0/browser-skill/signal-valid.json');
+  assertValid(readBrowser('manifest-valid.json'), manifestValidate, 'c0/browser-skill/manifest-valid.json');
+  assertValid(readBrowser('result-success.json'), resultValidate, 'c0/browser-skill/result-success.json');
+  assertValid(readBrowser('result-failure.json'), resultValidate, 'c0/browser-skill/result-failure.json');
+
+  assertInvalid(readBrowser('signal-extra-identity.json'), signalValidate, 'c0/browser-skill/signal-extra-identity.json');
+  assertInvalid(readBrowser('manifest-absolute-script.json'), manifestValidate, 'c0/browser-skill/manifest-absolute-script.json');
+  assertInvalid(readBrowser('manifest-invalid-version.json'), manifestValidate, 'c0/browser-skill/manifest-invalid-version.json');
+  assertInvalid(readBrowser('result-execution-id-missing.json'), resultValidate, 'c0/browser-skill/result-execution-id-missing.json');
 }
 
 function validatePhase2ProtectedBaselineContent() {
@@ -1543,6 +1594,74 @@ function validatePhase2EnumMirrors() {
       pass(`${name} Java/TS enum mirror ok`);
     }
   }
+
+  const skillRuntimeJava = readText(join(phase2BackendDir, 'enums/SkillEntrypointRuntime.java'));
+  const skillRuntimeTs = readText(join(phase2TsDir, 'skill-runtime.ts'));
+  const javaRuntimes = [...skillRuntimeJava.matchAll(/\b(pyodide|python|node)\b/g)].map((m) => m[1]);
+  const runtimeArray = skillRuntimeTs.match(
+    /export const SKILL_ENTRYPOINT_RUNTIMES\s*=\s*\[([\s\S]*?)\] as const/
+  );
+  const tsRuntimes = runtimeArray
+    ? [...runtimeArray[1].matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1])
+    : [];
+  if (JSON.stringify(javaRuntimes) !== JSON.stringify(tsRuntimes)) {
+    fail(`SkillEntrypointRuntime Java/TS mismatch: java=${JSON.stringify(javaRuntimes)} ts=${JSON.stringify(tsRuntimes)}`);
+  } else {
+    pass('SkillEntrypointRuntime Java/TS enum mirror ok');
+  }
+
+  validateBrowserSkillExecutionConstants(skillRuntimeTs);
+}
+
+function validateBrowserSkillExecutionConstants(tsSource) {
+  const javaSource = readText(join(phase2BackendDir, 'BrowserSkillExecutionContract.java'));
+  const expected = {
+    SCHEMA_VERSION: '1',
+    PRINTER_MESSAGE_TYPE: 'browser_skill_execution',
+    SSE_PACKAGE_TYPE: 'skill_execution',
+    RESULT_MAP_KEY: 'browserSkillExecution',
+    EXECUTION_MANIFEST_PATH: '__joyagent__/execution.json',
+  };
+  for (const [name, value] of Object.entries(expected)) {
+    const javaMatch = javaSource.match(new RegExp(`${name}\\s*=\\s*(?:(\\d+)|"([^"]*)")`));
+    const javaValue = javaMatch?.[1] ?? javaMatch?.[2];
+    if (javaValue !== value) {
+      fail(`BrowserSkillExecutionContract.${name} Java mismatch: expected ${value}, got ${javaValue}`);
+    }
+  }
+  const tsObject = tsSource.match(/export const BrowserSkillExecutionContract = \{([\s\S]*?)\} as const/);
+  if (!tsObject) {
+    fail('BrowserSkillExecutionContract missing from skill-runtime.ts');
+    return;
+  }
+  const body = tsObject[1];
+  const checks = [
+    ['SCHEMA_VERSION', 'BROWSER_SKILL_EXECUTION_SCHEMA_VERSION'],
+    ['PRINTER_MESSAGE_TYPE', 'BROWSER_SKILL_PRINTER_MESSAGE_TYPE'],
+    ['SSE_PACKAGE_TYPE', 'BROWSER_SKILL_SSE_PACKAGE_TYPE'],
+    ['RESULT_MAP_KEY', 'BROWSER_SKILL_RESULT_MAP_KEY'],
+    ['EXECUTION_MANIFEST_PATH', 'BROWSER_SKILL_EXECUTION_MANIFEST_PATH'],
+  ];
+  for (const [field, constName] of checks) {
+    if (!body.includes(`${field}: ${constName}`)) {
+      fail(`BrowserSkillExecutionContract.${field} must reference ${constName}`);
+    }
+  }
+  const constChecks = [
+    ['BROWSER_SKILL_EXECUTION_SCHEMA_VERSION', '1'],
+    ['BROWSER_SKILL_PRINTER_MESSAGE_TYPE', "'browser_skill_execution'"],
+    ['BROWSER_SKILL_SSE_PACKAGE_TYPE', "'skill_execution'"],
+    ['BROWSER_SKILL_RESULT_MAP_KEY', "'browserSkillExecution'"],
+    ['BROWSER_SKILL_EXECUTION_MANIFEST_PATH', "'__joyagent__/execution.json'"],
+  ];
+  for (const [constName, expectedValue] of constChecks) {
+    const re = new RegExp(`export const ${constName} = ([^;]+) as const`);
+    const match = tsSource.match(re);
+    if (!match || match[1].trim() !== expectedValue) {
+      fail(`${constName} mismatch: expected ${expectedValue}, got ${match?.[1]?.trim()}`);
+    }
+  }
+  pass('BrowserSkillExecutionContract Java/TS constants mirror ok');
 }
 
 function validatePhase2UniqueTypes() {

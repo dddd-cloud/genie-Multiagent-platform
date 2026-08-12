@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joyagent.local/schemas/browser-skill-execution-result-v1.schema.json",
+  "title": "Browser Skill Execution Result V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "executionId",
+    "success",
+    "outputJson",
+    "stdout",
+    "stderr",
+    "errorCode",
+    "message"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "executionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "success": { "type": "boolean" },
+    "outputJson": { "type": ["string", "null"], "maxLength": 65536 },
+    "stdout": { "type": ["string", "null"], "maxLength": 65536 },
+    "stderr": { "type": ["string", "null"], "maxLength": 65536 },
+    "errorCode": { "type": ["string", "null"], "maxLength": 128 },
+    "message": { "type": ["string", "null"], "maxLength": 2048 }
+  }
+}

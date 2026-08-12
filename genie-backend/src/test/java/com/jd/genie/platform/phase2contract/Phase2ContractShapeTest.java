@@ -6,16 +6,22 @@ import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeSkill;
+import com.jd.genie.platform.phase2contract.dto.BrowserSkillExecutionManifest;
+import com.jd.genie.platform.phase2contract.dto.BrowserSkillExecutionResult;
+import com.jd.genie.platform.phase2contract.dto.BrowserSkillExecutionSignal;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationEvent;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
 import com.jd.genie.platform.phase2contract.dto.Phase2GptQueryRequest;
 import com.jd.genie.platform.phase2contract.dto.Phase2LocalContext;
+import com.jd.genie.platform.phase2contract.dto.SkillEntrypointView;
+import com.jd.genie.platform.phase2contract.dto.SkillExecutionResult;
 import com.jd.genie.platform.phase2contract.dto.ToolBindingView;
 import com.jd.genie.platform.phase2contract.enums.AgentTaskErrorCode;
 import com.jd.genie.platform.phase2contract.enums.ExecutionMode;
 import com.jd.genie.platform.phase2contract.enums.OrchestrationCompletionStatus;
 import com.jd.genie.platform.phase2contract.enums.OrchestrationEventType;
 import com.jd.genie.platform.phase2contract.enums.OrchestrationRoute;
+import com.jd.genie.platform.phase2contract.enums.SkillEntrypointRuntime;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.AgentSkillBindingPort;
 import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
@@ -143,6 +149,16 @@ class Phase2ContractShapeTest {
             "schemaVersion", "eventId", "sequence", "eventType", "requestId", "runId",
             "attemptNo", "stepId", "agentId", "agentName", "route", "reasonCode",
             "errorCode", "steps", "completionStatus", "subTaskId", "stepMode", "retryNo");
+        assertRecordComponents(SkillEntrypointView.class,
+            "name", "runtime", "script", "description", "inputSchemaJson", "packages");
+        assertRecordComponents(SkillExecutionResult.class,
+            "success", "stdout", "stderr", "exitCode", "errorCode", "message", "outputJson");
+        assertRecordComponents(BrowserSkillExecutionSignal.class,
+            "schemaVersion", "executionId", "skillId", "entrypointName", "packageHash", "timeoutMs");
+        assertRecordComponents(BrowserSkillExecutionManifest.class,
+            "schemaVersion", "executionId", "entrypointName", "scriptRelativePath", "packages", "inputJson");
+        assertRecordComponents(BrowserSkillExecutionResult.class,
+            "schemaVersion", "executionId", "success", "outputJson", "stdout", "stderr", "errorCode", "message");
     }
 
     @Test
@@ -162,6 +178,7 @@ class Phase2ContractShapeTest {
             "CONTEXT_BUDGET_EXCEEDED", "EXECUTION_ERROR", "CANCELLED"
         }, enumNames(AgentTaskErrorCode.class));
         assertArrayEquals(new String[]{"SUCCESS", "PARTIAL"}, enumNames(OrchestrationCompletionStatus.class));
+        assertArrayEquals(new String[]{"pyodide", "python", "node"}, enumNames(SkillEntrypointRuntime.class));
     }
 
     @Test

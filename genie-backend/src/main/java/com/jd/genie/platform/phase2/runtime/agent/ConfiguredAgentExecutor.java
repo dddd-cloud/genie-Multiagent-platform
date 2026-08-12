@@ -8,8 +8,6 @@ import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 
 public final class ConfiguredAgentExecutor {
-    private static final int MAX_RAW_OUTPUT_LENGTH = 12_000;
-
     private final ConfiguredReactAgentFactory factory;
     private final AgentTaskResultParser parser;
 
@@ -36,15 +34,6 @@ public final class ConfiguredAgentExecutor {
     }
 
     private AgentTaskResult normalize(String raw) {
-        try {
-            return parser.parse(raw);
-        } catch (AgentBridgeException error) {
-            if (error.getErrorCode() != MvpErrorCode.AGENT_INVALID_RESULT || raw == null || raw.isBlank()
-                    || raw.length() > MAX_RAW_OUTPUT_LENGTH) {
-                throw error;
-            }
-            String displayOutput = parser.extractDisplaySuccess(raw);
-            return AgentTaskResult.success(displayOutput == null ? raw.trim() : displayOutput);
-        }
+        return parser.parse(raw);
     }
 }
