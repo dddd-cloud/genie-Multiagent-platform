@@ -61,6 +61,9 @@ public final class Phase2ErrorHttpStatus {
         map.put(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND, 404);
         map.put(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND, 404);
 
+        // 501: the requested native Skill runtime is recognized but not implemented.
+        map.put(MvpErrorCode.SKILL_ENTRYPOINT_NOT_AVAILABLE, 501);
+
         // 409
         map.put(MvpErrorCode.VERSION_CONFLICT, 409);
         map.put(MvpErrorCode.AGENT_INVALID_STATE, 409);

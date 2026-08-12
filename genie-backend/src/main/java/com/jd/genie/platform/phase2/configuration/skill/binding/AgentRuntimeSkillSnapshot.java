@@ -8,6 +8,7 @@ public class AgentRuntimeSkillSnapshot {
     private Long skillVersion;
     private Integer sortOrder;
     private String skillName;
+    private String description;
     private String instruction;
     private String outputRequirement;
     private String status;

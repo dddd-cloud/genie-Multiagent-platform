@@ -22,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -106,6 +107,7 @@ public abstract class Phase2AMySqlTestSupport {
     })
     static class TestApplication {
         @Bean
+        @Primary
         ToolBindingPort toolBindingPort() {
             return new FakeToolBindingPort();
         }

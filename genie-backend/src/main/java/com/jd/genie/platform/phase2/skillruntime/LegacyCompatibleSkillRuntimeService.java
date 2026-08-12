@@ -20,6 +20,9 @@ import com.jd.genie.platform.phase2contract.enums.SkillPackageMode;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.SkillRuntimePort;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.LoadedSkillPackage;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageHasher;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageLoader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -34,9 +37,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * C0 legacy Skill runtime: synthesizes LEGACY_SYNTHETIC snapshots from
- * skill_definition + agent_skill_binding + ToolBindingPort.
- * Does not scan skills/ filesystem or execute scripts.
+ * Resolves owner-scoped filesystem Skill packages when present and otherwise
+ * preserves the C0 LEGACY_SYNTHETIC snapshot. Stage1 does not execute scripts.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,6 +46,8 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
     private final SkillDefinitionMapper skillMapper;
     private final AgentSkillBindingMapper bindingMapper;
     private final ObjectProvider<ToolBindingPort> toolBindingPortProvider;
+    private final SkillPackageLoader packageLoader;
+    private final SkillPackageHasher packageHasher;
 
     @Override
     @Transactional(readOnly = true)
@@ -73,7 +77,7 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
                 }
                 continue;
             }
-            packages.add(toLegacyPackage(skill, binding.sortOrder(), List.of()));
+            packages.add(toRuntimePackage(user, skill, binding.sortOrder(), List.of()));
         }
         return List.copyOf(packages);
     }
@@ -101,7 +105,7 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
                 }
                 continue;
             }
-            packages.add(toLegacyPackage(snapshot, skillCapabilities.getOrDefault(snapshot.getSkillId(), List.of())));
+            packages.add(toRuntimePackage(user, snapshot, skillCapabilities.getOrDefault(snapshot.getSkillId(), List.of())));
         }
         return List.copyOf(packages);
     }
@@ -112,11 +116,11 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
         if (skillId == null || skillId.isBlank() || relativePath == null || relativePath.isBlank()) {
             throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, "skillId and relativePath required");
         }
-        if (relativePath.contains("..") || relativePath.startsWith("/") || relativePath.startsWith("\\")) {
-            throw new Phase2ContractException(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND, "path rejected");
-        }
-        // LEGACY_SYNTHETIC packages have no filesystem resources in C0.
-        throw new Phase2ContractException(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND, "legacy skill has no package resources");
+        SkillDefinitionEntity skill = skillMapper.selectOwnedByIds(user.tenantId(), user.userId(), List.of(skillId)).stream()
+            .findFirst().orElseThrow(() -> new Phase2ContractException(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND, "skill not found"));
+        if (packageLoader.load(user, skill.getId()).isEmpty())
+            throw new Phase2ContractException(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND, "legacy skill has no package resources");
+        return packageLoader.readResource(user, skill.getId(), relativePath);
     }
 
     @Override
@@ -140,7 +144,9 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
 
     private SkillRuntimePackage toLegacyPackage(SkillDefinitionEntity skill, int sortOrder, List<String> capabilityKeys) {
         String instruction = skill.getInstruction() == null ? "" : skill.getInstruction();
-        String hash = Integer.toHexString(instruction.hashCode());
+        long version = skill.getVersion() == null ? 0L : skill.getVersion();
+        String hash = packageHasher.legacyHash(skill.getId(), version, skill.getName(), skill.getDescription(),
+            instruction, skill.getOutputRequirement(), capabilityKeys);
         return new SkillRuntimePackage(
             skill.getId(),
             skill.getVersion() == null ? 0L : skill.getVersion(),
@@ -162,7 +168,9 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
 
     private SkillRuntimePackage toLegacyPackage(AgentRuntimeSkillSnapshot snapshot, List<String> capabilityKeys) {
         String instruction = snapshot.getInstruction() == null ? "" : snapshot.getInstruction();
-        String hash = Integer.toHexString(instruction.hashCode());
+        long version = snapshot.getSkillVersion() == null ? 0L : snapshot.getSkillVersion();
+        String hash = packageHasher.legacyHash(snapshot.getSkillId(), version, snapshot.getSkillName(), snapshot.getDescription(),
+            instruction, snapshot.getOutputRequirement(), capabilityKeys);
         return new SkillRuntimePackage(
             snapshot.getSkillId(),
             snapshot.getSkillVersion() == null ? 0L : snapshot.getSkillVersion(),
@@ -170,7 +178,7 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
             snapshot.getStatus(),
             snapshot.getSkillName(),
             snapshot.getSkillName(),
-            null,
+            snapshot.getDescription(),
             SkillPackageMode.LEGACY_SYNTHETIC,
             String.valueOf(snapshot.getSkillVersion() == null ? 0L : snapshot.getSkillVersion()),
             hash,
@@ -180,6 +188,31 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
             List.of(),
             capabilityKeys
         );
+    }
+
+    private SkillRuntimePackage toRuntimePackage(CurrentUser user, SkillDefinitionEntity skill, int sortOrder,
+                                                 List<String> capabilityKeys) {
+        return packageLoader.load(user, skill.getId())
+            .map(loaded -> toFilesystemPackage(skill.getId(), skill.getVersion() == null ? 0L : skill.getVersion(),
+                sortOrder, skill.getStatus(), skill.getOutputRequirement(), capabilityKeys, loaded))
+            .orElseGet(() -> toLegacyPackage(skill, sortOrder, capabilityKeys));
+    }
+
+    private SkillRuntimePackage toRuntimePackage(CurrentUser user, AgentRuntimeSkillSnapshot skill,
+                                                 List<String> capabilityKeys) {
+        return packageLoader.load(user, skill.getSkillId())
+            .map(loaded -> toFilesystemPackage(skill.getSkillId(), skill.getSkillVersion() == null ? 0L : skill.getSkillVersion(),
+                skill.getSortOrder() == null ? 0 : skill.getSortOrder(), skill.getStatus(), skill.getOutputRequirement(),
+                capabilityKeys, loaded))
+            .orElseGet(() -> toLegacyPackage(skill, capabilityKeys));
+    }
+
+    private SkillRuntimePackage toFilesystemPackage(String skillId, long skillVersion, int sortOrder, String status,
+                                                    String outputRequirement, List<String> capabilityKeys,
+                                                    LoadedSkillPackage loaded) {
+        return new SkillRuntimePackage(skillId, skillVersion, sortOrder, status, loaded.name(), loaded.name(),
+            loaded.description(), SkillPackageMode.FILESYSTEM, loaded.packageVersion(), loaded.packageHash(),
+            loaded.instructionMarkdown(), outputRequirement, loaded.resourceManifest(), loaded.entrypoints(), capabilityKeys);
     }
 
     private List<AgentSkillBindingSpec> normalizeBindings(List<AgentSkillBindingSpec> bindings) {
