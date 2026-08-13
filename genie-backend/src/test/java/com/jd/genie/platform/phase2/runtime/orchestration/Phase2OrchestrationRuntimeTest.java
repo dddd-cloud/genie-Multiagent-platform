@@ -15,9 +15,12 @@ import com.jd.genie.platform.phase2.runtime.event.OrchestrationEventMapper;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
+import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
+import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
+import com.jd.genie.platform.phase2contract.enums.StepMode;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.support.FakeRuntimeToolCollectionPort;
 import org.junit.jupiter.api.Test;
@@ -42,7 +45,7 @@ class Phase2OrchestrationRuntimeTest {
     );
 
     @Test
-    void successfulReplanDoesNotRetainPriorAttemptFailureAsPartial() {
+    void retryableFailureRecoversWithinTheSinglePlannedStep() {
         RecordingCatalogPort catalog = new RecordingCatalogPort();
         ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
         AtomicInteger executions = new AtomicInteger();
@@ -50,13 +53,15 @@ class Phase2OrchestrationRuntimeTest {
                 ? AgentTaskResult.failure("TOOL_TIMEOUT", true)
                 : AgentTaskResult.success("recovered result")
         ).when(executor).execute(any(AgentContext.class), any(AgentRuntimeProfile.class), any(Printer.class), any(Integer.TYPE));
+        RecordingModel model = new RecordingModel();
         SerialOrchestrationService serial = new SerialOrchestrationService(
                 catalog,
                 new FakeRuntimeToolCollectionPort(),
+                null,
                 executor,
-                10
+                10,
+                model
         );
-        RecordingModel model = new RecordingModel();
         Phase2OrchestrationRuntime runtime = new Phase2OrchestrationRuntime(
                 model,
                 new OrchestrationPlanValidator(),
@@ -81,7 +86,8 @@ class Phase2OrchestrationRuntimeTest {
                 observer
         );
 
-        assertEquals(Map.of("step-1", "TOOL_TIMEOUT"), model.failureMetadataByAttempt.get(2));
+        assertEquals(1, model.planAttempts.get());
+        assertEquals(2, executions.get());
         assertEquals(1, channel.events.stream().filter(event -> event.isFinished()).count());
         assertEquals("SUCCESS", finalEvent(channel.events).get("completionStatus"));
         assertEquals(1, port.getCalls().stream()
@@ -123,6 +129,59 @@ class Phase2OrchestrationRuntimeTest {
     }
 
     @Test
+    void parallelPlanProjectsFrozenStepAndSubTaskViewsBeforeLocalExecution() {
+        ParallelPlanCatalogPort catalog = new ParallelPlanCatalogPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        doAnswer(invocation -> AgentTaskResult.success(
+                invocation.getArgument(0, AgentContext.class).getRequestId() + " output"
+        )).when(executor).execute(any(AgentContext.class), any(AgentRuntimeProfile.class), any(Printer.class), any(Integer.TYPE));
+        Phase2OrchestrationRuntime runtime = new Phase2OrchestrationRuntime(
+                new ParallelPlanModel(),
+                new OrchestrationPlanValidator(),
+                new SerialOrchestrationService(catalog, new FakeRuntimeToolCollectionPort(), executor, 10),
+                new OrchestrationEventMapper()
+        );
+        FakeConversationExecutionPort port = new FakeConversationExecutionPort();
+        RecordingChannel channel = new RecordingChannel();
+        ConversationStreamObserver observer = new ConversationStreamObserver(
+                new StreamPersistenceObserver(port, USER, "assistant-1"), channel
+        );
+
+        runtime.execute(
+                USER,
+                "request-1",
+                "123e4567-e89b-12d3-a456-426614174000",
+                "question",
+                "summary",
+                List.of(
+                        new AgentCapabilitySummary("agent-a", 1L, "Agent A", "analysis"),
+                        new AgentCapabilitySummary("agent-b", 1L, "Agent B", "analysis")
+                ),
+                new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST"),
+                observer
+        );
+
+        Map<?, ?> planCreated = orchestrationEvent(channel.events, "PLAN_CREATED");
+        List<?> projectedSteps = (List<?>) planCreated.get("steps");
+        assertEquals(1, projectedSteps.size());
+        OrchestrationPlanStepView projected = (OrchestrationPlanStepView) projectedSteps.get(0);
+        assertEquals("parallel", projected.stepId());
+        assertEquals(null, projected.agentId());
+        assertEquals(null, projected.agentName());
+        assertEquals(StepMode.PARALLEL_AGENTS, projected.mode());
+        assertEquals(List.of("sub-a", "sub-b"), projected.subTasks().stream()
+                .map(subTask -> subTask.subTaskId())
+                .toList());
+        assertEquals(List.of("Agent A", "Agent B"), projected.subTasks().stream()
+                .map(subTask -> subTask.agentName())
+                .toList());
+        assertEquals("SUCCESS", finalEvent(channel.events).get("completionStatus"));
+        assertEquals(1, port.getCalls().stream()
+                .filter(call -> call.type() == FakeConversationExecutionPort.CallType.COMPLETE)
+                .count());
+    }
+
+    @Test
     void plannerFailureProducesOneControlledFailureWithoutFinalResponse() {
         Phase2OrchestrationRuntime runtime = new Phase2OrchestrationRuntime(
                 new FailingPlanModel(),
@@ -154,6 +213,16 @@ class Phase2OrchestrationRuntimeTest {
         assertEquals(1, port.getCalls().stream()
                 .filter(call -> call.type() == FakeConversationExecutionPort.CallType.FAIL)
                 .count());
+    }
+
+    private Map<?, ?> orchestrationEvent(List<GptProcessResult> events, String expectedType) {
+        return events.stream()
+                .map(event -> event.getResultMap().get("orchestrationEvent"))
+                .filter(Map.class::isInstance)
+                .map(value -> (Map<?, ?>) value)
+                .filter(event -> expectedType.equals(event.get("eventType")))
+                .findFirst()
+                .orElseThrow();
     }
 
     private Map<?, ?> finalEvent(List<GptProcessResult> events) {
@@ -197,7 +266,7 @@ class Phase2OrchestrationRuntimeTest {
     }
 
     private static final class RecordingModel implements OrchestrationModelPort {
-        private final Map<Integer, Map<String, String>> failureMetadataByAttempt = new java.util.LinkedHashMap<>();
+        private final AtomicInteger planAttempts = new AtomicInteger();
 
         @Override
         public RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates) {
@@ -212,9 +281,9 @@ class Phase2OrchestrationRuntimeTest {
                 Map<String, String> successfulResultSummaries,
                 Map<String, String> failureMetadata
         ) {
-            failureMetadataByAttempt.put(attemptNo, Map.copyOf(failureMetadata));
+            planAttempts.incrementAndGet();
             return new OrchestrationPlan(List.of(
-                    new OrchestrationStep("step-" + attemptNo, "agent-a", "complete task", List.of())
+                    new OrchestrationStep("step-1", "agent-a", "complete task", List.of())
             ));
         }
 
@@ -244,6 +313,55 @@ class Phase2OrchestrationRuntimeTest {
         @Override
         public String summarize(String query, Map<String, String> successfulResultSummaries, Map<String, String> failureMetadata) {
             throw new AssertionError("not reached");
+        }
+    }
+
+    private static final class ParallelPlanModel implements OrchestrationModelPort {
+        @Override
+        public RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates) {
+            return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "TEST");
+        }
+
+        @Override
+        public OrchestrationPlan createPlan(
+                String query,
+                List<AgentCapabilitySummary> candidates,
+                int attemptNo,
+                Map<String, String> successfulResultSummaries,
+                Map<String, String> failureMetadata
+        ) {
+            return new OrchestrationPlan(List.of(new OrchestrationStep(
+                    "parallel",
+                    StepMode.PARALLEL_AGENTS,
+                    "compare independent evidence",
+                    List.of(),
+                    null,
+                    List.of(
+                            new OrchestrationSubTask("sub-a", "agent-a", "inspect source A"),
+                            new OrchestrationSubTask("sub-b", "agent-b", "inspect source B")
+                    )
+            )));
+        }
+
+        @Override
+        public String summarize(String query, Map<String, String> successes, Map<String, String> failures) {
+            return "final answer";
+        }
+    }
+
+    private static final class ParallelPlanCatalogPort implements AgentRuntimeCatalogPort {
+        @Override
+        public List<AgentCapabilitySummary> listOnlineCandidates(CurrentUser user, List<String> allowedAgentIds) {
+            return List.of(
+                    new AgentCapabilitySummary("agent-a", 1L, "Agent A", "analysis"),
+                    new AgentCapabilitySummary("agent-b", 1L, "Agent B", "analysis")
+            );
+        }
+
+        @Override
+        public AgentRuntimeProfile loadOnlineProfile(CurrentUser user, String agentId) {
+            String name = "agent-a".equals(agentId) ? "Agent A" : "Agent B";
+            return new AgentRuntimeProfile(agentId, 1L, name, "description", "prompt", "model", List.of(), List.of());
         }
     }
 

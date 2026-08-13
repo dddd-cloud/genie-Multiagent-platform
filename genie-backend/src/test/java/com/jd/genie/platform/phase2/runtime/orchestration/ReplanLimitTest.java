@@ -42,7 +42,7 @@ class ReplanLimitTest {
     );
 
     @Test
-    void retryableStepFailuresProduceAtMostThreeAttempts() {
+    void newSchemaV2RunUsesOneAttemptWithoutGlobalReplan() {
         FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
         catalog.registerProfile(profile());
         ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
@@ -66,9 +66,9 @@ class ReplanLimitTest {
                 CANDIDATES, new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST"), observer
         );
 
-        assertEquals(List.of(1, 2, 3), model.attempts);
-        assertEquals(2, eventTypes(channel.events).stream().filter("REPLAN_STARTED"::equals).count());
-        verify(executor, times(3)).execute(any(AgentContext.class), any(AgentRuntimeProfile.class), any(Printer.class), anyInt());
+        assertEquals(List.of(1), model.attempts);
+        assertEquals(0, eventTypes(channel.events).stream().filter("REPLAN_STARTED"::equals).count());
+        verify(executor, times(1)).execute(any(AgentContext.class), any(AgentRuntimeProfile.class), any(Printer.class), anyInt());
         assertEquals(1, channel.events.stream().filter(GptProcessResult::isFinished).count());
         assertEquals("PARTIAL", terminalDetails(channel.events).get("completionStatus"));
         assertEquals(1, port.getCalls().stream()
@@ -77,10 +77,14 @@ class ReplanLimitTest {
     }
 
     private List<String> eventTypes(List<GptProcessResult> events) {
-        return events.stream().map(event -> {
-            Map<?, ?> details = (Map<?, ?>) event.getResultMap().get("orchestrationEvent");
-            return details.get("eventType").toString();
-        }).toList();
+        return events.stream()
+                .map(event -> event.getResultMap().get("orchestrationEvent"))
+                .filter(Map.class::isInstance)
+                .map(value -> (Map<?, ?>) value)
+                .map(details -> details.get("eventType"))
+                .filter(java.util.Objects::nonNull)
+                .map(Object::toString)
+                .toList();
     }
 
     private Map<?, ?> terminalDetails(List<GptProcessResult> events) {

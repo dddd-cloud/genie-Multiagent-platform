@@ -82,10 +82,14 @@ class SummaryFallbackTest {
     }
 
     private List<String> eventTypes(List<GptProcessResult> events) {
-        return events.stream().map(event -> {
-            Map<?, ?> details = (Map<?, ?>) event.getResultMap().get("orchestrationEvent");
-            return details.get("eventType").toString();
-        }).toList();
+        return events.stream()
+                .map(event -> event.getResultMap().get("orchestrationEvent"))
+                .filter(Map.class::isInstance)
+                .map(value -> (Map<?, ?>) value)
+                .map(details -> details.get("eventType"))
+                .filter(java.util.Objects::nonNull)
+                .map(Object::toString)
+                .toList();
     }
 
     private static final class SummaryFailingModel implements OrchestrationModelPort {
