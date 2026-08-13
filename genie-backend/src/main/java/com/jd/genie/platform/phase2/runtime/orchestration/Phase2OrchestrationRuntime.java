@@ -10,25 +10,26 @@ import com.jd.genie.platform.phase2.runtime.event.OrchestrationEventMapper;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
+import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
+import com.jd.genie.platform.phase2contract.dto.OrchestrationSubTaskView;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public final class Phase2OrchestrationRuntime {
-    private static final int MAX_ATTEMPTS = 3;
 
     private final OrchestrationModelPort modelPort;
     private final OrchestrationPlanValidator planValidator;
     private final SerialOrchestrationService serialService;
     private final OrchestrationEventMapper eventMapper;
+    private final DirectFallbackExecutor directFallbackExecutor;
 
     public Phase2OrchestrationRuntime(
             OrchestrationModelPort modelPort,
@@ -36,10 +37,21 @@ public final class Phase2OrchestrationRuntime {
             SerialOrchestrationService serialService,
             OrchestrationEventMapper eventMapper
     ) {
+        this(modelPort, planValidator, serialService, eventMapper, null);
+    }
+
+    public Phase2OrchestrationRuntime(
+            OrchestrationModelPort modelPort,
+            OrchestrationPlanValidator planValidator,
+            SerialOrchestrationService serialService,
+            OrchestrationEventMapper eventMapper,
+            DirectFallbackExecutor directFallbackExecutor
+    ) {
         this.modelPort = modelPort;
         this.planValidator = planValidator;
         this.serialService = serialService;
         this.eventMapper = eventMapper;
+        this.directFallbackExecutor = directFallbackExecutor;
     }
 
     public RouteDecision selectRoute(
@@ -79,8 +91,7 @@ public final class Phase2OrchestrationRuntime {
             RouteDecision route,
             ConversationStreamObserver observer
     ) {
-        Map<String, String> plannerFailureMetadata = new LinkedHashMap<>();
-        Map<String, String> currentAttemptFailures = new LinkedHashMap<>();
+        Map<String, String> failures = new LinkedHashMap<>();
         AtomicLong sequence = new AtomicLong();
         OrchestrationTraceChannel traces = new OrchestrationTraceChannel(observer, requestId, runId, sequence);
         try {
@@ -94,69 +105,36 @@ public final class Phase2OrchestrationRuntime {
             }
 
             Map<String, String> successes = new LinkedHashMap<>();
-            Map<String, AgentTaskResult> reusableResults = new LinkedHashMap<>();
-            Set<String> failedPlanSignatures = new java.util.HashSet<>();
-            int lastAttemptNo = 1;
-            for (int attemptNo = 1; attemptNo <= MAX_ATTEMPTS; attemptNo++) {
-                lastAttemptNo = attemptNo;
-                traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS,
-                        attemptNo == 1 ? "正在制定任务计划…" : "正在重规划（第 " + attemptNo + " 次尝试）…", false);
-                OrchestrationPlan plan = planValidator.validate(
-                        modelPort.createPlan(
-                                query,
-                                candidates,
-                                attemptNo,
-                                Map.copyOf(successes),
-                                Map.copyOf(plannerFailureMetadata)
-                        ),
-                        candidates
-                );
-                String planSignature = planSignature(plan, successes, plannerFailureMetadata);
-                if (failedPlanSignatures.contains(planSignature)) {
-                    throw new AgentBridgeException(
-                            MvpErrorCode.ORCHESTRATION_PLAN_INVALID,
-                            "Replanned attempt repeats an unsuccessful plan"
-                    );
-                }
-                List<OrchestrationPlanStepView> steps = plan.steps().stream()
-                        .map(step -> stepView(step, candidates))
-                        .toList();
-                emit(observer, requestId, runId, sequence, "PLAN_CREATED", Map.of("attemptNo", attemptNo), steps);
-                traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_OUTPUT, formatPlanTrace(steps), false);
-                int currentAttempt = attemptNo;
-                Map<String, AgentTaskResult> results = serialService.execute(
-                        user,
-                        query,
-                        longTermMemory,
-                        plan.steps(),
-                        (eventType, step, result, details) -> emitStep(
-                                observer, requestId, runId, sequence, eventType, currentAttempt, step, result, details, steps
-                        ),
-                        observer::isTerminal,
-                        reusableResults,
-                        traces,
-                        currentAttempt
-                );
-                currentAttemptFailures.clear();
-                collectResults(results, successes, currentAttemptFailures);
-                if (currentAttemptFailures.isEmpty()) {
-                    complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "SUCCESS", attemptNo, traces);
-                    return;
-                }
-                plannerFailureMetadata.putAll(currentAttemptFailures);
-                failedPlanSignatures.add(planSignature);
-                if (attemptNo < MAX_ATTEMPTS && retryable(results)) {
-                    emit(observer, requestId, runId, sequence, "REPLAN_STARTED", Map.of(
-                            "attemptNo", attemptNo + 1,
-                            "reasonCode", "RETRYABLE_STEP_FAILURE"
-                    ), steps);
-                    traces.emitMain(attemptNo + 1, OrchestrationTraceChannel.KIND_STATUS,
-                            "上一步失败，准备重规划…", false);
-                    continue;
-                }
-                break;
-            }
-            complete(observer, requestId, runId, sequence, query, successes, currentAttemptFailures, "PARTIAL", lastAttemptNo, traces);
+            OrchestrationPlan plan = planValidator.validate(
+                    modelPort.createPlan(query, candidates, 1, Map.of(), Map.of()),
+                    candidates
+            );
+            List<OrchestrationPlanStepView> steps = plan.steps().stream()
+                    .map(step -> stepView(step, candidates))
+                    .toList();
+            emit(observer, requestId, runId, sequence, "PLAN_CREATED", Map.of("attemptNo", 1), steps);
+            traces.emitMain(1, OrchestrationTraceChannel.KIND_OUTPUT, formatPlanTrace(steps), false);
+            java.util.concurrent.atomic.AtomicBoolean degraded = new java.util.concurrent.atomic.AtomicBoolean(false);
+            Map<String, AgentTaskResult> results = serialService.execute(
+                    user, query, longTermMemory, plan.steps(),
+                    (eventType, step, result, details) -> {
+                        if ("STEP_DEGRADED".equals(eventType)) {
+                            degraded.set(true);
+                        }
+                        emitStep(
+                                observer, requestId, runId, sequence, eventType, 1, step, result, details, steps
+                        );
+                    },
+                    observer::isTerminal,
+                    new LinkedHashMap<>(),
+                    traces,
+                    1,
+                    observer
+            );
+            collectResults(results, successes, failures);
+            boolean hadDegraded = degraded.get();
+            complete(observer, requestId, runId, sequence, query, successes, failures,
+                    failures.isEmpty() && !hadDegraded ? "SUCCESS" : "PARTIAL", 1, traces);
         } catch (RuntimeException error) {
             if (!observer.isTerminal()) {
                 observer.onError(controlledFailure(error));
@@ -199,28 +177,21 @@ public final class Phase2OrchestrationRuntime {
             Map<String, Object> details,
             List<OrchestrationPlanStepView> steps
     ) {
-        Map<String, Object> eventDetails = new LinkedHashMap<>(details);
+        Map<String, Object> eventDetails = details == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(details);
         eventDetails.put("attemptNo", attemptNo);
         eventDetails.put("stepId", step.stepId());
-        eventDetails.put("agentId", step.agentId());
-        Object named = details == null ? null : details.get("agentName");
-        eventDetails.put("agentName", named instanceof String name && !name.isBlank() ? name : step.agentId());
+        eventDetails.put("stepMode", step.mode() == null ? null : step.mode().name());
+        // SUBTASK_* events already carry the subTask agent in details; step-level
+        // events fall back to the top-level step agent.
+        eventDetails.putIfAbsent("agentId", step.agentId());
+        Object named = eventDetails.get("agentName");
+        eventDetails.putIfAbsent("agentName", named instanceof String name && !name.isBlank() ? name : step.agentId());
         if (result != null && result.status() == AgentTaskResult.Status.FAILURE) {
             eventDetails.put("errorCode", result.errorCode());
         }
-        emit(observer, requestId, runId, sequence, eventType, Map.copyOf(eventDetails), steps);
-    }
-
-    private String planSignature(
-            OrchestrationPlan plan,
-            Map<String, String> successes,
-            Map<String, String> failureMetadata
-    ) {
-        String steps = plan.steps().stream()
-                .map(step -> step.stepId() + "\u0000" + step.agentId() + "\u0000" + step.objective().trim()
-                        + "\u0000" + String.join("\u0001", step.inputRefs()))
-                .collect(java.util.stream.Collectors.joining("\u0002"));
-        return steps + "\u0003" + successes.keySet() + "\u0003" + failureMetadata;
+        emit(observer, requestId, runId, sequence, eventType, eventDetails, steps);
     }
 
     private void collectResults(
@@ -235,10 +206,6 @@ public final class Phase2OrchestrationRuntime {
                 failures.put(stepId, result.errorCode());
             }
         });
-    }
-
-    private boolean retryable(Map<String, AgentTaskResult> results) {
-        return results.values().stream().anyMatch(result -> result.status() == AgentTaskResult.Status.FAILURE && result.retryable());
     }
 
     private void complete(
@@ -311,20 +278,46 @@ public final class Phase2OrchestrationRuntime {
             OrchestrationStep step,
             List<AgentCapabilitySummary> candidates
     ) {
-        String agentName = step.agentId();
-        if (candidates != null) {
-            for (AgentCapabilitySummary candidate : candidates) {
-                if (candidate != null && step.agentId().equals(candidate.agentId())) {
-                    if (candidate.name() != null && !candidate.name().isBlank()) {
-                        agentName = candidate.name();
-                    }
-                    break;
+        String agentName = agentName(step.agentId(), candidates);
+        List<OrchestrationSubTaskView> subTasks = step.subTasks().stream()
+                .map(subTask -> subTaskView(subTask, candidates))
+                .toList();
+        return new OrchestrationPlanStepView(
+                step.stepId(),
+                step.agentId(),
+                agentName,
+                step.objective(),
+                step.inputRefs(),
+                step.mode(),
+                subTasks
+        );
+    }
+
+    private OrchestrationSubTaskView subTaskView(
+            OrchestrationSubTask subTask,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        return new OrchestrationSubTaskView(
+                subTask.subTaskId(),
+                subTask.agentId(),
+                agentName(subTask.agentId(), candidates),
+                subTask.objective()
+        );
+    }
+
+    private String agentName(String agentId, List<AgentCapabilitySummary> candidates) {
+        if (agentId == null || agentId.isBlank() || candidates == null) {
+            return agentId;
+        }
+        for (AgentCapabilitySummary candidate : candidates) {
+            if (candidate != null && agentId.equals(candidate.agentId())) {
+                if (candidate.name() != null && !candidate.name().isBlank()) {
+                    return candidate.name();
                 }
+                break;
             }
         }
-        return new OrchestrationPlanStepView(
-                step.stepId(), step.agentId(), agentName, step.objective(), step.inputRefs()
-        );
+        return agentId;
     }
 
     private String deterministicSummary(Map<String, String> successes, Map<String, String> failures) {

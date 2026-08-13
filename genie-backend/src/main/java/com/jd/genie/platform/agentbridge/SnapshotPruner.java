@@ -173,10 +173,13 @@ public final class SnapshotPruner {
     private static final java.util.Set<String> CRITICAL_ORCHESTRATION_EVENTS = java.util.Set.of(
             "PLAN_CREATED",
             "STEP_COMPLETED",
+            "STEP_DEGRADED",
             "STEP_FAILED",
             "STEP_SKIPPED",
-            "REPLAN_STARTED",
-            "FINAL_RESPONSE"
+            "FINAL_RESPONSE",
+            // Legacy V1 replan event: keep it parseable for history readers even
+            // though the new V2 runtime never emits it.
+            "REPLAN_STARTED"
     );
 
     private static final java.util.Set<String> CRITICAL_TRACE_KINDS = java.util.Set.of(
@@ -197,6 +200,13 @@ public final class SnapshotPruner {
     }
 
     private boolean isPlanOrTaskEvent(JsonNode event) {
+        String packageType = event.path("packageType").asText("");
+
+        // skill_execution is a transient control packet, droppable under space pressure
+        if ("skill_execution".equals(packageType)) {
+            return false;
+        }
+
         String messageType = event.path("resultMap")
                 .path("eventData")
                 .path("messageType")
@@ -210,7 +220,7 @@ public final class SnapshotPruner {
                 || CRITICAL_ORCHESTRATION_EVENTS.contains(orchestrationEventType)) {
             return true;
         }
-        if ("orchestration_trace".equals(event.path("packageType").asText(""))) {
+        if ("orchestration_trace".equals(packageType)) {
             String kind = event.path("resultMap")
                     .path("orchestrationTrace")
                     .path("kind")

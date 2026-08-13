@@ -19,6 +19,7 @@ public final class OrchestrationTraceChannel {
 
     public static final String SCOPE_MAIN = "MAIN";
     public static final String SCOPE_STEP = "STEP";
+    public static final String SCOPE_SUBTASK = "SUBTASK";
     public static final String KIND_STATUS = "STATUS";
     public static final String KIND_THOUGHT = "THOUGHT";
     public static final String KIND_OUTPUT = "OUTPUT";
@@ -43,11 +44,11 @@ public final class OrchestrationTraceChannel {
     }
 
     public void emitMain(String kind, String text, boolean append) {
-        emit(SCOPE_MAIN, null, null, null, "主 Agent", kind, text, append);
+        emit(SCOPE_MAIN, null, null, null, null, null, "主 Agent", kind, text, append);
     }
 
     public void emitMain(Integer attemptNo, String kind, String text, boolean append) {
-        emit(SCOPE_MAIN, attemptNo, null, null, "主 Agent", kind, text, append);
+        emit(SCOPE_MAIN, attemptNo, null, null, null, null, "主 Agent", kind, text, append);
     }
 
     public void emitStep(
@@ -59,13 +60,29 @@ public final class OrchestrationTraceChannel {
             String text,
             boolean append
     ) {
-        emit(SCOPE_STEP, attemptNo, stepId, agentId, agentName, kind, text, append);
+        emit(SCOPE_STEP, attemptNo, null, stepId, null, agentId, agentName, kind, text, append);
+    }
+
+    public void emitSubTask(
+            Integer attemptNo,
+            Integer retryNo,
+            String stepId,
+            String subTaskId,
+            String agentId,
+            String agentName,
+            String kind,
+            String text,
+            boolean append
+    ) {
+        emit(SCOPE_SUBTASK, attemptNo, retryNo, stepId, subTaskId, agentId, agentName, kind, text, append);
     }
 
     private void emit(
             String scope,
             Integer attemptNo,
+            Integer retryNo,
             String stepId,
+            String subTaskId,
             String agentId,
             String agentName,
             String kind,
@@ -77,7 +94,8 @@ public final class OrchestrationTraceChannel {
         }
         String safeKind = kind == null ? KIND_STATUS : kind;
         String raw = text == null ? "" : text;
-        String budgetKey = scope + ":" + (stepId == null ? "main" : stepId) + ":" + safeKind;
+        String budgetKey = scope + ":" + (stepId == null ? "main" : stepId) +
+                          ":" + (subTaskId == null ? "" : subTaskId) + ":" + safeKind;
         int emitted = stepEmittedChars.getOrDefault(budgetKey, 0);
         if (emitted >= MAX_STEP_CHARS) {
             return;
@@ -99,13 +117,15 @@ public final class OrchestrationTraceChannel {
         stepEmittedChars.put(budgetKey, emitted + chunk.length());
 
         Map<String, Object> trace = new LinkedHashMap<>();
-        trace.put("schemaVersion", 1);
+        trace.put("schemaVersion", 2);
         trace.put("sequence", sequence.incrementAndGet());
         trace.put("requestId", requestId);
         trace.put("runId", runId);
         trace.put("scope", scope);
         trace.put("attemptNo", attemptNo);
+        trace.put("retryNo", retryNo);
         trace.put("stepId", stepId);
+        trace.put("subTaskId", subTaskId);
         trace.put("agentId", agentId);
         trace.put("agentName", agentName == null || agentName.isBlank() ? agentId : agentName);
         trace.put("kind", safeKind);

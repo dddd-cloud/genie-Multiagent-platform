@@ -1,5 +1,7 @@
 package com.jd.genie.platform.phase2.runtime.agent;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.agentbridge.AgentBridgeException;
@@ -47,7 +49,9 @@ public final class AgentTaskResultParser {
     private final ObjectMapper objectMapper;
 
     public AgentTaskResultParser() {
-        this(new ObjectMapper());
+        this(new ObjectMapper()
+                .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+                .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS));
     }
 
     AgentTaskResultParser(ObjectMapper objectMapper) {
@@ -131,6 +135,10 @@ public final class AgentTaskResultParser {
         }
         String output = unescapeJsonString(candidate.substring(prefix.end(), suffix.start()));
         if (output.isBlank() || output.length() > MAX_OUTPUT_LENGTH) {
+            return null;
+        }
+        // Multiple concatenated envelopes are not a single fixed contract object.
+        if (candidate.indexOf("{\"status\"", 1) >= 0) {
             return null;
         }
         return AgentTaskResult.success(output);

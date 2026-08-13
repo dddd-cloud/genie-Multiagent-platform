@@ -7,7 +7,7 @@ import com.jd.genie.config.GenieConfig;
 import com.jd.genie.platform.agentbridge.AgentBridgeException;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
-import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
+import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanParser;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import okhttp3.MediaType;
@@ -34,6 +34,7 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
 
     private final GenieConfig genieConfig;
     private final ObjectMapper objectMapper;
+    private final OrchestrationPlanParser planParser;
     private final OkHttpClient httpClient;
 
     public OpenAiOrchestrationModelPort(GenieConfig genieConfig) {
@@ -43,6 +44,7 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     OpenAiOrchestrationModelPort(GenieConfig genieConfig, ObjectMapper objectMapper, OkHttpClient httpClient) {
         this.genieConfig = genieConfig;
         this.objectMapper = objectMapper;
+        this.planParser = new OrchestrationPlanParser();
         this.httpClient = httpClient;
     }
 
@@ -98,10 +100,37 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 last = new AgentBridgeException(MvpErrorCode.ORCHESTRATION_PLAN_INVALID, "Planner parse failed", ex);
             }
         }
-        if (candidates != null && !candidates.isEmpty()) {
-            return heuristicPlan(query, candidates);
-        }
         throw last != null ? last : failed("Planner failed");
+    }
+
+    @Override
+    public ReviewDecision review(
+            String objective,
+            String safeResult,
+            String errorCode,
+            boolean retryable,
+            int retryNo
+    ) {
+        String system = """
+                You are a Phase2 step reviewer. Reply with ONLY one JSON object:
+                {"decision":"COMPLETE"|"RETRY"|"FALLBACK"}
+                COMPLETE means the safe result sufficiently completes the current step.
+                RETRY means the current execution unit needs one more attempt and retryNo is 0.
+                FALLBACK means the step cannot be accepted or retried.
+                Never provide markdown, explanations, or extra fields.
+                """;
+        String user = "objective:\n" + nullToEmpty(objective)
+                + "\n\nsafeResult:\n" + nullToEmpty(safeResult)
+                + "\n\nerrorCode:\n" + nullToEmpty(errorCode)
+                + "\n\nretryable:\n" + retryable
+                + "\n\nretryNo:\n" + retryNo;
+        JsonNode root = parseJsonObject(chat(system, user));
+        String decision = text(root, "decision");
+        try {
+            return ReviewDecision.valueOf(decision);
+        } catch (IllegalArgumentException | NullPointerException error) {
+            throw failed("Review decision invalid");
+        }
     }
 
     @Override
@@ -126,21 +155,26 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
 
     private String planSystemPrompt() {
         return """
-                You are a Phase2 orchestration planner. Reply with ONLY JSON:
-                {"steps":[{"stepId":"step-1","agentId":"<id>","objective":"...","inputRefs":[]}]}
+                You are a Phase2 orchestration planner. Reply with ONLY one JSON object:
+                {"steps":[{"stepId":"step-1","mode":"SINGLE_AGENT","objective":"...","inputRefs":[],"agentId":"<id>","subTasks":[]}]}
+                Every step must contain exactly these fields: stepId, mode, objective, inputRefs, agentId, subTasks.
                 Rules:
-                - 1..6 steps
-                - agentId must be from candidates
-                - inputRefs may only reference earlier stepIds
-                - same agentId at most twice
-                - When the user asks multiple agents to each do something (各/分别/每个), assign different candidate agents to those parallel specialist steps
+                - 1..6 top-level steps; stepId values are unique
+                - inputRefs may only uniquely reference earlier top-level stepIds
+                - MAIN_ONLY requires agentId null and subTasks []
+                - SINGLE_AGENT requires a candidate agentId and subTasks []
+                - PARALLEL_AGENTS requires agentId null and 2..4 subTasks
+                - Every subTask must contain exactly subTaskId, agentId, objective; subTaskId values are unique across the plan
+                - Every agentId must be from candidates
+                - A candidate may appear in multiple distinct parallel subTasks
+                - When the user asks multiple agents to each do something (各/分别/每个), use one PARALLEL_AGENTS step with independent subTasks when suitable
                 - Aggregation/summary steps MUST inputRefs the specialist steps they combine
-                - Each objective must be a self-contained instruction for that one agent; never ask a step to discover which agents are available
+                - Each objective must be a self-contained instruction for its current execution unit; never ask it to discover available agents
                 - Planning only decomposes work and assigns evidence-gathering tasks; it must not draft the final overall answer
-                - Specialist steps must return findings, observations, source references, intermediate results, and explicit uncertainty only; they must not summarize the whole user request
+                - Specialist work must return findings, observations, source references, intermediate results, and explicit uncertainty only; it must not summarize the whole user request
                 - The designated final summarization step is the only step allowed to synthesize a user-facing overall answer
-                - Prefer candidate "name" when writing objectives (e.g. "用 Agent a 写一句…"), but agentId field must still be the candidate id
-                - no tool calls, no markdown, no extra fields
+                - Prefer candidate "name" when writing objectives, but every agentId field must still be the candidate id
+                - no tool calls, no markdown, no extra fields, no text outside the JSON object
                 """;
     }
 
@@ -161,62 +195,10 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     }
 
     private OrchestrationPlan parsePlan(String content, List<AgentCapabilitySummary> candidates) {
-        JsonNode root = parseJsonObject(content);
-        JsonNode stepsNode = root.get("steps");
-        if (stepsNode == null || !stepsNode.isArray() || stepsNode.isEmpty()) {
-            throw new AgentBridgeException(MvpErrorCode.ORCHESTRATION_PLAN_INVALID, "Plan steps missing");
-        }
-        List<OrchestrationStep> steps = new ArrayList<>();
-        for (JsonNode stepNode : stepsNode) {
-            List<String> refs = new ArrayList<>();
-            JsonNode refsNode = stepNode.get("inputRefs");
-            if (refsNode != null && refsNode.isArray()) {
-                for (JsonNode ref : refsNode) {
-                    if (ref != null && ref.isTextual()) {
-                        refs.add(ref.asText());
-                    }
-                }
-            }
-            steps.add(new OrchestrationStep(
-                    text(stepNode, "stepId"),
-                    text(stepNode, "agentId"),
-                    text(stepNode, "objective"),
-                    List.copyOf(refs)
-            ));
-        }
-        // Keep candidate ids available for callers that validate afterwards.
         if (candidates == null) {
             throw new AgentBridgeException(MvpErrorCode.ORCHESTRATION_PLAN_INVALID, "Candidates missing");
         }
-        return new OrchestrationPlan(List.copyOf(steps));
-    }
-
-    private OrchestrationPlan heuristicPlan(String query, List<AgentCapabilitySummary> candidates) {
-        List<OrchestrationStep> steps = new ArrayList<>();
-        int index = 1;
-        List<String> specialistStepIds = new ArrayList<>();
-        for (AgentCapabilitySummary candidate : candidates) {
-            if (index > 5) {
-                break;
-            }
-            String stepId = "step-" + index;
-            String name = blank(candidate.name()) ? candidate.agentId() : candidate.name();
-            String objective = "作为 Agent「" + name + "」，用你自己独特的一句话完成用户请求中与你相关的部分。"
-                    + "不要复述其他 Agent 的措辞。用户总请求仅作背景：" + nullToEmpty(query);
-            steps.add(new OrchestrationStep(stepId, candidate.agentId(), objective, List.of()));
-            specialistStepIds.add(stepId);
-            index++;
-        }
-        if (specialistStepIds.size() >= 2 && index <= 6) {
-            String summaryId = "step-" + index;
-            steps.add(new OrchestrationStep(
-                    summaryId,
-                    candidates.get(0).agentId(),
-                    "汇总前面各 Agent 的结果，写成一段连贯答复。",
-                    List.copyOf(specialistStepIds)
-            ));
-        }
-        return new OrchestrationPlan(List.copyOf(steps));
+        return planParser.parse(content);
     }
 
     private String chat(String systemPrompt, String userPrompt) {

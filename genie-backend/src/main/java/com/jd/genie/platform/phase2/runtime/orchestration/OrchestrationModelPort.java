@@ -11,7 +11,29 @@ import java.util.Map;
  * The implementation owns transport and redaction so orchestration input is never emitted by the runtime.
  */
 public interface OrchestrationModelPort {
+    enum ReviewDecision {
+        COMPLETE,
+        RETRY,
+        FALLBACK
+    }
+
     RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates);
+
+    /**
+     * Reviews only a single step's safe execution boundary. Implementations must not require raw prompts or tools.
+     */
+    default ReviewDecision review(
+            String objective,
+            String safeResult,
+            String errorCode,
+            boolean retryable,
+            int retryNo
+    ) {
+        if (errorCode == null || errorCode.isBlank()) {
+            return ReviewDecision.COMPLETE;
+        }
+        return retryable && retryNo == 0 ? ReviewDecision.RETRY : ReviewDecision.FALLBACK;
+    }
 
     OrchestrationPlan createPlan(
             String query,
