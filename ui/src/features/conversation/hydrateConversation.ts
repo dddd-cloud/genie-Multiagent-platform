@@ -14,6 +14,7 @@ import {
   reduceOrchestrationTrace,
 } from '@/features/phase2/orchestration/orchestrationReducer';
 import type { OrchestrationUiState } from '@/features/phase2/orchestration/types';
+import { extractBrowserSkillSignalFromResult } from '@/features/phase2/skillRuntime/signal';
 import { parseSnapshot } from './snapshot';
 import type { PersistedChatItem } from './types';
 
@@ -115,6 +116,13 @@ function replaySnapshot(
       continue;
     }
 
+    // Hard rule: snapshot skill_execution packets must never re-execute Python.
+    if (event.packageType === 'skill_execution') {
+      // Touch parser so malformed signals stay inert; no runner call.
+      extractBrowserSkillSignalFromResult(event);
+      continue;
+    }
+
     const orchEvent = extractOrchestrationEventFromResult(event);
     if (orchEvent) {
       if (!orchestration) {
@@ -167,7 +175,16 @@ function replaySnapshot(
             steps: Object.fromEntries(
               Object.entries(attempt.steps).map(([stepId, step]) => [
                 stepId,
-                { ...step, open: false },
+                {
+                  ...step,
+                  open: false,
+                  subTasks: Object.fromEntries(
+                    Object.entries(step.subTasks ?? {}).map(([subId, sub]) => [
+                      subId,
+                      { ...sub, open: false },
+                    ]),
+                  ),
+                },
               ]),
             ),
           },

@@ -63,11 +63,14 @@ export default defineConfig(({ command, mode, isPreview }) => {
       },
     },
     preview: {proxy,},
+    worker: {
+      format: 'es',
+    },
     build: {
       outDir: 'dist',
       sourcemap: false,
       minify: 'terser' as const,
-      rollupOptions: { output: { inlineDynamicImports: true } },
+      // Workers (Pyodide) require separate chunks — do not inlineDynamicImports.
       cssCodeSplit: false,
     },
   };

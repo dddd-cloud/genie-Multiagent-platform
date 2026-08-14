@@ -24,6 +24,7 @@ import SkillForm, {
   validateSkillForm,
   type SkillFormState,
 } from './SkillForm';
+import SkillPackageInfoPanel from './SkillPackageInfoPanel';
 import SkillUsagePanel from './SkillUsagePanel';
 
 const { Title, Text } = Typography;
@@ -34,6 +35,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<SkillFormState>(emptySkillFormState());
+  const [skillRaw, setSkillRaw] = useState<unknown>(null);
   const [capabilities, setCapabilities] = useState<ToolCapabilityItem[]>([]);
   const [agents, setAgents] = useState<Phase2AgentResponse[]>([]);
   const [loading, setLoading] = useState(!isNew);
@@ -45,6 +47,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
     async (signal?: AbortSignal) => {
       if (isNew || !skillId) {
         setForm(emptySkillFormState());
+        setSkillRaw(null);
         setVersionConflict(false);
         return;
       }
@@ -57,6 +60,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
           return;
         }
         setForm(skillToFormState(skill));
+        setSkillRaw(skill);
         setVersionConflict(false);
       } catch (err: unknown) {
         setError(phase2ErrorMessage(err));
@@ -157,7 +161,10 @@ const SkillEditorPage: GenieType.FC = memo(() => {
     setError(null);
     try {
       const updated = await action(skillId, { version: form.version });
-      if (updated) setForm(skillToFormState(updated));
+      if (updated) {
+        setForm(skillToFormState(updated));
+        setSkillRaw(updated);
+      }
       message.success(successText);
     } catch (err: unknown) {
       if (isVersionConflict(err)) {
@@ -272,6 +279,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
 
       <Spin spinning={loading}>
         <div className="max-w-[720px] flex flex-col gap-16">
+          {!isNew ? <SkillPackageInfoPanel skill={skillRaw ?? form} /> : null}
           <SkillForm
             value={form}
             onChange={setForm}

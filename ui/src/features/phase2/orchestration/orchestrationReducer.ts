@@ -2,12 +2,15 @@ import {
   ORCHESTRATION_EVENT_TYPES,
   type OrchestrationEvent,
   type OrchestrationEventType,
+  type OrchestrationPlanStepView,
+  type StepMode,
 } from '@/contracts';
 import type { OrchestrationTrace } from './parseOrchestrationTrace';
 import type {
   AttemptUiState,
   OrchestrationUiState,
   StepUiState,
+  SubTaskUiState,
   TraceLine,
 } from './types';
 
@@ -25,8 +28,12 @@ export function createInitialOrchestrationState(): OrchestrationUiState {
     seenEventIds: {},
     recoveryWarnings: [],
     masterOpen: false,
-    main: { open: false, lines: [] },
+    main: {
+      open: false,
+      lines: []
+    },
     phaseLabel: 'thinking',
+    schemaVersion: null,
   };
 }
 
@@ -47,10 +54,11 @@ function acknowledgeEvent(
 ): OrchestrationUiState {
   const next: OrchestrationUiState = {
     ...state,
+    schemaVersion: state.schemaVersion ?? event.schemaVersion,
     lastSequence: event.sequence,
     seenEventIds: {
       ...state.seenEventIds,
-      [event.eventId]: true
+      [event.eventId]: true,
     },
   };
   if (warning) {
@@ -72,7 +80,7 @@ function maxAttemptNo(state: OrchestrationUiState): number {
   return max;
 }
 
-function countRunningSteps(state: OrchestrationUiState): number {
+function countRunningTopLevelSteps(state: OrchestrationUiState): number {
   let count = 0;
   for (const attempt of Object.values(state.attempts)) {
     for (const step of Object.values(attempt.steps)) {
@@ -86,14 +94,67 @@ function attemptHasFailedStep(attempt: AttemptUiState): boolean {
   return Object.values(attempt.steps).some((s) => s.status === 'FAILED');
 }
 
+function emptySubTasks(): Record<string, SubTaskUiState> {
+  return {};
+}
+
+function planStepToUi(step: OrchestrationPlanStepView): StepUiState {
+  const subTasks: Record<string, SubTaskUiState> = {};
+  for (const st of step.subTasks ?? []) {
+    subTasks[st.subTaskId] = {
+      subTaskId: st.subTaskId,
+      agentId: st.agentId,
+      agentName: st.agentName,
+      objective: st.objective,
+      status: 'PLANNED',
+      retryNo: 0,
+      errorCode: null,
+      lines: [],
+      open: false,
+    };
+  }
+  return {
+    stepId: step.stepId,
+    agentId: step.agentId ?? '',
+    agentName: step.agentName ?? '',
+    objective: step.objective,
+    status: 'PLANNED',
+    stepMode: step.mode ?? null,
+    errorCode: null,
+    retryNo: null,
+    reviewing: false,
+    fallbackActive: false,
+    lines: [],
+    open: false,
+    subTasks,
+  };
+}
+
+function cloneSubTasks(
+  subTasks: Record<string, SubTaskUiState>,
+): Record<string, SubTaskUiState> {
+  const out: Record<string, SubTaskUiState> = {};
+  for (const [id, st] of Object.entries(subTasks)) {
+    out[id] = { ...st };
+  }
+  return out;
+}
+
 function cloneAttempts(
   attempts: Record<number, AttemptUiState>,
 ): Record<number, AttemptUiState> {
   const out: Record<number, AttemptUiState> = {};
   for (const [key, attempt] of Object.entries(attempts)) {
+    const steps: Record<string, StepUiState> = {};
+    for (const [stepId, step] of Object.entries(attempt.steps)) {
+      steps[stepId] = {
+        ...step,
+        subTasks: cloneSubTasks(step.subTasks ?? emptySubTasks()),
+      };
+    }
     out[Number(key)] = {
       attemptNo: attempt.attemptNo,
-      steps: { ...attempt.steps },
+      steps,
     };
   }
   return out;
@@ -143,20 +204,41 @@ function updateStepStatus(
       ...attempt.steps,
       [stepId]: {
         ...step,
-        ...patch
+        ...patch,
+        subTasks:
+          patch.subTasks ??
+          cloneSubTasks(step.subTasks ?? emptySubTasks()),
       },
     },
   };
   return {
     ...state,
-    attempts
+    attempts,
   };
 }
 
-function validateEnvelope(
-  event: OrchestrationEvent,
-): string | null {
-  if (event.schemaVersion !== 1) {
+function updateSubTask(
+  state: OrchestrationUiState,
+  attemptNo: number,
+  stepId: string,
+  subTaskId: string,
+  patch: Partial<SubTaskUiState>,
+): OrchestrationUiState {
+  const attempt = state.attempts[attemptNo];
+  const step = attempt?.steps[stepId];
+  if (!attempt || !step) return state;
+  const existing = step.subTasks?.[subTaskId];
+  if (!existing) return state;
+  const subTasks = cloneSubTasks(step.subTasks);
+  subTasks[subTaskId] = {
+    ...existing,
+    ...patch
+  };
+  return updateStepStatus(state, attemptNo, stepId, { subTasks });
+}
+
+function validateEnvelope(event: OrchestrationEvent): string | null {
+  if (event.schemaVersion !== 1 && event.schemaVersion !== 2) {
     return 'invalid schemaVersion';
   }
   if (typeof event.eventId !== 'string' || event.eventId.length === 0) {
@@ -175,6 +257,27 @@ function validateEnvelope(
     return 'empty runId';
   }
   return null;
+}
+
+function preferReadableAgentName(
+  incoming: string | null | undefined,
+  current: string | null | undefined,
+  agentId: string,
+): string {
+  const pick = (value: string | null | undefined): string | null => {
+    if (!value || value.trim().length === 0) return null;
+    const trimmed = value.trim();
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        trimmed,
+      )
+    ) {
+      return null;
+    }
+    if (trimmed === agentId) return null;
+    return trimmed;
+  };
+  return pick(incoming) ?? pick(current) ?? agentId;
 }
 
 function applyRouteSelected(
@@ -202,16 +305,92 @@ function applyRouteSelected(
   };
 }
 
+function mergePlanSteps(
+  existing: Record<string, StepUiState>,
+  planSteps: OrchestrationPlanStepView[],
+): Record<string, StepUiState> {
+  const steps: Record<string, StepUiState> = { ...existing };
+  for (const step of planSteps) {
+    const prev = steps[step.stepId];
+    if (!prev) {
+      steps[step.stepId] = planStepToUi(step);
+      continue;
+    }
+    const mergedSubTasks = cloneSubTasks(prev.subTasks ?? emptySubTasks());
+    for (const st of step.subTasks ?? []) {
+      if (!mergedSubTasks[st.subTaskId]) {
+        mergedSubTasks[st.subTaskId] = {
+          subTaskId: st.subTaskId,
+          agentId: st.agentId,
+          agentName: st.agentName,
+          objective: st.objective,
+          status: 'PLANNED',
+          retryNo: 0,
+          errorCode: null,
+          lines: [],
+          open: false,
+        };
+      } else {
+        const cur = mergedSubTasks[st.subTaskId];
+        mergedSubTasks[st.subTaskId] = {
+          ...cur,
+          agentId: st.agentId || cur.agentId,
+          agentName: preferReadableAgentName(
+            st.agentName,
+            cur.agentName,
+            st.agentId || cur.agentId,
+          ),
+          objective:
+            st.objective && st.objective.trim().length > 0
+              ? st.objective
+              : cur.objective,
+        };
+      }
+    }
+    steps[step.stepId] = {
+      ...prev,
+      agentId: step.agentId || prev.agentId,
+      agentName: preferReadableAgentName(
+        step.agentName,
+        prev.agentName,
+        step.agentId || prev.agentId || '',
+      ),
+      objective:
+        step.objective && step.objective.trim().length > 0
+          ? step.objective
+          : prev.objective,
+      stepMode: step.mode ?? prev.stepMode ?? null,
+      subTasks: mergedSubTasks,
+    };
+  }
+  return steps;
+}
+
 function applyPlanCreated(
   state: OrchestrationUiState,
   event: OrchestrationEvent,
 ): OrchestrationUiState {
   const attemptNo = event.attemptNo;
-  if (attemptNo === null || attemptNo < 1 || attemptNo > 3) {
+  if (attemptNo === null) {
     return acknowledgeEvent(
       state,
       event,
       `PLAN_CREATED invalid attemptNo ignored (${event.eventId})`,
+    );
+  }
+  if (event.schemaVersion === 1) {
+    if (attemptNo < 1 || attemptNo > 3) {
+      return acknowledgeEvent(
+        state,
+        event,
+        `PLAN_CREATED invalid attemptNo ignored (${event.eventId})`,
+      );
+    }
+  } else if (attemptNo !== 1) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `PLAN_CREATED v2 attemptNo must be 1 ignored (${event.eventId})`,
     );
   }
   if (!event.steps || event.steps.length === 0) {
@@ -224,40 +403,11 @@ function applyPlanCreated(
   const existing = state.attempts[attemptNo];
   const attempts = cloneAttempts(state.attempts);
 
-  // Merge when traces already created placeholder steps (empty objective).
-  // Ignoring as "duplicate" left 任务安排 blank until snapshot reload.
   if (existing && Object.keys(existing.steps).length > 0) {
-    const steps: Record<string, StepUiState> = { ...existing.steps };
-    for (const step of event.steps) {
-      const prev = steps[step.stepId];
-      if (!prev) {
-        steps[step.stepId] = {
-          stepId: step.stepId,
-          agentId: step.agentId ?? '',
-          agentName: step.agentName ?? '',
-          objective: step.objective,
-          status: 'PLANNED',
-          errorCode: null,
-          lines: [],
-          open: false,
-        };
-        continue;
-      }
-      steps[step.stepId] = {
-        ...prev,
-        agentId: step.agentId || prev.agentId,
-        agentName: preferReadableAgentName(
-          step.agentName,
-          prev.agentName,
-          step.agentId || prev.agentId || '',
-        ),
-        objective:
-          step.objective && step.objective.trim().length > 0
-            ? step.objective
-            : prev.objective,
-      };
-    }
-    attempts[attemptNo] = { attemptNo, steps };
+    attempts[attemptNo] = {
+      attemptNo,
+      steps: mergePlanSteps(existing.steps, event.steps),
+    };
     return {
       ...acknowledgeEvent(state, event),
       attempts,
@@ -266,27 +416,24 @@ function applyPlanCreated(
 
   const steps: Record<string, StepUiState> = {};
   for (const step of event.steps) {
-    steps[step.stepId] = {
-      stepId: step.stepId,
-      agentId: step.agentId ?? '',
-      agentName: step.agentName ?? '',
-      objective: step.objective,
-      status: 'PLANNED',
-      errorCode: null,
-      lines: [],
-      open: false,
-    };
+    steps[step.stepId] = planStepToUi(step);
   }
 
   attempts[attemptNo] = {
     attemptNo,
     steps
   };
-
   return {
     ...acknowledgeEvent(state, event),
     attempts,
   };
+}
+
+function resolveStepMode(
+  step: StepUiState,
+  event: OrchestrationEvent,
+): StepMode | null | undefined {
+  return event.stepMode ?? step.stepMode ?? null;
 }
 
 function applyStepStarted(
@@ -332,7 +479,8 @@ function applyStepStarted(
       `STEP_STARTED from illegal status ${step.status} ignored (${event.eventId})`,
     );
   }
-  if (countRunningSteps(state) > 0) {
+  // Top-level steps remain strictly serial even in v2.
+  if (countRunningTopLevelSteps(state) > 0) {
     return acknowledgeEvent(
       state,
       event,
@@ -343,32 +491,23 @@ function applyStepStarted(
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: 'RUNNING',
     agentId: event.agentId ?? step.agentId,
-    agentName: preferReadableAgentName(event.agentName, step.agentName, step.agentId),
+    agentName: preferReadableAgentName(
+      event.agentName,
+      step.agentName,
+      step.agentId,
+    ),
+    stepMode: resolveStepMode(step, event),
+    retryNo: event.retryNo ?? step.retryNo ?? 0,
+    reviewing: false,
+    fallbackActive: false,
   });
   return acknowledgeEvent(next, event);
-}
-
-function preferReadableAgentName(
-  incoming: string | null | undefined,
-  current: string | null | undefined,
-  agentId: string,
-): string {
-  const pick = (value: string | null | undefined): string | null => {
-    if (!value || value.trim().length === 0) return null;
-    const trimmed = value.trim();
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
-      return null;
-    }
-    if (trimmed === agentId) return null;
-    return trimmed;
-  };
-  return pick(incoming) ?? pick(current) ?? agentId;
 }
 
 function applyStepTerminal(
   state: OrchestrationUiState,
   event: OrchestrationEvent,
-  nextStatus: 'COMPLETED' | 'FAILED' | 'SKIPPED',
+  nextStatus: 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'DEGRADED',
 ): OrchestrationUiState {
   const attemptNo = event.attemptNo;
   const stepId = event.stepId;
@@ -396,7 +535,6 @@ function applyStepTerminal(
     );
   }
 
-  // RUNNING is the live path; PLANNED is accepted for pruned Snapshot hydrate.
   if (step.status !== 'PLANNED' && step.status !== 'RUNNING') {
     return acknowledgeEvent(
       state,
@@ -416,8 +554,15 @@ function applyStepTerminal(
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: nextStatus,
     agentId: event.agentId ?? step.agentId,
-    agentName: preferReadableAgentName(event.agentName, step.agentName, step.agentId),
+    agentName: preferReadableAgentName(
+      event.agentName,
+      step.agentName,
+      step.agentId,
+    ),
     errorCode: nextStatus === 'FAILED' ? event.errorCode : step.errorCode,
+    reviewing: false,
+    fallbackActive: nextStatus === 'DEGRADED' ? false : step.fallbackActive,
+    stepMode: resolveStepMode(step, event),
   });
   return acknowledgeEvent(next, event);
 }
@@ -426,6 +571,14 @@ function applyReplanStarted(
   state: OrchestrationUiState,
   event: OrchestrationEvent,
 ): OrchestrationUiState {
+  // v2 never starts REPLAN; still accept for historical snapshot hydrate.
+  if (event.schemaVersion === 2) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `REPLAN_STARTED ignored on v2 (${event.eventId})`,
+    );
+  }
   const attemptNo = event.attemptNo;
   if (attemptNo === null || attemptNo < 1 || attemptNo > 3) {
     return acknowledgeEvent(
@@ -449,12 +602,10 @@ function applyReplanStarted(
       `REPLAN_STARTED attemptNo must strictly increase ignored (${event.eventId})`,
     );
   }
-  // Reserve the attempt slot so subsequent REPLAN_STARTED cannot reuse it.
-  // PLAN_CREATED fills in the step list.
   const attempts = cloneAttempts(state.attempts);
   attempts[attemptNo] = {
     attemptNo,
-    steps: {}
+    steps: {},
   };
   return {
     ...acknowledgeEvent(state, event),
@@ -541,6 +692,256 @@ function applyFinalResponse(
   };
 }
 
+function ensureSubTaskSlot(
+  step: StepUiState,
+  event: OrchestrationEvent,
+): SubTaskUiState | null {
+  const subTaskId = event.subTaskId;
+  if (!subTaskId) return null;
+  const existing = step.subTasks?.[subTaskId];
+  if (existing) return existing;
+  return {
+    subTaskId,
+    agentId: event.agentId ?? '',
+    agentName: event.agentName ?? event.agentId ?? subTaskId,
+    objective: '',
+    status: 'PLANNED',
+    retryNo: event.retryNo ?? 0,
+    errorCode: null,
+    lines: [],
+    open: false,
+  };
+}
+
+function applyParallelStarted(
+  state: OrchestrationUiState,
+  event: OrchestrationEvent,
+): OrchestrationUiState {
+  const attemptNo = event.attemptNo;
+  const stepId = event.stepId;
+  if (attemptNo === null || !stepId) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `PARALLEL_STARTED missing attempt/step ignored (${event.eventId})`,
+    );
+  }
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `PARALLEL_STARTED unknown step ignored (${event.eventId})`,
+    );
+  }
+  const next = updateStepStatus(state, attemptNo, stepId, {
+    status: step.status === 'PLANNED' ? 'RUNNING' : step.status,
+    stepMode: 'PARALLEL_AGENTS',
+  });
+  return acknowledgeEvent(next, event);
+}
+
+function applySubTaskStarted(
+  state: OrchestrationUiState,
+  event: OrchestrationEvent,
+): OrchestrationUiState {
+  const attemptNo = event.attemptNo;
+  const stepId = event.stepId;
+  const subTaskId = event.subTaskId;
+  if (attemptNo === null || !stepId || !subTaskId) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `SUBTASK_STARTED missing ids ignored (${event.eventId})`,
+    );
+  }
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `SUBTASK_STARTED unknown step ignored (${event.eventId})`,
+    );
+  }
+  const slot = ensureSubTaskSlot(step, event);
+  if (!slot) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `SUBTASK_STARTED missing subTaskId ignored (${event.eventId})`,
+    );
+  }
+  const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
+  subTasks[subTaskId] = {
+    ...slot,
+    status: 'RUNNING',
+    agentId: event.agentId ?? slot.agentId,
+    agentName: preferReadableAgentName(
+      event.agentName,
+      slot.agentName,
+      event.agentId ?? slot.agentId,
+    ),
+    retryNo: event.retryNo ?? slot.retryNo ?? 0,
+  };
+  const next = updateStepStatus(state, attemptNo, stepId, {
+    status: step.status === 'PLANNED' ? 'RUNNING' : step.status,
+    stepMode: resolveStepMode(step, event) ?? 'PARALLEL_AGENTS',
+    subTasks,
+  });
+  return acknowledgeEvent(next, event);
+}
+
+function applySubTaskTerminal(
+  state: OrchestrationUiState,
+  event: OrchestrationEvent,
+  nextStatus: 'COMPLETED' | 'FAILED',
+): OrchestrationUiState {
+  const attemptNo = event.attemptNo;
+  const stepId = event.stepId;
+  const subTaskId = event.subTaskId;
+  if (attemptNo === null || !stepId || !subTaskId) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `${event.eventType} missing ids ignored (${event.eventId})`,
+    );
+  }
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `${event.eventType} unknown step ignored (${event.eventId})`,
+    );
+  }
+  const existing = step.subTasks?.[subTaskId] ?? ensureSubTaskSlot(step, event);
+  if (!existing) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `${event.eventType} unknown subTask ignored (${event.eventId})`,
+    );
+  }
+  if (nextStatus === 'FAILED' && !event.errorCode) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `SUBTASK_FAILED missing errorCode ignored (${event.eventId})`,
+    );
+  }
+  const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
+  subTasks[subTaskId] = {
+    ...existing,
+    status: nextStatus,
+    agentId: event.agentId ?? existing.agentId,
+    agentName: preferReadableAgentName(
+      event.agentName,
+      existing.agentName,
+      event.agentId ?? existing.agentId,
+    ),
+    errorCode: nextStatus === 'FAILED' ? event.errorCode : existing.errorCode,
+    retryNo: event.retryNo ?? existing.retryNo,
+  };
+  const next = updateStepStatus(state, attemptNo, stepId, { subTasks });
+  return acknowledgeEvent(next, event);
+}
+
+function applyStepReviewStarted(
+  state: OrchestrationUiState,
+  event: OrchestrationEvent,
+): OrchestrationUiState {
+  const attemptNo = event.attemptNo;
+  const stepId = event.stepId;
+  if (attemptNo === null || !stepId) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `STEP_REVIEW_STARTED missing attempt/step ignored (${event.eventId})`,
+    );
+  }
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `STEP_REVIEW_STARTED unknown step ignored (${event.eventId})`,
+    );
+  }
+  return acknowledgeEvent(
+    updateStepStatus(state, attemptNo, stepId, { reviewing: true }),
+    event,
+  );
+}
+
+function applyStepRetryStarted(
+  state: OrchestrationUiState,
+  event: OrchestrationEvent,
+): OrchestrationUiState {
+  const attemptNo = event.attemptNo;
+  const stepId = event.stepId;
+  if (attemptNo === null || !stepId) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `STEP_RETRY_STARTED missing attempt/step ignored (${event.eventId})`,
+    );
+  }
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `STEP_RETRY_STARTED unknown step ignored (${event.eventId})`,
+    );
+  }
+  const retryNo = event.retryNo ?? 1;
+  let next = updateStepStatus(state, attemptNo, stepId, {
+    status: 'RUNNING',
+    reviewing: false,
+    retryNo,
+    fallbackActive: false,
+  });
+  if (event.subTaskId && step.subTasks?.[event.subTaskId]) {
+    next = updateSubTask(next, attemptNo, stepId, event.subTaskId, {
+      status: 'RUNNING',
+      retryNo,
+      errorCode: null,
+    });
+  }
+  return acknowledgeEvent(next, event);
+}
+
+function applyStepFallbackStarted(
+  state: OrchestrationUiState,
+  event: OrchestrationEvent,
+): OrchestrationUiState {
+  const attemptNo = event.attemptNo;
+  const stepId = event.stepId;
+  if (attemptNo === null || !stepId) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `STEP_FALLBACK_STARTED missing attempt/step ignored (${event.eventId})`,
+    );
+  }
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return acknowledgeEvent(
+      state,
+      event,
+      `STEP_FALLBACK_STARTED unknown step ignored (${event.eventId})`,
+    );
+  }
+  return acknowledgeEvent(
+    updateStepStatus(state, attemptNo, stepId, {
+      status: 'RUNNING',
+      reviewing: false,
+      fallbackActive: true,
+    }),
+    event,
+  );
+}
+
 const HANDLERS: Record<
   OrchestrationEventType,
   (state: OrchestrationUiState, event: OrchestrationEvent) => OrchestrationUiState
@@ -556,15 +957,14 @@ const HANDLERS: Record<
   SUMMARY_COMPLETED: applySummaryCompleted,
   SUMMARY_FALLBACK: applySummaryFallback,
   FINAL_RESPONSE: applyFinalResponse,
-  // C0: v2 event types are parseable; Timeline business rendering belongs to MEMORY-UI.
-  PARALLEL_STARTED: (s, e) => acknowledgeEvent(s, e),
-  SUBTASK_STARTED: (s, e) => acknowledgeEvent(s, e),
-  SUBTASK_COMPLETED: (s, e) => acknowledgeEvent(s, e),
-  SUBTASK_FAILED: (s, e) => acknowledgeEvent(s, e),
-  STEP_REVIEW_STARTED: (s, e) => acknowledgeEvent(s, e),
-  STEP_RETRY_STARTED: (s, e) => acknowledgeEvent(s, e),
-  STEP_FALLBACK_STARTED: (s, e) => acknowledgeEvent(s, e),
-  STEP_DEGRADED: (s, e) => applyStepTerminal(s, e, 'COMPLETED'),
+  PARALLEL_STARTED: applyParallelStarted,
+  SUBTASK_STARTED: applySubTaskStarted,
+  SUBTASK_COMPLETED: (s, e) => applySubTaskTerminal(s, e, 'COMPLETED'),
+  SUBTASK_FAILED: (s, e) => applySubTaskTerminal(s, e, 'FAILED'),
+  STEP_REVIEW_STARTED: applyStepReviewStarted,
+  STEP_RETRY_STARTED: applyStepRetryStarted,
+  STEP_FALLBACK_STARTED: applyStepFallbackStarted,
+  STEP_DEGRADED: (s, e) => applyStepTerminal(s, e, 'DEGRADED'),
 };
 
 /**
@@ -594,7 +994,7 @@ export function reduceOrchestrationEvent(
         ...state,
         seenEventIds: {
           ...state.seenEventIds,
-          [event.eventId]: true
+          [event.eventId]: true,
         },
       },
       `out-of-order sequence ignored (${event.eventId}, seq=${event.sequence})`,
@@ -674,12 +1074,58 @@ export function reduceOrchestrationTrace(
     errorCode: null,
     lines: [],
     open: false,
+    subTasks: emptySubTasks(),
   };
+
+  if (trace.scope === 'SUBTASK' && trace.subTaskId) {
+    const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
+    const existing =
+      subTasks[trace.subTaskId] ??
+      ({
+        subTaskId: trace.subTaskId,
+        agentId: trace.agentId ?? '',
+        agentName: trace.agentName ?? trace.agentId ?? trace.subTaskId,
+        objective: '',
+        status: 'RUNNING' as const,
+        retryNo: trace.retryNo ?? 0,
+        errorCode: null,
+        lines: [],
+        open: false,
+      } satisfies SubTaskUiState);
+    const patchedSub: SubTaskUiState = {
+      ...existing,
+      agentId: trace.agentId ?? existing.agentId,
+      agentName: trace.agentName ?? existing.agentName,
+      retryNo: trace.retryNo ?? existing.retryNo,
+      lines: appendTraceLine(existing.lines, trace),
+    };
+    if (trace.kind === 'ERROR' && !existing.errorCode) {
+      patchedSub.errorCode = trace.text;
+    }
+    subTasks[trace.subTaskId] = patchedSub;
+    attempts[attemptNo] = {
+      ...existingAttempt,
+      steps: {
+        ...existingAttempt.steps,
+        [stepId]: {
+          ...step,
+          subTasks,
+          status: step.status === 'PLANNED' ? 'RUNNING' : step.status,
+        },
+      },
+    };
+    return {
+      ...state,
+      lastTraceSequence: trace.sequence,
+      attempts,
+    };
+  }
+
   const objectiveFromStatus =
     !step.objective &&
     trace.kind === 'STATUS' &&
     typeof trace.text === 'string'
-      ? trace.text.match(/^开始执行[：:](.+)$/)?.[1]?.trim() ?? ''
+      ? (trace.text.match(/^开始执行[：:](.+)$/)?.[1]?.trim() ?? '')
       : '';
   const patched: StepUiState = {
     ...step,
@@ -687,6 +1133,7 @@ export function reduceOrchestrationTrace(
     agentName: trace.agentName ?? step.agentName,
     objective: step.objective || objectiveFromStatus,
     lines: appendTraceLine(step.lines, trace),
+    subTasks: cloneSubTasks(step.subTasks ?? emptySubTasks()),
   };
   if (trace.kind === 'OUTPUT') {
     patched.output =
@@ -710,13 +1157,19 @@ export function reduceOrchestrationTrace(
 }
 
 export function toggleMasterOpen(state: OrchestrationUiState): OrchestrationUiState {
-  return { ...state, masterOpen: !state.masterOpen };
+  return {
+    ...state,
+    masterOpen: !state.masterOpen
+  };
 }
 
 export function toggleMainOpen(state: OrchestrationUiState): OrchestrationUiState {
   return {
     ...state,
-    main: { ...state.main, open: !state.main.open },
+    main: {
+      ...state.main,
+      open: !state.main.open
+    },
   };
 }
 
@@ -729,6 +1182,18 @@ export function toggleStepOpen(
   const step = attempt?.steps[stepId];
   if (!step) return state;
   return updateStepStatus(state, attemptNo, stepId, { open: !step.open });
+}
+
+export function toggleSubTaskOpen(
+  state: OrchestrationUiState,
+  attemptNo: number,
+  stepId: string,
+  subTaskId: string,
+): OrchestrationUiState {
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  const sub = step?.subTasks?.[subTaskId];
+  if (!sub) return state;
+  return updateSubTask(state, attemptNo, stepId, subTaskId, {open: !sub.open,});
 }
 
 /**
@@ -754,15 +1219,35 @@ export function preserveOrchestrationFold(
     for (const stepId of Object.keys(steps)) {
       const existingStep = existingAttempt.steps[stepId];
       if (existingStep) {
-        steps[stepId] = { ...steps[stepId], open: existingStep.open };
+        const subTasks = cloneSubTasks(steps[stepId].subTasks ?? emptySubTasks());
+        for (const subId of Object.keys(subTasks)) {
+          const existingSub = existingStep.subTasks?.[subId];
+          if (existingSub) {
+            subTasks[subId] = {
+              ...subTasks[subId],
+              open: existingSub.open
+            };
+          }
+        }
+        steps[stepId] = {
+          ...steps[stepId],
+          open: existingStep.open,
+          subTasks,
+        };
       }
     }
-    attempts[attemptNo] = { ...incomingAttempt, steps };
+    attempts[attemptNo] = {
+      ...incomingAttempt,
+      steps
+    };
   }
   return {
     ...incoming,
     masterOpen: existing.masterOpen,
-    main: { ...incoming.main, open: existing.main.open },
+    main: {
+      ...incoming.main,
+      open: existing.main.open
+    },
     attempts,
   };
 }
@@ -771,5 +1256,8 @@ export function markOrchestrationDone(
   state: OrchestrationUiState,
 ): OrchestrationUiState {
   if (state.phaseLabel === 'done') return state;
-  return { ...state, phaseLabel: 'done' };
+  return {
+    ...state,
+    phaseLabel: 'done'
+  };
 }

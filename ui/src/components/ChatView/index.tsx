@@ -23,9 +23,15 @@ import {
   toggleMainOpen,
   toggleMasterOpen,
   toggleStepOpen,
+  toggleSubTaskOpen,
 } from '@/features/phase2/orchestration/orchestrationReducer';
 import { extractOrchestrationEventFromResult } from '@/features/phase2/orchestration/parseOrchestrationEvent';
 import { extractOrchestrationTraceFromResult } from '@/features/phase2/orchestration/parseOrchestrationTrace';
+import {
+  getSharedBrowserSkillExecutionRunner,
+  resetSharedBrowserSkillExecutionRunner,
+} from '@/features/phase2/skillRuntime/BrowserSkillExecutionRunner';
+import { extractBrowserSkillSignalFromResult } from '@/features/phase2/skillRuntime/signal';
 import { MvpApiError } from '@/services/apiError';
 import { listAgents } from '@/services/phase2/agents';
 import { getPhase2ErrorMessage } from '@/services/phase2/errorMessages';
@@ -299,6 +305,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const actionViewRef = ActionView.useActionView();
 
   const sseHandleRef = useRef<SseHandle | null>(null);
+  const skillExecutionAbortRef = useRef<AbortController | null>(null);
   const sendInFlightRef = useRef(false);
   const openedOnceRef = useRef(false);
   const reconcileStartedRef = useRef(false);
@@ -680,6 +687,22 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       const handleMessagePhase2 = (data: MESSAGE.Answer) => {
         const { finished, resultMap, packageType } = data;
+
+        // skill_execution is a control packet — never chat body / orch terminal.
+        if (packageType === 'skill_execution') {
+          const signal = extractBrowserSkillSignalFromResult(data);
+          if (signal) {
+            if (!skillExecutionAbortRef.current) {
+              skillExecutionAbortRef.current = new AbortController();
+            }
+            void getSharedBrowserSkillExecutionRunner().handleLiveSignal(
+              signal,
+              skillExecutionAbortRef.current.signal,
+            );
+          }
+          return;
+        }
+
         const orchEvent = extractOrchestrationEventFromResult(data);
         const orchTrace = extractOrchestrationTraceFromResult(data);
         const isOrchPackage =
@@ -830,6 +853,12 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       const result = await handle.done;
       sseHandleRef.current = null;
+      // Chat COMPLETED must not abort an in-flight POST result.
+      // Cancel Worker only on disconnect / HTTP error / user abort / unmount.
+      if (result.kind !== 'COMPLETED') {
+        skillExecutionAbortRef.current?.abort();
+        skillExecutionAbortRef.current = null;
+      }
 
       if (result.kind === 'COMPLETED' || result.kind === 'FAILED') {
         stopLoadingForRequest(
@@ -924,6 +953,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       mountedRef.current = false;
       sseHandleRef.current?.abort();
       sseHandleRef.current = null;
+      skillExecutionAbortRef.current?.abort();
+      skillExecutionAbortRef.current = null;
+      getSharedBrowserSkillExecutionRunner().stop();
+      resetSharedBrowserSkillExecutionRunner();
     };
   }, []);
 
@@ -1002,6 +1035,16 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                           onToggleStep={(attemptNo, stepId) =>
                             patchOrchestration(chat.requestId, (state) =>
                               toggleStepOpen(state, attemptNo, stepId),
+                            )
+                          }
+                          onToggleSubTask={(attemptNo, stepId, subTaskId) =>
+                            patchOrchestration(chat.requestId, (state) =>
+                              toggleSubTaskOpen(
+                                state,
+                                attemptNo,
+                                stepId,
+                                subTaskId,
+                              ),
                             )
                           }
                         />

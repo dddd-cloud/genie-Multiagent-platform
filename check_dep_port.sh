@@ -82,6 +82,38 @@ fi
 
 
 
+# 检查Python（genie-tool / genie-client 一键启动仍需要）
+echo -e "${BLUE}检查Python...${NC}"
+PYTHON_BIN=""
+if command -v python3 &> /dev/null; then
+    PYTHON_BIN="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_BIN="python"
+fi
+
+if [ -n "$PYTHON_BIN" ]; then
+    PYTHON_VERSION=$($PYTHON_BIN -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || true)
+    if [ -n "$PYTHON_VERSION" ]; then
+        echo -e "${GREEN}✅ Python: $PYTHON_BIN ($PYTHON_VERSION)${NC}"
+    else
+        echo -e "${RED}❌ Python 命令不可用（$PYTHON_BIN）${NC}"
+        ALL_PASSED=false
+    fi
+else
+    echo -e "${RED}❌ 未找到 python3/python（Genie_start.sh 会启动 genie-tool / genie-client）${NC}"
+    ALL_PASSED=false
+fi
+
+# 检查 uv（genie-tool / genie-client 依赖同步）
+echo -e "${BLUE}检查uv...${NC}"
+if command -v uv &> /dev/null; then
+    UV_VERSION=$(uv --version 2>/dev/null | head -n 1)
+    echo -e "${GREEN}✅ uv: $UV_VERSION${NC}"
+else
+    echo -e "${RED}❌ uv未安装（Genie_start.sh 使用 uv sync / uv venv）${NC}"
+    ALL_PASSED=false
+fi
+
 # 检查必要的端口是否被占用
 echo -e "${BLUE}检查端口占用情况...${NC}"
 PORTS=(3000 8080 1601 8188)
@@ -105,5 +137,7 @@ else
     echo -e "  - Maven: brew install maven"
     echo -e "  - Node.js >= 18: brew install node@18"
     echo -e "  - pnpm >= 7: npm install -g pnpm@7.33.1"
+    echo -e "  - Python 3: brew install python 或从 python.org 下载"
+    echo -e "  - uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
     exit 1
 fi 

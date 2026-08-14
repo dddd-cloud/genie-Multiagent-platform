@@ -113,6 +113,14 @@ init_setup() {
     
     # 2. 工具服务数据库初始化
     echo -e "${BLUE}🗄️  初始化工具服务数据库...${NC}"
+    if ! command -v uv >/dev/null 2>&1; then
+        echo -e "${RED}❌ 未找到 uv（genie-tool 需要 uv sync）。请先安装：https://docs.astral.sh/uv/${NC}"
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+        echo -e "${RED}❌ 未找到 python3/python（genie-tool / genie-client 仍依赖系统 Python）${NC}"
+        return 1
+    fi
     cd genie-tool
     
     # 检查虚拟环境
