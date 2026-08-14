@@ -24,7 +24,7 @@ class OrchestrationEventMapperTest {
     }
 
     @Test
-    void projectsFrozenV1FieldsWithoutDetailsEnvelope() {
+    void projectsV2FieldsWithoutLegacyDetailsEnvelope() {
         GptProcessResult result = mapper.progress(
                 "request-1",
                 "run-1",
@@ -35,11 +35,14 @@ class OrchestrationEventMapperTest {
         );
 
         Map<?, ?> event = (Map<?, ?>) result.getResultMap().get("orchestrationEvent");
-        assertEquals(1, event.get("schemaVersion"));
+        assertEquals(2, event.get("schemaVersion"));
         assertEquals("request-1", event.get("requestId"));
         assertEquals("run-1", event.get("runId"));
         assertEquals("step-1", event.get("stepId"));
         assertEquals("agent-a", event.get("agentId"));
+        assertTrue(event.containsKey("stepMode"));
+        assertTrue(event.containsKey("subTaskId"));
+        assertTrue(event.containsKey("retryNo"));
         assertFalse(event.containsKey("details"));
         assertTrue(event.containsKey("steps"));
     }

@@ -60,6 +60,35 @@ final class MultiAgentServiceTestSupport {
             String autoAgentUrl,
             long maxSnapshotBytes
     ) {
+        return scenario(
+                script,
+                handler == null ? Map.of() : Map.of(AgentType.REACT, handler),
+                internalToken,
+                autoAgentUrl,
+                maxSnapshotBytes
+        );
+    }
+
+    static Scenario scenario(
+            Script script,
+            Map<AgentType, AgentResponseHandler> handlers
+    ) {
+        return scenario(
+                script,
+                handlers,
+                INTERNAL_TOKEN,
+                DEFAULT_AUTO_AGENT_URL,
+                SnapshotPruner.DEFAULT_MAX_BYTES
+        );
+    }
+
+    static Scenario scenario(
+            Script script,
+            Map<AgentType, AgentResponseHandler> handlers,
+            String internalToken,
+            String autoAgentUrl,
+            long maxSnapshotBytes
+    ) {
         ScriptedCallFactory calls = new ScriptedCallFactory(script);
         FakeConversationExecutionPort port = new FakeConversationExecutionPort();
         ObserverTestSupport.RecordingClientChannel channel =
@@ -73,7 +102,7 @@ final class MultiAgentServiceTestSupport {
         );
         MultiAgentServiceImpl service = new MultiAgentServiceImpl(
                 new GenieConfig(),
-                handler == null ? Map.of() : Map.of(AgentType.REACT, handler),
+                Map.copyOf(handlers),
                 calls,
                 internalToken,
                 autoAgentUrl

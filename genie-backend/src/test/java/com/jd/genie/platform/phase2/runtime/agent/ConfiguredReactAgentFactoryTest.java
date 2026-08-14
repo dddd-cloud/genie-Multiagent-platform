@@ -45,8 +45,9 @@ class ConfiguredReactAgentFactoryTest {
             assertEquals(true, agent.getSystemPrompt().startsWith("frozen prompt"));
             assertEquals(true, agent.getSystemPrompt().contains("\"status\":\"SUCCESS\""));
             assertEquals(agent.getSystemPrompt(), agent.getSystemPromptSnapshot());
-            assertEquals(agent.getSystemPrompt(), agent.getNextStepPrompt());
-            assertEquals(agent.getSystemPrompt(), agent.getNextStepPromptSnapshot());
+            // Frozen per-step nudge: never re-inject the full system prompt each step.
+            assertEquals(agent.getNextStepPrompt(), agent.getNextStepPromptSnapshot());
+            assertEquals(true, agent.getNextStepPrompt().contains("After the latest tool result"));
             assertEquals("frozen-model", agent.getLlm().getModel());
             assertEquals(20, agent.getMaxSteps());
             assertSame(tools, agent.getAvailableTools());

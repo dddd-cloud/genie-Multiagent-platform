@@ -10,7 +10,10 @@ import java.util.Map;
 public final class OrchestrationEventMapper {
     private static final String PACKAGE_TYPE = "orchestration";
 
-    /** Builds the wire event directly from the frozen V1 event shape. */
+    /**
+     * Builds V2 event with support for stepMode, subTaskId, and retryNo.
+     * schemaVersion=2 indicates new orchestration runtime with local retry and fallback.
+     */
     public GptProcessResult progress(
             String requestId,
             String runId,
@@ -21,7 +24,7 @@ public final class OrchestrationEventMapper {
     ) {
         Map<String, Object> normalizedDetails = details == null ? Map.of() : details;
         Map<String, Object> event = new LinkedHashMap<>();
-        event.put("schemaVersion", 1);
+        event.put("schemaVersion", 2);
         event.put("eventId", requestId + ":" + sequence);
         event.put("sequence", sequence);
         event.put("eventType", eventType);
@@ -29,6 +32,9 @@ public final class OrchestrationEventMapper {
         event.put("runId", runId);
         event.put("attemptNo", normalizedDetails.get("attemptNo"));
         event.put("stepId", normalizedDetails.get("stepId"));
+        event.put("stepMode", normalizedDetails.get("stepMode"));
+        event.put("subTaskId", normalizedDetails.get("subTaskId"));
+        event.put("retryNo", normalizedDetails.get("retryNo"));
         event.put("agentId", normalizedDetails.get("agentId"));
         event.put("agentName", normalizedDetails.get("agentName"));
         event.put("route", normalizedDetails.get("route"));
@@ -59,7 +65,7 @@ public final class OrchestrationEventMapper {
             String completionStatus
     ) {
         Map<String, Object> event = new LinkedHashMap<>();
-        event.put("schemaVersion", 1);
+        event.put("schemaVersion", 2);
         event.put("eventId", requestId + ":" + sequence);
         event.put("sequence", sequence);
         event.put("eventType", "FINAL_RESPONSE");
@@ -67,6 +73,9 @@ public final class OrchestrationEventMapper {
         event.put("runId", runId);
         event.put("attemptNo", null);
         event.put("stepId", null);
+        event.put("stepMode", null);
+        event.put("subTaskId", null);
+        event.put("retryNo", null);
         event.put("agentId", null);
         event.put("agentName", null);
         event.put("route", null);
