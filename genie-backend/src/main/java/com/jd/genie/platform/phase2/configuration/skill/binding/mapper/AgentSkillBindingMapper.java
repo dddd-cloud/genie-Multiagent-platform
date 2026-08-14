@@ -49,6 +49,7 @@ public interface AgentSkillBindingMapper {
         @Result(column = "skill_version", property = "skillVersion"),
         @Result(column = "sort_order", property = "sortOrder"),
         @Result(column = "skill_name", property = "skillName"),
+        @Result(column = "description", property = "description"),
         @Result(column = "instruction", property = "instruction"),
         @Result(column = "output_requirement", property = "outputRequirement"),
         @Result(column = "status", property = "status")
@@ -58,6 +59,7 @@ public interface AgentSkillBindingMapper {
                s.version AS skill_version,
                b.sort_order AS sort_order,
                s.name AS skill_name,
+               s.description AS description,
                s.instruction AS instruction,
                s.output_requirement AS output_requirement,
                s.status AS status

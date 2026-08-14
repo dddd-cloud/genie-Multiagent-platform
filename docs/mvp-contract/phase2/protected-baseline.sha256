@@ -25,5 +25,5 @@ f3e344777dbe01031799edd64bacbbaffe577b344b0614b92dd3e8723c7cffd3  genie-backend/
 83d693f1825f7ac5b3545ba67e2123bfa984d581341959011a323e49f32c2004  genie-backend/src/main/java/com/jd/genie/platform/phase2contract/port/RuntimeToolCollectionPort.java
 00d87e89e63cbe07006c627f956dd3ab36cc4c250ce78ac4843bcf6f2ff2db2b  genie-backend/src/main/java/com/jd/genie/platform/phase2contract/port/AgentSkillBindingPort.java
 0a440c42f6da51624530f20d9cc1b8d101615009d9372a6da416a7b05d80f0bc  genie-backend/src/main/java/com/jd/genie/platform/phase2contract/port/SkillRuntimePort.java
-88bec9c0d31ef58e9fac94d6b517ee97b0be36678d34ff53dc4b5b318212da8a  genie-backend/src/main/java/com/jd/genie/platform/contract/MvpErrorCode.java
-65d790c8025b73b05f8c151d68c7267493f75cce37d55e7544cbb78c21ba8b7e  genie-backend/src/main/java/com/jd/genie/platform/phase2contract/error/Phase2ErrorHttpStatus.java
+7985d28f5f4ffce291fa5edf779a3cd37129de4b9d51836ed60ef5780dac66b5  genie-backend/src/main/java/com/jd/genie/platform/contract/MvpErrorCode.java
+d7b68a3aa6fe5e93d1ff0397f2b2ad996768527e7241bbb527f820953a26db77  genie-backend/src/main/java/com/jd/genie/platform/phase2contract/error/Phase2ErrorHttpStatus.java

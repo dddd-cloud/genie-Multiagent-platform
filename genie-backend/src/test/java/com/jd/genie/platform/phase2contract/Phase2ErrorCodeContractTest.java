@@ -65,6 +65,7 @@ class Phase2ErrorCodeContractTest {
         "SKILL_PACKAGE_INVALID",
         "SKILL_RESOURCE_NOT_FOUND",
         "SKILL_ENTRYPOINT_NOT_FOUND",
+        "SKILL_ENTRYPOINT_NOT_AVAILABLE",
         "SKILL_EXECUTION_FAILED",
         "SKILL_EXECUTION_TIMEOUT"
     );
@@ -109,6 +110,7 @@ class Phase2ErrorCodeContractTest {
         assertEquals(422, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_PACKAGE_INVALID));
         assertEquals(404, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_RESOURCE_NOT_FOUND));
         assertEquals(404, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND));
+        assertEquals(501, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_ENTRYPOINT_NOT_AVAILABLE));
         assertEquals(502, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_EXECUTION_FAILED));
         assertEquals(504, Phase2ErrorHttpStatus.httpStatus(MvpErrorCode.SKILL_EXECUTION_TIMEOUT));
     }
