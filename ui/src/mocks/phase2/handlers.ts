@@ -690,6 +690,50 @@ export const phase2Handlers: HttpHandler[] = [
     return HttpResponse.json(ok(skill));
   }),
 
+  http.post('/api/v2/skills/import', async ({ request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+
+    const form = await request.formData();
+    const file = form.get('file');
+    const skillIdRaw = form.get('skillId');
+    if (!(file instanceof File) || file.size === 0) {
+      return HttpResponse.json(
+        errorBody('SKILL_PACKAGE_INVALID', 'zip required'),
+        { status: 422 },
+      );
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return HttpResponse.json(
+        errorBody('SKILL_PACKAGE_INVALID', 'zip too large'),
+        { status: 422 },
+      );
+    }
+    const now = nowIso();
+    const skillId =
+      typeof skillIdRaw === 'string' && skillIdRaw.trim()
+        ? skillIdRaw.trim()
+        : `skill-${crypto.randomUUID()}`;
+    const existing = getPhase2State().skills.get(skillId);
+    const skill: Phase2SkillResponse = {
+      id: skillId,
+      name: existing?.name || file.name.replace(/\.zip$/i, '') || 'Imported Skill',
+      description: existing?.description || 'Imported skill package',
+      instruction: existing?.instruction || 'Imported from SKILL.md',
+      outputRequirement: existing?.outputRequirement || '',
+      status: existing?.status || 'ENABLED',
+      version: existing ? existing.version + 1 : 0,
+      capabilityKeys: existing?.capabilityKeys ?? [],
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      packageMode: 'FILESYSTEM',
+    };
+    getPhase2State().skills.set(skill.id, skill);
+    return HttpResponse.json(ok(skill));
+  }),
+
   http.put('/api/v2/skills/:id', async ({ params, request }) => {
     const authError = requireAuth();
     if (authError) return authError;

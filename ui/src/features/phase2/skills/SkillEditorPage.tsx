@@ -108,9 +108,9 @@ const SkillEditorPage: GenieType.FC = memo(() => {
       if (isNew) {
         const created = await createSkill({
           name: form.name.trim(),
-          description: form.description.trim(),
+          description: (form.description ?? '').trim(),
           instruction: form.instruction.trim(),
-          outputRequirement: form.outputRequirement.trim(),
+          outputRequirement: (form.outputRequirement ?? '').trim(),
           capabilityKeys: [...form.capabilityKeys],
         });
         if (!created) {
@@ -124,9 +124,9 @@ const SkillEditorPage: GenieType.FC = memo(() => {
       if (!skillId || form.version == null) return;
       const updated = await updateSkill(skillId, {
         name: form.name.trim(),
-        description: form.description.trim(),
+        description: (form.description ?? '').trim(),
         instruction: form.instruction.trim(),
-        outputRequirement: form.outputRequirement.trim(),
+        outputRequirement: (form.outputRequirement ?? '').trim(),
         capabilityKeys: [...form.capabilityKeys],
         version: form.version,
       });

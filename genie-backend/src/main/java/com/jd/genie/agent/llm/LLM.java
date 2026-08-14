@@ -451,7 +451,9 @@ public class LLM {
             }
             params.put("messages", formattedMessages);
 
-            if (!"struct_parse".equals(functionCallType)) {
+            if (!"struct_parse".equals(functionCallType)
+                    && toolChoice != ToolChoice.NONE
+                    && !formattedTools.isEmpty()) {
                 params.put("tools", formattedTools);
                 params.put("tool_choice", toolChoice.getValue());
             }

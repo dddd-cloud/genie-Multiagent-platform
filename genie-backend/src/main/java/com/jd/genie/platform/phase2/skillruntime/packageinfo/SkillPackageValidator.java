@@ -33,10 +33,16 @@ public class SkillPackageValidator {
         return result;
     }
 
-    public void validatePackagePath(String relativePath) {
+    public boolean keepPackageFile(String relativePath) {
         String normalized = normalizeRelativePath(relativePath, MvpErrorCode.SKILL_PACKAGE_INVALID);
         String top = normalized.contains("/") ? normalized.substring(0, normalized.indexOf('/')) : normalized;
-        if (!ALLOWED_TOP_LEVEL.contains(top)) throw invalid(MvpErrorCode.SKILL_PACKAGE_INVALID, "unsupported package path");
+        return ALLOWED_TOP_LEVEL.contains(top);
+    }
+
+    public void validatePackagePath(String relativePath) {
+        if (!keepPackageFile(relativePath)) {
+            throw invalid(MvpErrorCode.SKILL_PACKAGE_INVALID, "unsupported package path");
+        }
     }
 
     private boolean isSensitiveName(String name) {

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialOrchestrationState,
   preserveOrchestrationFold,
+  collapseOrchestrationFolds,
+  markOrchestrationInterrupted,
   reduceOrchestrationEvent,
   reduceOrchestrationTrace,
   toggleMasterOpen,
@@ -144,6 +146,16 @@ describe('OrchestrationTraceReducerTest', () => {
 
     state = toggleMasterOpen(state);
     expect(state.masterOpen).toBe(true);
+    expect(state.main.open).toBe(true);
+    expect(state.attempts[1].steps.s1.open).toBe(true);
+
+    state = markOrchestrationInterrupted(state);
+    expect(state.masterOpen).toBe(false);
+    expect(state.main.open).toBe(false);
+    expect(state.attempts[1].steps.s1.open).toBe(false);
+    expect(state.phaseLabel).toBe('done');
+    expect(state.terminalStatus).toBe('INTERRUPTED');
+    expect(collapseOrchestrationFolds(state).masterOpen).toBe(false);
   });
 
   it('merges PLAN_CREATED objectives into trace placeholder steps', () => {
@@ -229,9 +241,10 @@ describe('OrchestrationTraceReducerTest', () => {
       }),
     );
     state = toggleMasterOpen(state);
+    expect(state.attempts[1].steps.s1.open).toBe(true);
     state = toggleStepOpen(state, 1, 's1');
     expect(state.masterOpen).toBe(true);
-    expect(state.attempts[1].steps.s1.open).toBe(true);
+    expect(state.attempts[1].steps.s1.open).toBe(false);
 
     // Simulate SSE working-copy that never saw the toggle (still collapsed).
     let stale = createInitialOrchestrationState();
@@ -291,8 +304,56 @@ describe('OrchestrationTraceReducerTest', () => {
 
     const merged = preserveOrchestrationFold(stale, state);
     expect(merged.masterOpen).toBe(true);
-    expect(merged.attempts[1].steps.s1.open).toBe(true);
+    expect(merged.attempts[1].steps.s1.open).toBe(false);
     expect(merged.attempts[1].steps.s1.status).toBe('COMPLETED');
+  });
+
+  it('opening master expands nested folds and still allows collapsing a child', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        attemptNo: 1,
+        steps: [
+          {
+            stepId: 's1',
+            agentId: 'a1',
+            agentName: 'Agent A',
+            objective: 'do a',
+            inputRefs: [],
+            subTasks: [
+              {
+                subTaskId: 'st-1',
+                agentId: 'a1',
+                agentName: 'Agent A',
+                objective: 'part a',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    state = toggleMasterOpen(state);
+    expect(state.masterOpen).toBe(true);
+    expect(state.main.open).toBe(true);
+    expect(state.attempts[1].steps.s1.open).toBe(true);
+    expect(state.attempts[1].steps.s1.subTasks['st-1'].open).toBe(true);
+    state = toggleStepOpen(state, 1, 's1');
+    expect(state.attempts[1].steps.s1.open).toBe(false);
+    expect(state.attempts[1].steps.s1.subTasks['st-1'].open).toBe(true);
   });
 
   it('marks phase done on FINAL_RESPONSE', () => {

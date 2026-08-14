@@ -1,3 +1,5 @@
+import type { SkillEntrypointView } from './skill-runtime';
+
 export const AGENT_PROMPT_MODES = ['STRUCTURED', 'RAW'] as const;
 export type AgentPromptMode = (typeof AGENT_PROMPT_MODES)[number];
 
@@ -41,6 +43,9 @@ export interface Phase2SkillResponse {
   capabilityKeys: string[];
   createdAt: string;
   updatedAt: string;
+  packageMode?: string | null;
+  packageHash?: string | null;
+  entrypoints?: SkillEntrypointView[] | null;
 }
 
 export interface Phase2ModelResponse {

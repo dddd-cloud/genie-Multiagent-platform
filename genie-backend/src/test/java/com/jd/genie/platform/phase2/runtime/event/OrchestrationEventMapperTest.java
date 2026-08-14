@@ -64,5 +64,26 @@ class OrchestrationEventMapperTest {
         assertEquals("FINAL_RESPONSE", event.get("eventType"));
         assertEquals("SUCCESS", event.get("completionStatus"));
         assertEquals("request-1:3", event.get("eventId"));
+        assertFalse(result.getResultMap().containsKey("fileList"));
+    }
+
+    @Test
+    void projectsDeliverableFileListOnFinalResponse() {
+        GptProcessResult result = mapper.finalResponse(
+                "request-1",
+                "run-1",
+                4L,
+                "see file",
+                "SUCCESS",
+                java.util.List.of(java.util.Map.of(
+                        "fileName", "page.html",
+                        "ossUrl", "http://127.0.0.1:1601/v1/file_tool/download/r/page.html",
+                        "domainUrl", "http://127.0.0.1:1601/v1/file_tool/preview/r/page.html",
+                        "fileSize", 12
+                ))
+        );
+        java.util.List<?> files = (java.util.List<?>) result.getResultMap().get("fileList");
+        assertEquals(1, files.size());
+        assertEquals("page.html", ((java.util.Map<?, ?>) files.get(0)).get("fileName"));
     }
 }

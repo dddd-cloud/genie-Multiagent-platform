@@ -97,6 +97,59 @@ class Phase2OrchestrationRuntimeTest {
     }
 
     @Test
+    void followUpTurnPassesConversationHistoryToPlannerSpecialistAndSummarizer() {
+        RecordingCatalogPort catalog = new RecordingCatalogPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        List<String> specialistQueries = new ArrayList<>();
+        doAnswer(invocation -> {
+            specialistQueries.add(invocation.getArgument(0, AgentContext.class).getQuery());
+            return AgentTaskResult.success("competitor note");
+        }).when(executor).execute(any(AgentContext.class), any(AgentRuntimeProfile.class), any(Printer.class), any(Integer.TYPE));
+        HistoryCapturingModel model = new HistoryCapturingModel();
+        SerialOrchestrationService serial = new SerialOrchestrationService(
+                catalog,
+                new FakeRuntimeToolCollectionPort(),
+                null,
+                executor,
+                10,
+                model
+        );
+        Phase2OrchestrationRuntime runtime = new Phase2OrchestrationRuntime(
+                model,
+                new OrchestrationPlanValidator(),
+                serial,
+                new OrchestrationEventMapper()
+        );
+        FakeConversationExecutionPort port = new FakeConversationExecutionPort();
+        RecordingChannel channel = new RecordingChannel();
+        ConversationStreamObserver observer = new ConversationStreamObserver(
+                new StreamPersistenceObserver(port, USER, "assistant-1"),
+                channel
+        );
+        String history = "user: 茅台市场规模多大\nassistant: 约三千亿。";
+
+        runtime.execute(
+                USER,
+                "request-2",
+                "123e4567-e89b-12d3-a456-426614174000",
+                "那竞品呢",
+                "",
+                "",
+                history,
+                CANDIDATES,
+                new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST"),
+                observer
+        );
+
+        assertEquals(history, model.planHistory);
+        assertEquals(history, model.summaryHistory);
+        assertEquals(1, specialistQueries.size());
+        assertTrue(specialistQueries.get(0).contains("那竞品呢"));
+        assertTrue(specialistQueries.get(0).contains("茅台市场规模多大"));
+        assertTrue(specialistQueries.get(0).contains("约三千亿。"));
+    }
+
+    @Test
     void summaryFailureFallsBackToAHonestFinalResponse() {
         RecordingCatalogPort catalog = new RecordingCatalogPort();
         ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
@@ -123,7 +176,7 @@ class Phase2OrchestrationRuntimeTest {
         assertEquals("SUCCESS", finalEvent(channel.events).get("completionStatus"));
         assertEquals("SUMMARY_FALLBACK", eventType(channel.events, "SUMMARY_FALLBACK"));
         assertTrue(channel.events.stream().filter(GptProcessResult::isFinished).findFirst().orElseThrow()
-                .getResponse().contains("## 已完成"));
+                .getResponse().contains("针对问题"));
         assertEquals(1, port.getCalls().stream()
                 .filter(call -> call.type() == FakeConversationExecutionPort.CallType.COMPLETE).count());
     }
@@ -240,6 +293,51 @@ class Phase2OrchestrationRuntimeTest {
                 .findFirst()
                 .map(Object::toString)
                 .orElseThrow();
+    }
+
+    private static final class HistoryCapturingModel implements OrchestrationModelPort {
+        private String planHistory;
+        private String summaryHistory;
+
+        @Override
+        public RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates) {
+            return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "TEST");
+        }
+
+        @Override
+        public OrchestrationPlan createPlan(
+                String query,
+                List<AgentCapabilitySummary> candidates,
+                int attemptNo,
+                Map<String, String> successfulResultSummaries,
+                Map<String, String> failureMetadata
+        ) {
+            return createPlan(query, "", candidates, attemptNo, successfulResultSummaries, failureMetadata);
+        }
+
+        @Override
+        public OrchestrationPlan createPlan(
+                String query,
+                String conversationHistory,
+                List<AgentCapabilitySummary> candidates,
+                int attemptNo,
+                Map<String, String> successfulResultSummaries,
+                Map<String, String> failureMetadata
+        ) {
+            planHistory = conversationHistory;
+            return new OrchestrationPlan(List.of(new OrchestrationStep("step-1", "agent-a", "分析竞品", List.of())));
+        }
+
+        @Override
+        public String summarize(String query, Map<String, String> successes, Map<String, String> failures) {
+            return "final answer";
+        }
+
+        @Override
+        public String summarize(String query, String conversationHistory, List<SummaryEvidence> evidence) {
+            summaryHistory = conversationHistory;
+            return "final answer";
+        }
     }
 
     private static final class SummaryFailingModel implements OrchestrationModelPort {

@@ -98,7 +98,10 @@ function emptySubTasks(): Record<string, SubTaskUiState> {
   return {};
 }
 
-function planStepToUi(step: OrchestrationPlanStepView): StepUiState {
+function planStepToUi(
+  step: OrchestrationPlanStepView,
+  open = false,
+): StepUiState {
   const subTasks: Record<string, SubTaskUiState> = {};
   for (const st of step.subTasks ?? []) {
     subTasks[st.subTaskId] = {
@@ -110,7 +113,7 @@ function planStepToUi(step: OrchestrationPlanStepView): StepUiState {
       retryNo: 0,
       errorCode: null,
       lines: [],
-      open: false,
+      open,
     };
   }
   return {
@@ -125,7 +128,7 @@ function planStepToUi(step: OrchestrationPlanStepView): StepUiState {
     reviewing: false,
     fallbackActive: false,
     lines: [],
-    open: false,
+    open,
     subTasks,
   };
 }
@@ -308,12 +311,13 @@ function applyRouteSelected(
 function mergePlanSteps(
   existing: Record<string, StepUiState>,
   planSteps: OrchestrationPlanStepView[],
+  defaultOpen = false,
 ): Record<string, StepUiState> {
   const steps: Record<string, StepUiState> = { ...existing };
   for (const step of planSteps) {
     const prev = steps[step.stepId];
     if (!prev) {
-      steps[step.stepId] = planStepToUi(step);
+      steps[step.stepId] = planStepToUi(step, defaultOpen);
       continue;
     }
     const mergedSubTasks = cloneSubTasks(prev.subTasks ?? emptySubTasks());
@@ -328,7 +332,7 @@ function mergePlanSteps(
           retryNo: 0,
           errorCode: null,
           lines: [],
-          open: false,
+          open: defaultOpen,
         };
       } else {
         const cur = mergedSubTasks[st.subTaskId];
@@ -406,7 +410,7 @@ function applyPlanCreated(
   if (existing && Object.keys(existing.steps).length > 0) {
     attempts[attemptNo] = {
       attemptNo,
-      steps: mergePlanSteps(existing.steps, event.steps),
+      steps: mergePlanSteps(existing.steps, event.steps, state.masterOpen),
     };
     return {
       ...acknowledgeEvent(state, event),
@@ -416,7 +420,7 @@ function applyPlanCreated(
 
   const steps: Record<string, StepUiState> = {};
   for (const step of event.steps) {
-    steps[step.stepId] = planStepToUi(step);
+    steps[step.stepId] = planStepToUi(step, state.masterOpen);
   }
 
   attempts[attemptNo] = {
@@ -695,6 +699,7 @@ function applyFinalResponse(
 function ensureSubTaskSlot(
   step: StepUiState,
   event: OrchestrationEvent,
+  defaultOpen = false,
 ): SubTaskUiState | null {
   const subTaskId = event.subTaskId;
   if (!subTaskId) return null;
@@ -709,7 +714,7 @@ function ensureSubTaskSlot(
     retryNo: event.retryNo ?? 0,
     errorCode: null,
     lines: [],
-    open: false,
+    open: defaultOpen,
   };
 }
 
@@ -763,7 +768,7 @@ function applySubTaskStarted(
       `SUBTASK_STARTED unknown step ignored (${event.eventId})`,
     );
   }
-  const slot = ensureSubTaskSlot(step, event);
+  const slot = ensureSubTaskSlot(step, event, state.masterOpen);
   if (!slot) {
     return acknowledgeEvent(
       state,
@@ -814,7 +819,7 @@ function applySubTaskTerminal(
       `${event.eventType} unknown step ignored (${event.eventId})`,
     );
   }
-  const existing = step.subTasks?.[subTaskId] ?? ensureSubTaskSlot(step, event);
+  const existing = step.subTasks?.[subTaskId] ?? ensureSubTaskSlot(step, event, state.masterOpen);
   if (!existing) {
     return acknowledgeEvent(
       state,
@@ -1073,7 +1078,7 @@ export function reduceOrchestrationTrace(
     status: 'RUNNING' as const,
     errorCode: null,
     lines: [],
-    open: false,
+    open: state.masterOpen,
     subTasks: emptySubTasks(),
   };
 
@@ -1090,7 +1095,7 @@ export function reduceOrchestrationTrace(
         retryNo: trace.retryNo ?? 0,
         errorCode: null,
         lines: [],
-        open: false,
+        open: state.masterOpen,
       } satisfies SubTaskUiState);
     const patchedSub: SubTaskUiState = {
       ...existing,
@@ -1157,9 +1162,44 @@ export function reduceOrchestrationTrace(
 }
 
 export function toggleMasterOpen(state: OrchestrationUiState): OrchestrationUiState {
+  if (state.masterOpen) {
+    return {
+      ...state,
+      masterOpen: false,
+    };
+  }
+  const attempts = cloneAttempts(state.attempts);
+  for (const key of Object.keys(attempts)) {
+    const attemptNo = Number(key);
+    const attempt = attempts[attemptNo];
+    const steps: Record<string, StepUiState> = {};
+    for (const [stepId, step] of Object.entries(attempt.steps)) {
+      const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
+      for (const subId of Object.keys(subTasks)) {
+        subTasks[subId] = {
+          ...subTasks[subId],
+          open: true,
+        };
+      }
+      steps[stepId] = {
+        ...step,
+        open: true,
+        subTasks,
+      };
+    }
+    attempts[attemptNo] = {
+      ...attempt,
+      steps,
+    };
+  }
   return {
     ...state,
-    masterOpen: !state.masterOpen
+    masterOpen: true,
+    main: {
+      ...state.main,
+      open: true,
+    },
+    attempts,
   };
 }
 
@@ -1196,6 +1236,54 @@ export function toggleSubTaskOpen(
   return updateSubTask(state, attemptNo, stepId, subTaskId, {open: !sub.open,});
 }
 
+export function collapseOrchestrationFolds(
+  state: OrchestrationUiState,
+): OrchestrationUiState {
+  const attempts = cloneAttempts(state.attempts);
+  for (const key of Object.keys(attempts)) {
+    const attemptNo = Number(key);
+    const attempt = attempts[attemptNo];
+    const steps: Record<string, StepUiState> = {};
+    for (const [stepId, step] of Object.entries(attempt.steps)) {
+      const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
+      for (const subId of Object.keys(subTasks)) {
+        subTasks[subId] = {
+          ...subTasks[subId],
+          open: false,
+        };
+      }
+      steps[stepId] = {
+        ...step,
+        open: false,
+        subTasks,
+      };
+    }
+    attempts[attemptNo] = {
+      ...attempt,
+      steps,
+    };
+  }
+  return {
+    ...state,
+    masterOpen: false,
+    main: {
+      ...state.main,
+      open: false,
+    },
+    attempts,
+  };
+}
+
+export function markOrchestrationInterrupted(
+  state: OrchestrationUiState,
+): OrchestrationUiState {
+  return {
+    ...collapseOrchestrationFolds(state),
+    phaseLabel: 'done',
+    terminalStatus: 'INTERRUPTED',
+  };
+}
+
 /**
  * Keep user fold choices when SSE reapplies orchestration from a stale working copy.
  * New steps keep their incoming default (collapsed).
@@ -1227,11 +1315,29 @@ export function preserveOrchestrationFold(
               ...subTasks[subId],
               open: existingSub.open
             };
+          } else if (existing.masterOpen) {
+            subTasks[subId] = {
+              ...subTasks[subId],
+              open: true,
+            };
           }
         }
         steps[stepId] = {
           ...steps[stepId],
           open: existingStep.open,
+          subTasks,
+        };
+      } else if (existing.masterOpen) {
+        const subTasks = cloneSubTasks(steps[stepId].subTasks ?? emptySubTasks());
+        for (const subId of Object.keys(subTasks)) {
+          subTasks[subId] = {
+            ...subTasks[subId],
+            open: true,
+          };
+        }
+        steps[stepId] = {
+          ...steps[stepId],
+          open: true,
           subTasks,
         };
       }

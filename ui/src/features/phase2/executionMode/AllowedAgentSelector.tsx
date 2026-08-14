@@ -52,7 +52,7 @@ export default function AllowedAgentSelector({
         onChange?.(dedupeAllowedAgentIds(next).slice(0, ALLOWED_AGENTS_MAX));
       }}
       style={{ minWidth: 220 }}
-      data-testid="allowed-agent-selector"
+      data-testid="allowed-agent-selector-legacy"
     />
   );
 }

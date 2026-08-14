@@ -16,6 +16,7 @@ import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationSubTaskView;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+@Slf4j
 public final class Phase2OrchestrationRuntime {
 
     private final OrchestrationModelPort modelPort;
@@ -60,7 +62,17 @@ public final class Phase2OrchestrationRuntime {
             String conversationSummary,
             List<AgentCapabilitySummary> candidates
     ) {
-        return selectRouteDecision(mode, query, conversationSummary, candidates);
+        return selectRoute(mode, query, conversationSummary, "", candidates);
+    }
+
+    public RouteDecision selectRoute(
+            String mode,
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        return selectRouteDecision(mode, query, conversationSummary, conversationHistory, candidates);
     }
 
     /**
@@ -91,6 +103,21 @@ public final class Phase2OrchestrationRuntime {
             RouteDecision route,
             ConversationStreamObserver observer
     ) {
+        execute(user, requestId, runId, query, conversationSummary, longTermMemory, "", candidates, route, observer);
+    }
+
+    public void execute(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            RouteDecision route,
+            ConversationStreamObserver observer
+    ) {
         Map<String, String> failures = new LinkedHashMap<>();
         AtomicLong sequence = new AtomicLong();
         OrchestrationTraceChannel traces = new OrchestrationTraceChannel(observer, requestId, runId, sequence);
@@ -106,7 +133,7 @@ public final class Phase2OrchestrationRuntime {
 
             Map<String, String> successes = new LinkedHashMap<>();
             OrchestrationPlan plan = planValidator.validate(
-                    modelPort.createPlan(query, candidates, 1, Map.of(), Map.of()),
+                    modelPort.createPlan(query, conversationHistory, candidates, 1, Map.of(), Map.of()),
                     candidates
             );
             List<OrchestrationPlanStepView> steps = plan.steps().stream()
@@ -115,15 +142,26 @@ public final class Phase2OrchestrationRuntime {
             emit(observer, requestId, runId, sequence, "PLAN_CREATED", Map.of("attemptNo", 1), steps);
             traces.emitMain(1, OrchestrationTraceChannel.KIND_OUTPUT, formatPlanTrace(steps), false);
             java.util.concurrent.atomic.AtomicBoolean degraded = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles = new java.util.ArrayList<>();
             Map<String, AgentTaskResult> results = serialService.execute(
-                    user, query, longTermMemory, plan.steps(),
-                    (eventType, step, result, details) -> {
-                        if ("STEP_DEGRADED".equals(eventType)) {
-                            degraded.set(true);
+                    user, query, conversationHistory, longTermMemory, plan.steps(),
+                    new OrchestrationEventSink() {
+                        @Override
+                        public void emit(String eventType, OrchestrationStep step, AgentTaskResult result, Map<String, Object> details) {
+                            if ("STEP_DEGRADED".equals(eventType)) {
+                                degraded.set(true);
+                            }
+                            emitStep(
+                                    observer, requestId, runId, sequence, eventType, 1, step, result, details, steps
+                            );
                         }
-                        emitStep(
-                                observer, requestId, runId, sequence, eventType, 1, step, result, details, steps
-                        );
+
+                        @Override
+                        public void acceptDeliverables(java.util.List<com.jd.genie.agent.dto.File> files) {
+                            if (files != null) {
+                                deliverableFiles.addAll(files);
+                            }
+                        }
                     },
                     observer::isTerminal,
                     new LinkedHashMap<>(),
@@ -133,9 +171,24 @@ public final class Phase2OrchestrationRuntime {
             );
             collectResults(results, successes, failures);
             boolean hadDegraded = degraded.get();
-            complete(observer, requestId, runId, sequence, query, successes, failures,
-                    failures.isEmpty() && !hadDegraded ? "SUCCESS" : "PARTIAL", 1, traces);
+            complete(
+                    observer,
+                    requestId,
+                    runId,
+                    sequence,
+                    query,
+                    conversationHistory,
+                    steps,
+                    results,
+                    successes,
+                    failures,
+                    failures.isEmpty() && !hadDegraded ? "SUCCESS" : "PARTIAL",
+                    1,
+                    traces,
+                    deliverableFiles
+            );
         } catch (RuntimeException error) {
+            log.warn("Orchestration failed: {}", error.getMessage(), error);
             if (!observer.isTerminal()) {
                 observer.onError(controlledFailure(error));
             }
@@ -153,13 +206,14 @@ public final class Phase2OrchestrationRuntime {
             String mode,
             String query,
             String conversationSummary,
+            String conversationHistory,
             List<AgentCapabilitySummary> candidates
     ) {
         if ("ORCHESTRATED".equals(mode)) {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST");
         }
         try {
-            return modelPort.selectRoute(query, conversationSummary, candidates);
+            return modelPort.selectRoute(query, conversationSummary, conversationHistory, candidates);
         } catch (RuntimeException ignored) {
             return new RouteDecision(RouteDecision.Route.DIRECT, "ROUTER_FALLBACK");
         }
@@ -214,35 +268,41 @@ public final class Phase2OrchestrationRuntime {
             String runId,
             AtomicLong sequence,
             String query,
+            String conversationHistory,
+            List<OrchestrationPlanStepView> steps,
+            Map<String, AgentTaskResult> results,
             Map<String, String> successes,
             Map<String, String> failures,
             String completionStatus,
             int attemptNo,
-            OrchestrationTraceChannel traces
+            OrchestrationTraceChannel traces,
+            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles
     ) {
         emit(observer, requestId, runId, sequence, "SUMMARY_STARTED", Map.of("attemptNo", attemptNo), List.of());
-        traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "正在汇总各 Agent 结果…", false);
-        // Quote real step outputs for 主要结果 — LLM must not rewrite/fabricate them.
-        String factual = labeledDeterministicSummary(successes, failures);
+        traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "正在根据用户问题汇总各专家结论…", false);
+        List<SummaryEvidence> evidence = toEvidence(steps, results, successes, failures);
+        String fallback = fallbackAnswer(query, evidence);
         String answer;
         try {
-            String overview = modelPort.summarize(query, Map.copyOf(successes), Map.copyOf(failures));
-            answer = mergeFactualWithOverview(factual, overview);
+            String overview = modelPort.summarize(query, conversationHistory, evidence);
+            answer = overview == null || overview.isBlank() ? fallback : overview.trim();
             emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
             traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总完成", false);
         } catch (RuntimeException ignored) {
-            answer = factual;
+            answer = fallback;
             emit(observer, requestId, runId, sequence, "SUMMARY_FALLBACK", Map.of(
                     "attemptNo", attemptNo, "reasonCode", "SUMMARY_FAILED"
             ), List.of());
-            traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总失败，已使用兜底摘要", false);
+            traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总失败，已使用已完成材料直出", false);
         }
+        answer = DeliverableFiles.appendDownloadLinks(answer, deliverableFiles);
         GptProcessResult finalResponse = eventMapper.finalResponse(
                 requestId,
                 runId,
                 sequence.incrementAndGet(),
                 answer,
-                completionStatus
+                completionStatus,
+                DeliverableFiles.toFileList(deliverableFiles)
         );
         observer.onEvent(finalResponse);
         observer.onCompleted();
@@ -320,62 +380,89 @@ public final class Phase2OrchestrationRuntime {
         return agentId;
     }
 
-    private String deterministicSummary(Map<String, String> successes, Map<String, String> failures) {
-        return labeledDeterministicSummary(successes, failures);
-    }
-
-    private String labeledDeterministicSummary(
+    private List<SummaryEvidence> toEvidence(
+            List<OrchestrationPlanStepView> steps,
+            Map<String, AgentTaskResult> results,
             Map<String, String> successes,
             Map<String, String> failures
     ) {
-        String completed = successes.isEmpty() ? "无" : String.join("\n", successes.keySet());
-        String results;
-        if (successes.isEmpty()) {
-            results = "无";
-        } else {
-            StringBuilder sb = new StringBuilder();
-            for (Map.Entry<String, String> entry : successes.entrySet()) {
-                if (!sb.isEmpty()) {
-                    sb.append('\n');
+        List<SummaryEvidence> evidence = new java.util.ArrayList<>();
+        if (steps != null) {
+            for (OrchestrationPlanStepView step : steps) {
+                if (step == null || step.stepId() == null) {
+                    continue;
                 }
-                sb.append("- ").append(entry.getKey()).append(": ")
-                        .append(entry.getValue() == null ? "" : entry.getValue());
+                AgentTaskResult result = results == null ? null : results.get(step.stepId());
+                String output = result != null && result.status() == AgentTaskResult.Status.SUCCESS
+                        ? result.output()
+                        : successes == null ? null : successes.get(step.stepId());
+                String errorCode = result != null && result.status() == AgentTaskResult.Status.FAILURE
+                        ? result.errorCode()
+                        : failures == null ? null : failures.get(step.stepId());
+                evidence.add(new SummaryEvidence(
+                        step.stepId(),
+                        specialistLabel(step),
+                        step.objective(),
+                        output,
+                        errorCode
+                ));
             }
-            results = sb.toString();
         }
-        String unfinished = failures.isEmpty() ? "无" : String.join("\n", failures.keySet());
-        String required = failures.isEmpty()
-                ? "无，所有任务均已顺利完成。"
-                : String.join("\n", failures.values());
-        return "## 已完成\n" + completed
-                + "\n\n## 主要结果\n" + results
-                + "\n\n## 未完成\n" + unfinished
-                + "\n\n## 继续完成所需\n" + required;
+        if (!evidence.isEmpty()) {
+            return evidence;
+        }
+        if (successes != null) {
+            successes.forEach((id, output) -> evidence.add(new SummaryEvidence(id, id, "", output, null)));
+        }
+        if (failures != null) {
+            failures.forEach((id, code) -> evidence.add(new SummaryEvidence(id, id, "", null, code)));
+        }
+        return evidence;
     }
 
-    private String mergeFactualWithOverview(String factual, String overview) {
-        if (overview == null || overview.isBlank()) {
-            return factual;
-        }
-        String trimmed = overview.trim();
-        String overviewBody = trimmed;
-        int idx = trimmed.indexOf("## 汇总");
-        if (idx >= 0) {
-            overviewBody = trimmed.substring(idx + "## 汇总".length()).trim();
-            int next = overviewBody.indexOf("\n## ");
-            if (next >= 0) {
-                overviewBody = overviewBody.substring(0, next).trim();
+    private String specialistLabel(OrchestrationPlanStepView step) {
+        if (step.subTasks() != null && !step.subTasks().isEmpty()) {
+            String names = step.subTasks().stream()
+                    .map(sub -> sub.agentName() == null || sub.agentName().isBlank() ? sub.agentId() : sub.agentName())
+                    .filter(name -> name != null && !name.isBlank())
+                    .collect(Collectors.joining("、"));
+            if (!names.isBlank()) {
+                return names;
             }
-        } else if (trimmed.startsWith("## ")) {
-            // Full markdown from model — keep only a short prose paragraph if present.
-            overviewBody = trimmed.replaceAll("(?m)^## .*\\R?", "").trim();
         }
-        if (overviewBody.isBlank()) {
-            return factual;
+        if (step.agentName() != null && !step.agentName().isBlank()) {
+            return step.agentName();
         }
-        return factual.replace(
-                "\n\n## 未完成\n",
-                "\n\n## 汇总\n" + overviewBody + "\n\n## 未完成\n"
-        );
+        return step.agentId() == null || step.agentId().isBlank() ? step.stepId() : step.agentId();
+    }
+
+    private String fallbackAnswer(String query, List<SummaryEvidence> evidence) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("针对问题：").append(query == null ? "" : query.trim()).append("\n\n");
+        boolean anySuccess = evidence.stream().anyMatch(item -> !item.failed() && item.output() != null && !item.output().isBlank());
+        if (anySuccess) {
+            sb.append("已收集到的材料：\n");
+            for (SummaryEvidence item : evidence) {
+                if (item.failed() || item.output() == null || item.output().isBlank()) {
+                    continue;
+                }
+                sb.append("- ").append(item.displayName());
+                if (item.objective() != null && !item.objective().isBlank()) {
+                    sb.append("（").append(item.objective().trim()).append("）");
+                }
+                sb.append("：\n").append(item.output().trim()).append("\n\n");
+            }
+        }
+        List<SummaryEvidence> failed = evidence.stream().filter(SummaryEvidence::failed).toList();
+        if (!failed.isEmpty()) {
+            sb.append("以下工作未能完成：\n");
+            for (SummaryEvidence item : failed) {
+                sb.append("- ").append(item.displayName()).append('\n');
+            }
+        }
+        if (!anySuccess && failed.isEmpty()) {
+            sb.append("暂无可用材料。");
+        }
+        return sb.toString().trim();
     }
 }

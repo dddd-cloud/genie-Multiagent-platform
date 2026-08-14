@@ -50,6 +50,10 @@ class ConfiguredReactAgentFactoryTest {
             assertEquals(true, agent.getNextStepPrompt().contains("After the latest tool result"));
             assertEquals("frozen-model", agent.getLlm().getModel());
             assertEquals(20, agent.getMaxSteps());
+            assertEquals(ConfiguredReactAgentFactory.MAX_OBSERVE_CHARS, agent.getMaxObserve());
+            assertEquals(true, agent.isFinishWithoutToolsAfterObservations());
+            assertEquals(true, agent.getSystemPrompt().contains("file_tool"));
+            assertEquals(true, agent.getNextStepPrompt().contains("Do not call another tool"));
             assertSame(tools, agent.getAvailableTools());
             assertSame(printer, context.getPrinter());
         } finally {

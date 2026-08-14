@@ -73,6 +73,12 @@ public class DeepSearchTool implements BaseTool {
             GenieConfig genieConfig = SpringContextHolder.getApplicationContext().getBean(GenieConfig.class);
             Map<String, Object> params = (Map<String, Object>) input;
             String query = (String) params.get("query");
+            if (agentContext.getPrinter() != null) {
+                Map<String, Object> start = new HashMap<>();
+                start.put("messageType", "start");
+                start.put("query", query);
+                agentContext.getPrinter().send("deep_search", start);
+            }
             Map<String, Object> srcConfig = new HashMap<>();
 
             Map<String, Object> bingConfig = new HashMap<>();

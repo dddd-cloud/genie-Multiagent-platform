@@ -6,6 +6,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
 } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { Button, message } from 'antd';
@@ -27,6 +28,11 @@ import {
   conversationReducer,
   initialConversationListState,
 } from './conversationReducer';
+import {
+  isUnusedConversation,
+  resolveNewConversationAction,
+  unusedConversationIds,
+} from './unusedConversation';
 
 const PAGE_SIZE = 20;
 
@@ -39,6 +45,8 @@ export interface ConversationLayoutContextValue {
   upsert: (item: ConversationListItem) => void;
   remove: (id: string) => void;
   items: ConversationListItem[];
+  discardUnusedDrafts: (exceptId?: string | null) => Promise<void>;
+  touch: (id: string) => void;
 }
 
 const ConversationLayoutContext =
@@ -71,6 +79,10 @@ const ConversationLayout: GenieType.FC = memo(() => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { conversationId } = useParams<{ conversationId?: string }>();
+  const itemsRef = useRef(state.items);
+  itemsRef.current = state.items;
+  const conversationIdRef = useRef(conversationId);
+  const creatingRef = useRef(false);
 
   const loadPage = useCallback(async (page: number, more = false) => {
     dispatch({
@@ -140,8 +152,72 @@ const ConversationLayout: GenieType.FC = memo(() => {
     });
   }, []);
 
+  const touch = useCallback((id: string) => {
+    const existing = itemsRef.current.find((item) => item.id === id);
+    if (!existing || existing.lastMessageAt) {
+      return;
+    }
+    dispatch({
+      type: 'UPSERT',
+      item: {
+        ...existing,
+        lastMessageAt: new Date().toISOString(),
+      },
+    });
+  }, []);
+
+  const discardUnusedDrafts = useCallback(async (exceptId?: string | null) => {
+    const ids = unusedConversationIds(itemsRef.current, exceptId);
+    ids.forEach((id) => {
+      dispatch({
+        type: 'REMOVE',
+        id,
+      });
+    });
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          await deleteConversation(id);
+        } catch (err: unknown) {
+          if (isAuthRequired(err)) {
+            throw err;
+          }
+        }
+      }),
+    );
+  }, []);
+
+  useEffect(() => {
+    const previousId = conversationIdRef.current;
+    conversationIdRef.current = conversationId;
+    if (!previousId || previousId === conversationId) {
+      return;
+    }
+    const left = itemsRef.current.find((item) => item.id === previousId);
+    if (left && isUnusedConversation(left)) {
+      void discardUnusedDrafts(conversationId ?? null);
+    }
+  }, [conversationId, discardUnusedDrafts]);
+
   const handleNew = useCallback(async () => {
+    if (creatingRef.current) {
+      return;
+    }
+    creatingRef.current = true;
     try {
+      const action = resolveNewConversationAction(
+        itemsRef.current,
+        conversationId,
+      );
+      if (action.type === 'noop') {
+        return;
+      }
+      if (action.type === 'reuse') {
+        await discardUnusedDrafts(action.id);
+        navigate(`/app/chat/${action.id}`);
+        return;
+      }
+      await discardUnusedDrafts();
       const created = await createConversation(null);
       if (!created) {
         message.error('创建会话失败');
@@ -167,8 +243,10 @@ const ConversationLayout: GenieType.FC = memo(() => {
       message.error(
         err instanceof MvpApiError ? err.message : '创建会话失败',
       );
+    } finally {
+      creatingRef.current = false;
     }
-  }, [navigate]);
+  }, [conversationId, discardUnusedDrafts, navigate]);
 
   const handleRename = useCallback(
     async (id: string, title: string) => {
@@ -268,9 +346,12 @@ const ConversationLayout: GenieType.FC = memo(() => {
 
   const handleSelect = useCallback(
     (id: string) => {
+      if (id === conversationId) {
+        return;
+      }
       navigate(`/app/chat/${id}`);
     },
-    [navigate],
+    [conversationId, navigate],
   );
 
   const handleLogout = useCallback(async () => {
@@ -283,8 +364,10 @@ const ConversationLayout: GenieType.FC = memo(() => {
       upsert,
       remove,
       items: state.items,
+      discardUnusedDrafts,
+      touch,
     }),
-    [reload, remove, state.items, upsert],
+    [discardUnusedDrafts, reload, remove, state.items, touch, upsert],
   );
 
   const layout = (

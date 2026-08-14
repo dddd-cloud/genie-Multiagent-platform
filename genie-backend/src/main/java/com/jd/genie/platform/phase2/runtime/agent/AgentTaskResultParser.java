@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
  * {@code output}, recover the envelope by anchored prefix/suffix matching.
  */
 public final class AgentTaskResultParser {
-    private static final int MAX_OUTPUT_LENGTH = 12_000;
+    /** SUCCESS {@code output} character cap (~20k tokens for CJK). */
+    private static final int MAX_OUTPUT_LENGTH = 20_000;
     private static final Set<String> FAILURE_ERROR_CODES = Set.of(
             "INVALID_INPUT",
             "AGENT_OFFLINE",

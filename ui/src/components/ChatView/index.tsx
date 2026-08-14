@@ -1,14 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal, message } from 'antd';
 import classNames from 'classnames';
 import { useMemoizedFn } from 'ahooks';
-import type { ExecutionMode, OutputStyle, Phase2AgentResponse } from '@/contracts';
+import type { ExecutionMode, OutputStyle } from '@/contracts';
 import { OUTPUT_STYLES } from '@/contracts';
 import { notifyMvpError } from '@/features/auth/mvpErrorBus';
+import { useConversationLayout } from '@/features/conversation/ConversationLayout';
 import type { PersistedChatItem } from '@/features/conversation/types';
 import { isUuid } from '@/features/conversation/requestId';
-import AllowedAgentSelector from '@/features/phase2/executionMode/AllowedAgentSelector';
+import {
+  beginLiveChatRun,
+  finishLiveChatRun,
+  patchLiveChatRun,
+  peekLiveChatRun,
+  stopLiveChatRun,
+  subscribeLiveChatRun,
+} from '@/features/conversation/liveChatRuns';
 import ExecutionModeSelector from '@/features/phase2/executionMode/ExecutionModeSelector';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import { buildPhase2GptQueryRequest } from '@/features/phase2/executionMode/phase2RequestBuilder';
@@ -29,11 +37,9 @@ import { extractOrchestrationEventFromResult } from '@/features/phase2/orchestra
 import { extractOrchestrationTraceFromResult } from '@/features/phase2/orchestration/parseOrchestrationTrace';
 import {
   getSharedBrowserSkillExecutionRunner,
-  resetSharedBrowserSkillExecutionRunner,
 } from '@/features/phase2/skillRuntime/BrowserSkillExecutionRunner';
 import { extractBrowserSkillSignalFromResult } from '@/features/phase2/skillRuntime/signal';
 import { MvpApiError } from '@/services/apiError';
-import { listAgents } from '@/services/phase2/agents';
 import { getPhase2ErrorMessage } from '@/services/phase2/errorMessages';
 import { queryPhase2SSE } from '@/services/phase2/queryPhase2SSE';
 import {
@@ -41,7 +47,7 @@ import {
   scrollToTop,
 } from '@/utils';
 import { RESULT_TYPES, productList } from '@/utils/constants';
-import { combineData, handleTaskData } from '@/utils/chat';
+import { combineData, extractGeneratedFiles, handleTaskData } from '@/utils/chat';
 import querySSE, {
   type SseHandle,
   type SseTerminalResult,
@@ -269,6 +275,33 @@ async function resolvePhase2LocalContext(
   };
 }
 
+function canConsumeWheel(
+  start: EventTarget | null,
+  root: HTMLElement,
+  deltaY: number,
+): boolean {
+  let node = start instanceof HTMLElement ? start : null;
+  while (node && node !== root) {
+    const overflowY = window.getComputedStyle(node).overflowY;
+    const scrollable =
+      (overflowY === 'auto' || overflowY === 'scroll') &&
+      node.scrollHeight - node.clientHeight > 1;
+    if (scrollable) {
+      if (deltaY < 0 && node.scrollTop > 0) {
+        return true;
+      }
+      if (
+        deltaY > 0 &&
+        node.scrollTop + node.clientHeight < node.scrollHeight - 1
+      ) {
+        return true;
+      }
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
 const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const {
     conversationId,
@@ -287,27 +320,63 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
   const sessionId = conversationId;
   const navigate = useNavigate();
+  const layout = useConversationLayout();
   const localMemory = useLocalMemoryOptional();
   const phase2 = isPhase2Enabled();
+  const liveOnMount = peekLiveChatRun(sessionId);
 
-  const [chatList, setChatList] = useState<PersistedChatItem[]>(initialChats);
+  const [chatList, setChatList] = useState<PersistedChatItem[]>(
+    liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
+  );
   const [taskList, setTaskList] = useState<MESSAGE.Task[]>([]);
   const [activeTask, setActiveTask] = useState<CHAT.Task>();
   const [plan, setPlan] = useState<CHAT.Plan>();
   const [showAction, setShowAction] = useState(false);
-  const [sendInFlight, setSendInFlight] = useState(false);
+  const [sendInFlight, setSendInFlight] = useState(!!liveOnMount?.sendInFlight);
   const [reconcileHint, setReconcileHint] = useState<string | null>(null);
   const [needManualRefresh, setNeedManualRefresh] = useState(false);
   const [reconciling, setReconciling] = useState(false);
-  const [agents, setAgents] = useState<Phase2AgentResponse[]>([]);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const actionViewRef = ActionView.useActionView();
+  const chatListRef = useRef<PersistedChatItem[]>(initialChats);
+  chatListRef.current = chatList;
+
+  const relayWheelToChat = useMemoizedFn((event: WheelEvent<HTMLElement>) => {
+    const chat = chatRef.current;
+    if (!chat || event.ctrlKey || event.metaKey) {
+      return;
+    }
+    if (chat.contains(event.target as Node)) {
+      return;
+    }
+    if (canConsumeWheel(event.target, event.currentTarget, event.deltaY)) {
+      return;
+    }
+    chat.scrollTop += event.deltaY;
+  });
 
   const sseHandleRef = useRef<SseHandle | null>(null);
   const skillExecutionAbortRef = useRef<AbortController | null>(null);
-  const sendInFlightRef = useRef(false);
+  const sendInFlightRef = useRef(!!liveOnMount?.sendInFlight);
   const openedOnceRef = useRef(false);
+  const titleRefreshTimersRef = useRef<number[]>([]);
+  const clearTitleRefreshTimers = () => {
+    for (const id of titleRefreshTimersRef.current) {
+      window.clearTimeout(id);
+    }
+    titleRefreshTimersRef.current = [];
+  };
+  const scheduleTitleRefresh = () => {
+    clearTitleRefreshTimers();
+    for (const delayMs of [2000, 8000]) {
+      const id = window.setTimeout(() => {
+        titleRefreshTimersRef.current = titleRefreshTimersRef.current.filter((item) => item !== id);
+        void onConversationChanged();
+      }, delayMs);
+      titleRefreshTimersRef.current.push(id);
+    }
+  };
   const reconcileStartedRef = useRef(false);
   const mountedRef = useRef(true);
   const initialChatsRef = useRef(initialChats);
@@ -338,36 +407,48 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     };
   }, [chatList, mode.deepThink, mode.outputStyle]);
 
-  const inputDisabled =
-    sendInFlight || detachedRunning || reconciling;
+  const inputDisabled = reconciling;
+  const taskRunning = sendInFlight;
+
+  const publishChatList = useMemoizedFn(
+    (updater: (prev: PersistedChatItem[]) => PersistedChatItem[]) => {
+      const prev = peekLiveChatRun(sessionId)?.chatList ?? chatListRef.current;
+      const next = updater(prev);
+      chatListRef.current = next;
+      patchLiveChatRun(sessionId, { chatList: next });
+      if (mountedRef.current) {
+        setChatList(next);
+      }
+      return next;
+    },
+  );
+
+  const stopGeneration = useMemoizedFn(() => {
+    stopLiveChatRun(sessionId);
+  });
 
   useEffect(() => {
-    if (!sendInFlightRef.current) {
-      setChatList(initialChats);
+    const existing = peekLiveChatRun(sessionId);
+    if (existing?.sendInFlight) {
+      setChatList(existing.chatList);
+      chatListRef.current = existing.chatList;
+      sendInFlightRef.current = existing.sendInFlight;
+      setSendInFlight(existing.sendInFlight);
     }
-  }, [initialChats]);
+    return subscribeLiveChatRun(sessionId, (snapshot) => {
+      chatListRef.current = snapshot.chatList;
+      setChatList(snapshot.chatList);
+      sendInFlightRef.current = snapshot.sendInFlight;
+      setSendInFlight(snapshot.sendInFlight);
+    });
+  }, [sessionId]);
 
   useEffect(() => {
-    if (!phase2) {
+    if (peekLiveChatRun(sessionId)?.sendInFlight || sendInFlightRef.current) {
       return;
     }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await listAgents();
-        if (!cancelled) {
-          setAgents(list ?? []);
-        }
-      } catch {
-        if (!cancelled) {
-          setAgents([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [phase2]);
+    setChatList(initialChats);
+  }, [initialChats, sessionId]);
 
   const temporaryChangeTask = useMemoizedFn((tasks: MESSAGE.Task[]) => {
     const task = tasks[tasks.length - 1] as CHAT.Task;
@@ -413,7 +494,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         state: NonNullable<PersistedChatItem['orchestration']>,
       ) => NonNullable<PersistedChatItem['orchestration']>,
     ) => {
-      setChatList((prev) =>
+      publishChatList((prev) =>
         prev.map((item) => {
           if (item.requestId !== requestId || !item.orchestration) {
             return item;
@@ -428,7 +509,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   );
 
   const stopLoadingForRequest = useMemoizedFn((requestId: string, patch?: Partial<PersistedChatItem>) => {
-    setChatList((prev) =>
+    publishChatList((prev) =>
       prev.map((item) =>
         item.requestId === requestId
           ? {
@@ -609,10 +690,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       );
 
       let currentChat: PersistedChatItem = loadingChat;
-      setChatList((prev) => [...prev, loadingChat]);
+      beginLiveChatRun(sessionId, requestId, [...chatListRef.current, loadingChat]);
       sendInFlightRef.current = true;
       setSendInFlight(true);
       openedOnceRef.current = false;
+      clearTitleRefreshTimers();
+      layout?.touch(sessionId);
+
+      try {
 
       const body: Record<string, unknown> = usePhase2 && phase2Body
         ? phase2Body
@@ -625,7 +710,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         };
 
       const commitWorkingChat = (working: PersistedChatItem) => {
-        setChatList((prev) => {
+        publishChatList((prev) => {
           const next = [...prev];
           const idx = next.findIndex((c) => c.requestId === requestId);
           if (idx < 0) {
@@ -654,6 +739,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       };
 
       const handleMessageV1 = (data: MESSAGE.Answer) => {
+        if (peekLiveChatRun(sessionId)?.userStopped) {
+          return;
+        }
         const { finished, resultMap } = data;
         // Plan §11.4: apply in receive order, sync — no rAF before settle/reload.
         const working = cloneWorkingChat(currentChat);
@@ -672,6 +760,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           working.response = data.response;
         }
         if (finished) {
+          const generated = extractGeneratedFiles(resultMap);
+          if (generated.length) {
+            working.generatedFiles = generated;
+          }
           working.loading = false;
         }
 
@@ -686,6 +778,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       };
 
       const handleMessagePhase2 = (data: MESSAGE.Answer) => {
+        if (peekLiveChatRun(sessionId)?.userStopped) {
+          return;
+        }
         const { finished, resultMap, packageType } = data;
 
         // skill_execution is a control packet — never chat body / orch terminal.
@@ -694,6 +789,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           if (signal) {
             if (!skillExecutionAbortRef.current) {
               skillExecutionAbortRef.current = new AbortController();
+              patchLiveChatRun(sessionId, {
+                skillAbort: skillExecutionAbortRef.current,
+              });
             }
             void getSharedBrowserSkillExecutionRunner().handleLiveSignal(
               signal,
@@ -709,9 +807,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           packageType === 'orchestration' ||
           packageType === 'orchestration_trace';
 
-        // Reduce inside setChatList so orchestration always starts from the
+        // Reduce inside publishChatList so orchestration always starts from the
         // latest React item (avoids stale currentChat wiping plan objectives).
-        setChatList((prev) => {
+        publishChatList((prev) => {
           const idx = prev.findIndex((c) => c.requestId === requestId);
           const base =
             idx >= 0 ? cloneWorkingChat(prev[idx]) : cloneWorkingChat(currentChat);
@@ -755,6 +853,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 working.response = data.responseAll;
               } else if (data.response) {
                 working.response = data.response;
+              }
+              const generated = extractGeneratedFiles(resultMap);
+              if (generated.length) {
+                working.generatedFiles = generated;
               }
               working.loading = false;
               if (working.orchestration) {
@@ -827,31 +929,32 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       const handleMessage = usePhase2 ? handleMessagePhase2 : handleMessageV1;
 
+      const refreshTitleAfterFirstOpen = () => {
+        if (openedOnceRef.current) {
+          return;
+        }
+        openedOnceRef.current = true;
+        void onConversationChanged();
+        scheduleTitleRefresh();
+      };
+
       // Phase2 always uses V2 SSE; never silently fall back to V1 on open failure.
       const handle = usePhase2
         ? queryPhase2SSE({
           body,
           handleMessage,
-          onOpen: () => {
-            if (!openedOnceRef.current) {
-              openedOnceRef.current = true;
-              void onConversationChanged();
-            }
-          },
+          onOpen: refreshTitleAfterFirstOpen,
         })
         : querySSE({
           body,
           handleMessage,
-          onOpen: () => {
-            if (!openedOnceRef.current) {
-              openedOnceRef.current = true;
-              void onConversationChanged();
-            }
-          },
+          onOpen: refreshTitleAfterFirstOpen,
         });
       sseHandleRef.current = handle;
+      patchLiveChatRun(sessionId, { handle });
 
       const result = await handle.done;
+      const stoppedByUser = peekLiveChatRun(sessionId)?.userStopped === true;
       sseHandleRef.current = null;
       // Chat COMPLETED must not abort an in-flight POST result.
       // Cancel Worker only on disconnect / HTTP error / user abort / unmount.
@@ -872,8 +975,11 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         );
         sendInFlightRef.current = false;
         setSendInFlight(false);
-        await onReloadMessages();
-        await onConversationChanged();
+        finishLiveChatRun(sessionId, requestId);
+        if (mountedRef.current) {
+          await onReloadMessages();
+          await onConversationChanged();
+        }
         return;
       }
 
@@ -884,6 +990,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         stopLoadingForRequest(requestId, { tip: '' });
         sendInFlightRef.current = false;
         setSendInFlight(false);
+        finishLiveChatRun(sessionId, requestId);
         if (usePhase2) {
           await handlePhase2HttpError(result);
         } else {
@@ -895,14 +1002,22 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       // INTERRUPTED — plan §11.9/§11.10: never invent DB INTERRUPTED locally;
       // show disconnect hint and reconcile from backend.
       const malformed = isMalformedStreamMessage(result.message);
-      stopLoadingForRequest(requestId, { tip: '' });
+      if (!stoppedByUser) {
+        stopLoadingForRequest(requestId, { tip: '' });
+      }
       sendInFlightRef.current = false;
       setSendInFlight(false);
+      finishLiveChatRun(sessionId, requestId);
 
       if (result.reason === 'ABORT') {
-        // Unmount abort: dying instance must not reconcile (new route loads history).
-        // Still-mounted abort (e.g. AUTH/Strict Mode race): plan §11.10 有限对账.
-        // Keep requestId in consumedDraftRequestIds — never re-POST same draft UUID.
+        if (stoppedByUser) {
+          if (mountedRef.current) {
+            await onConversationChanged();
+          }
+          return;
+        }
+        // Unmount no longer aborts. Remaining ABORT is logout / explicit stop
+        // races / AUTH. Reconcile only if this view is still mounted.
         if (mountedRef.current) {
           await runLimitedReconcile(true);
         }
@@ -911,11 +1026,22 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       if (malformed) {
         message.error('流式响应格式错误');
-        await onReloadMessages();
+        if (mountedRef.current) {
+          await onReloadMessages();
+        }
         return;
       }
 
-      await runLimitedReconcile(true);
+      if (mountedRef.current) {
+        await runLimitedReconcile(true);
+      }
+      } finally {
+        finishLiveChatRun(sessionId, requestId);
+        sendInFlightRef.current = false;
+        if (mountedRef.current) {
+          setSendInFlight(false);
+        }
+      }
     },
   );
 
@@ -939,77 +1065,81 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     if (initialDraft) {
       return;
     }
+    if (peekLiveChatRun(sessionId)?.sendInFlight) {
+      return;
+    }
     if (!detachedRunning) {
       return;
     }
     reconcileStartedRef.current = true;
     void runLimitedReconcile(false);
-  }, [detachedRunning, initialDraft, runLimitedReconcile]);
+  }, [detachedRunning, initialDraft, runLimitedReconcile, sessionId]);
 
-  // Abort SSE on unmount
+  // Keep the SSE alive across Agent/Skill/other-conversation navigation.
+  // Only the stop button (and logout via abortAllActiveSse) may abort.
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      sseHandleRef.current?.abort();
-      sseHandleRef.current = null;
-      skillExecutionAbortRef.current?.abort();
-      skillExecutionAbortRef.current = null;
-      getSharedBrowserSkillExecutionRunner().stop();
-      resetSharedBrowserSkillExecutionRunner();
+      clearTitleRefreshTimers();
     };
   }, []);
 
   return (
-    <div className="h-full w-full flex justify-center bg-surface">
+    <div className="h-full w-full flex bg-surface" onWheel={relayWheelToChat}>
       <div
-        className={classNames('px-24 py-20 flex flex-col flex-1 w-0', {'max-w-[960px]': !showAction,})}
+        className="flex h-full min-w-0 flex-1 flex-col"
         id="chat-view"
       >
-        <div className="w-full flex justify-between border-b border-border pb-12 mb-4">
-          <div className="w-full flex items-center min-w-0">
-            <Logo />
-            <div className="overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-medium text-text-primary mr-8">
-              {conversationTitle}
-            </div>
-            {sendMode.deepThink ? (
-              <div className="rounded-sm px-8 py-2 border border-border bg-surface-subtle text-text-secondary flex items-center shrink-0 text-[12px]">
-                <i className="font_family icon-shendusikao mr-6 text-[12px]"></i>
-                <span className="ml-[-4px]">深度研究</span>
+        <div className="shrink-0 border-b border-border">
+          <div className="mx-auto flex w-full max-w-[960px] items-center justify-between px-24 py-16">
+            <div className="flex min-w-0 w-full items-center">
+              <Logo />
+              <div className="mr-8 overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-medium text-text-primary">
+                {conversationTitle}
               </div>
-            ) : null}
+              {sendMode.deepThink ? (
+                <div className="flex shrink-0 items-center rounded-sm border border-border bg-surface-subtle px-8 py-2 text-[12px] text-text-secondary">
+                  <i className="font_family icon-shendusikao mr-6 text-[12px]"></i>
+                  <span className="ml-[-4px]">深度研究</span>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
         {reconcileHint ? (
-          <div className="mb-12 px-12 py-8 rounded-md bg-surface-subtle border border-border text-[13px] text-text-secondary flex items-center gap-12">
-            <span>{reconcileHint}</span>
-            {needManualRefresh ? (
-              <button
-                type="button"
-                className="text-brand hover:text-brand-hover transition-colors duration-150"
-                onClick={() => {
-                  setNeedManualRefresh(false);
-                  void (async () => {
-                    await onReloadMessages();
-                    setReconcileHint(null);
-                  })();
-                }}
-              >
-                手动刷新
-              </button>
-            ) : null}
+          <div className="mx-auto w-full max-w-[960px] px-24 pt-12">
+            <div className="flex items-center gap-12 rounded-md border border-border bg-surface-subtle px-12 py-8 text-[13px] text-text-secondary">
+              <span>{reconcileHint}</span>
+              {needManualRefresh ? (
+                <button
+                  type="button"
+                  className="text-brand hover:text-brand-hover transition-colors duration-150"
+                  onClick={() => {
+                    setNeedManualRefresh(false);
+                    void (async () => {
+                      await onReloadMessages();
+                      setReconcileHint(null);
+                    })();
+                  }}
+                >
+                  手动刷新
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
         <div
-          className="w-full flex-1 overflow-auto no-scrollbar mb-[28px]"
+          className="chat-scroll min-h-0 w-full flex-1 overflow-y-auto"
           ref={chatRef}
         >
+          <div className="mx-auto w-full max-w-[960px] px-24 py-16">
           {chatList.map((chat) => {
             const showErrorCard =
               chat.persistedStatus === 'FAILED' ||
-              chat.persistedStatus === 'INTERRUPTED';
+              (chat.persistedStatus === 'INTERRUPTED' && !chat.stoppedByUser);
 
             return (
               <div key={chat.requestId}>
@@ -1082,38 +1212,40 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
               </div>
             );
           })}
+          </div>
         </div>
 
-        {phase2 ? (
-          <div className="mb-12 flex flex-wrap items-center gap-12">
-            <ExecutionModeSelector
-              value={executionMode}
-              disabled={inputDisabled}
-              onChange={(next) => {
-                onExecutionModeChange?.(next);
-                if (next === 'DIRECT') {
-                  onAllowedAgentIdsChange?.([]);
-                }
-              }}
-            />
-            <AllowedAgentSelector
-              agents={agents}
-              value={allowedAgentIds}
-              executionMode={executionMode}
-              disabled={inputDisabled}
-              onChange={(ids) => onAllowedAgentIdsChange?.(ids)}
-            />
-          </div>
-        ) : null}
-
+        <div className="shrink-0 bg-surface">
+          <div className="mx-auto w-full max-w-[960px] px-24 pb-20 pt-8">
         <GeneralInput
           placeholder={
-            inputDisabled ? '任务进行中' : '希望 Genie 为你做哪些任务呢？'
+            taskRunning
+              ? '正在生成…'
+              : inputDisabled
+                ? '任务进行中'
+                : '希望 Genie 为你做哪些任务呢？'
           }
           showBtn={false}
           size="medium"
-          disabled={inputDisabled}
+          disabled={inputDisabled || (detachedRunning && !taskRunning)}
+          running={taskRunning}
+          onStop={stopGeneration}
           product={product}
+          leftExtra={
+            phase2 ? (
+              <ExecutionModeSelector
+                value={executionMode}
+                disabled={inputDisabled || taskRunning || detachedRunning}
+                allowedAgentIds={allowedAgentIds}
+                onChange={(next) => {
+                  onExecutionModeChange?.(next);
+                }}
+                onAllowedAgentIdsChange={(ids) =>
+                  onAllowedAgentIdsChange?.(ids)
+                }
+              />
+            ) : null
+          }
           send={(info) =>
             void sendMessage({
               ...info,
@@ -1122,12 +1254,16 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
             })
           }
         />
+          </div>
+        </div>
       </div>
       <div
-        className={classNames('transition-all w-0 border-l border-border bg-surface-subtle', {
-          'opacity-0 overflow-hidden border-l-0': !showAction,
-          'flex-1': showAction,
-        })}
+        className={classNames(
+          'h-full shrink-0 border-l border-border bg-surface-subtle transition-[width] duration-200',
+          showAction
+            ? 'w-[560px] max-w-[48vw]'
+            : 'pointer-events-none w-0 overflow-hidden border-l-0',
+        )}
       >
         <ActionView
           activeTask={activeTask}

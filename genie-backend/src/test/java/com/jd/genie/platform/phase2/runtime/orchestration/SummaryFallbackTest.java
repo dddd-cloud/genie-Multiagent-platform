@@ -72,7 +72,8 @@ class SummaryFallbackTest {
         assertEquals("result", terminal.getPackageType());
         assertEquals("SUCCESS", details.get("completionStatus"));
         assertTrue(eventTypes(channel.events).contains("SUMMARY_FALLBACK"));
-        assertTrue(terminal.getResponseAll().contains("## 已完成"));
+        assertTrue(terminal.getResponseAll().contains("针对问题"));
+        assertTrue(terminal.getResponseAll().contains("Agent A"));
         assertEquals(1, port.getCalls().stream()
                 .filter(call -> call.type() == FakeConversationExecutionPort.CallType.COMPLETE)
                 .count());

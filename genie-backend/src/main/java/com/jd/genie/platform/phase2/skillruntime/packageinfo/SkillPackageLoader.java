@@ -92,7 +92,9 @@ public class SkillPackageLoader {
                 Path real = path.toRealPath();
                 if (!real.startsWith(realRoot)) throw invalid("package path escaped root");
                 String relative = realRoot.relativize(path).toString().replace('\\', '/');
-                validator.validatePackagePath(relative);
+                if (!validator.keepPackageFile(relative)) {
+                    continue;
+                }
                 long size = Files.size(path);
                 long limit = relative.equals("SKILL.md") ? SkillPackageLimits.MAX_SKILL_MD_BYTES : SkillPackageLimits.MAX_RESOURCE_BYTES;
                 if (size > limit) throw invalid("package file too large");
@@ -114,6 +116,22 @@ public class SkillPackageLoader {
             String script = validator.normalizeRelativePath(entry.script(), MvpErrorCode.SKILL_PACKAGE_INVALID);
             if (!script.startsWith("scripts/") || !paths.contains(script)) throw invalid("entrypoint script missing");
         }
+    }
+
+    public Path ownedPackageRoot(CurrentUser user, String skillId) {
+        Path root = userPackageRoot(user, skillId);
+        Path ownerRoot = skillRoot.resolve("users")
+            .resolve(user.tenantId())
+            .resolve(user.userId())
+            .normalize();
+        Path builtin = skillRoot.resolve("builtin").normalize();
+        if (!root.startsWith(ownerRoot)) {
+            throw invalid("skill package root escaped owner directory");
+        }
+        if (root.startsWith(builtin) || ownerRoot.startsWith(builtin)) {
+            throw invalid("cannot write to builtin skill packages");
+        }
+        return root;
     }
 
     private Path userPackageRoot(CurrentUser user, String skillId) {

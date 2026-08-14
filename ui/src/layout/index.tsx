@@ -21,8 +21,8 @@ const Layout: GenieType.FC = memo(() => {
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: '#4040FF',
-          colorPrimaryHover: '#3535E8',
+          colorPrimary: '#1D1D1F',
+          colorPrimaryHover: '#000000',
           colorText: '#1D1D1F',
           colorTextSecondary: '#6E6E73',
           colorBorder: '#E5E5EA',

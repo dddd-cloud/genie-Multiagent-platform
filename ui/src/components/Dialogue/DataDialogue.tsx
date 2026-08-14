@@ -27,7 +27,7 @@ const DataDialogue: FC<Props> = (props) => {
     <div className="h-full text-[14px] font-normal flex flex-col text-text-primary">
       {chat.query ? (
         <div className="w-full mt-[24px] flex justify-end">
-          <div className="max-w-[80%] bg-brand text-white px-12 py-8 rounded-lg rounded-tr-lg rounded-br-sm rounded-bl-lg">
+          <div className="max-w-[80%] bg-[#E8E8ED] text-text-primary px-14 py-10 rounded-[18px] rounded-br-[6px]">
             {chat.query}
           </div>
         </div>

@@ -19,10 +19,7 @@ test.describe('Phase2 orchestration timeline (mock)', () => {
     await clickSend(page);
 
     await expect(page.getByTestId('orchestration-timeline')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('orchestration-route')).toContainText(
-      /ORCHESTRATED|MULTI_STEP/i,
-    );
-    await expect(page.getByTestId('orchestration-attempt-1')).toBeVisible();
+    await expect(page.getByTestId('orchestration-master-toggle')).toBeVisible();
     await expect(
       page.getByText('Orchestrated run finished with a full summary.'),
     ).toBeVisible({ timeout: 30_000 });

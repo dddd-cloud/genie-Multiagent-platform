@@ -129,7 +129,7 @@ const FilePreview: GenieType.FC<{
         <i className={classNames(STEP_CLASS, 'rotate-180')} onClick={next}></i>
         <Slider
           className="flex-1 text-primary"
-          styles={{ track: { background: '#4040FFB2' } }}
+          styles={{ track: { background: '#1D1D1FB2' } }}
           step={1}
           onChange={setCurActiveTaskIndex}
           // slider 的value和max都为0的时候会显示在最左边，所以这里给个默认值1

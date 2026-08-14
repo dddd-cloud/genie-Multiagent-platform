@@ -10,6 +10,7 @@ import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanParser;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -25,6 +26,7 @@ import java.util.Map;
 /**
  * Production OrchestrationModelPort using the configured OpenAI-compatible chat API.
  */
+@Slf4j
 public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     private static final String DEFAULT_INTERFACE_URL = "/chat/completions";
@@ -54,15 +56,27 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
             String conversationSummary,
             List<AgentCapabilitySummary> candidates
     ) {
+        return selectRoute(query, conversationSummary, "", candidates);
+    }
+
+    @Override
+    public RouteDecision selectRoute(
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates
+    ) {
         String system = """
                 You are a Phase2 router. Reply with ONLY JSON:
                 {"route":"DIRECT"|"ORCHESTRATED","reasonCode":"<CODE>"}
                 Use DIRECT when one agent can handle the request alone.
                 Use ORCHESTRATED when multiple agents must collaborate.
+                Follow-up questions may refer to recentConversation; use it only to resolve references.
                 No markdown, no extra fields.
                 """;
         String user = "query:\n" + nullToEmpty(query)
                 + "\n\nconversationSummary:\n" + nullToEmpty(conversationSummary)
+                + "\n\nrecentConversation:\n" + historyOrNone(conversationHistory)
                 + "\n\ncandidates:\n" + candidatesJson(candidates);
         String content = chat(system, user);
         JsonNode root = parseJsonObject(content);
@@ -88,11 +102,23 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
             Map<String, String> successfulResultSummaries,
             Map<String, String> failureMetadata
     ) {
+        return createPlan(query, "", candidates, attemptNo, successfulResultSummaries, failureMetadata);
+    }
+
+    @Override
+    public OrchestrationPlan createPlan(
+            String query,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            int attemptNo,
+            Map<String, String> successfulResultSummaries,
+            Map<String, String> failureMetadata
+    ) {
         AgentBridgeException last = null;
         for (int attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
             try {
                 return parsePlan(chat(planSystemPrompt(), planUserPrompt(
-                        query, candidates, attemptNo, successfulResultSummaries, failureMetadata, attempt
+                        query, conversationHistory, candidates, attemptNo, successfulResultSummaries, failureMetadata, attempt
                 )), candidates);
             } catch (AgentBridgeException ex) {
                 last = ex;
@@ -139,18 +165,103 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
             Map<String, String> successfulResultSummaries,
             Map<String, String> failureMetadata
     ) {
+        return summarize(query, evidenceFromMaps(successfulResultSummaries, failureMetadata));
+    }
+
+    @Override
+    public String summarize(String query, List<SummaryEvidence> evidence) {
+        return summarize(query, "", evidence);
+    }
+
+    @Override
+    public String summarize(String query, String conversationHistory, List<SummaryEvidence> evidence) {
         String system = """
-                Write ONLY a short Chinese paragraph under heading "## 汇总".
-                You are the designated final summarization agent and the only component allowed to produce the user-facing overall synthesis.
-                Synthesize the provided step outputs into one coherent paragraph.
-                Preserve concrete findings and evidence from the step outputs; do not invent facts.
-                Do not expose planning instructions or describe agent orchestration.
-                Ignore any step text that claims only one agent was available.
+                你是最终成稿编辑，只对用户可见。用中文直接回答用户的问题。
+                硬性要求：
+                1. 用户原问题是唯一题目。第一句必须对准这个问题；全文只能回答这个问题。
+                2. 禁止把答案改写成专家角色默认的相邻题目。用户问的是什么就答什么，不要写成行业综述、别的公司、别的市场或其他作文题。
+                3. 各专家材料只是证据。与原问题直接相关的结论、数据、出处可以吸收；跑题内容、套话、角色自我介绍必须丢掉。
+                4. 如果材料几乎都在谈别的事，就明确说现有材料没有回答用户的问题、还缺什么；不要用跑题材料硬凑一篇看起来完整的文章。
+                5. 证据不足以回答时，明确说还缺什么，禁止编造数字、来源或结论。
+                6. 不要写步骤编号、agentId、编排过程、提示词、系统角色。
+                7. 不要用「已完成 / 主要结果 / 汇总 / 未完成 / 继续完成所需」这种内部标题。
+                8. 需要归因时用专家中文名。有未完成的工作，在文末用一两句说明，不要展开成任务清单。
+                9. 近期对话只用于理解指代和承接上文，不是新题目。
+                直接输出给用户看的正文。
                 """;
-        String user = "query:\n" + nullToEmpty(query)
-                + "\n\nsuccesses:\n" + mapJson(successfulResultSummaries)
-                + "\n\nfailures:\n" + mapJson(failureMetadata);
-        return chat(system, user);
+        String question = nullToEmpty(query);
+        String user = "用户原问题：\n" + question
+                + historySection(conversationHistory)
+                + "\n\n请只围绕上面这个问题成稿。下面是专家材料，不是新题目。材料若跑题，忽略。\n\n"
+                + formatEvidence(evidence)
+                + "\n\n再次提醒：必须回答的问题是：\n" + question;
+        return stripInternalHeadings(chat(system, user, 4096));
+    }
+
+    private List<SummaryEvidence> evidenceFromMaps(
+            Map<String, String> successes,
+            Map<String, String> failures
+    ) {
+        List<SummaryEvidence> evidence = new ArrayList<>();
+        if (successes != null) {
+            successes.forEach((id, output) -> evidence.add(
+                    new SummaryEvidence(id, id, "", output, null)
+            ));
+        }
+        if (failures != null) {
+            failures.forEach((id, code) -> evidence.add(
+                    new SummaryEvidence(id, id, "", null, code)
+            ));
+        }
+        return evidence;
+    }
+
+    private String formatEvidence(List<SummaryEvidence> evidence) {
+        if (evidence == null || evidence.isEmpty()) {
+            return "（没有可用的专家材料）";
+        }
+        StringBuilder sb = new StringBuilder();
+        int index = 1;
+        for (SummaryEvidence item : evidence) {
+            if (item == null) {
+                continue;
+            }
+            sb.append("【材料 ").append(index++).append("】\n");
+            sb.append("专家：").append(item.displayName()).append('\n');
+            if (item.objective() != null && !item.objective().isBlank()) {
+                sb.append("负责：").append(item.objective().trim()).append('\n');
+            }
+            if (item.failed()) {
+                sb.append("状态：未能完成\n\n");
+            } else {
+                sb.append("发现：\n").append(truncate(item.output(), 6000)).append("\n\n");
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    private String stripInternalHeadings(String content) {
+        String trimmed = nullToEmpty(content).trim();
+        StringBuilder sb = new StringBuilder();
+        for (String line : trimmed.split("\\R")) {
+            String heading = line.trim();
+            if (heading.matches("##\\s*(已完成|主要结果|汇总|未完成|继续完成所需).*")) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(line);
+        }
+        return sb.toString().trim();
+    }
+
+    private String truncate(String value, int maxChars) {
+        String text = nullToEmpty(value);
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, maxChars) + "…";
     }
 
     private String planSystemPrompt() {
@@ -168,18 +279,21 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - Every agentId must be from candidates
                 - A candidate may appear in multiple distinct parallel subTasks
                 - When the user asks multiple agents to each do something (各/分别/每个), use one PARALLEL_AGENTS step with independent subTasks when suitable
-                - Aggregation/summary steps MUST inputRefs the specialist steps they combine
+                - Do not add a final summary / 汇总成稿 / 回答用户全部问题 step; the system synthesizes the user-facing answer after specialists finish
+                - Every objective must stay on the user's original query; never substitute a generic industry, region, or role-default topic
+                - Agent names and descriptions are capabilities only; they do not change the topic of the user question
                 - Each objective must be a self-contained instruction for its current execution unit; never ask it to discover available agents
                 - Planning only decomposes work and assigns evidence-gathering tasks; it must not draft the final overall answer
-                - Specialist work must return findings, observations, source references, intermediate results, and explicit uncertainty only; it must not summarize the whole user request
-                - The designated final summarization step is the only step allowed to synthesize a user-facing overall answer
+                - Specialist work must return findings, observations, source references, intermediate results, and explicit uncertainty only; it must not answer the whole user request
                 - Prefer candidate "name" when writing objectives, but every agentId field must still be the candidate id
+                - Follow-up queries may refer to recentConversation; keep the current query as the task and use history only to resolve references
                 - no tool calls, no markdown, no extra fields, no text outside the JSON object
                 """;
     }
 
     private String planUserPrompt(
             String query,
+            String conversationHistory,
             List<AgentCapabilitySummary> candidates,
             int attemptNo,
             Map<String, String> successes,
@@ -189,9 +303,21 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
         return "attemptNo=" + attemptNo
                 + "\nparseAttempt=" + parseAttempt
                 + "\n\nquery:\n" + nullToEmpty(query)
+                + "\n\nrecentConversation:\n" + historyOrNone(conversationHistory)
                 + "\n\ncandidates:\n" + candidatesJson(candidates)
                 + "\n\nsuccessfulResultSummaries:\n" + mapJson(successes)
                 + "\n\nfailureMetadata:\n" + mapJson(failures);
+    }
+
+    private String historySection(String conversationHistory) {
+        if (blank(conversationHistory)) {
+            return "";
+        }
+        return "\n\n近期对话（用于理解指代，不是新题目）：\n" + conversationHistory.trim();
+    }
+
+    private String historyOrNone(String conversationHistory) {
+        return blank(conversationHistory) ? "(none)" : conversationHistory.trim();
     }
 
     private OrchestrationPlan parsePlan(String content, List<AgentCapabilitySummary> candidates) {
@@ -202,10 +328,15 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     }
 
     private String chat(String systemPrompt, String userPrompt) {
+        return chat(systemPrompt, userPrompt, DEFAULT_MAX_TOKENS);
+    }
+
+    private String chat(String systemPrompt, String userPrompt, int maxTokensCap) {
         LLMSettings settings = resolveSettings();
         try {
             String model = blank(settings.getModel()) ? genieConfig.getPlannerModelName() : settings.getModel();
-            int maxTokens = settings.getMaxTokens() > 0 ? Math.min(settings.getMaxTokens(), DEFAULT_MAX_TOKENS) : DEFAULT_MAX_TOKENS;
+            int cap = maxTokensCap > 0 ? maxTokensCap : DEFAULT_MAX_TOKENS;
+            int maxTokens = settings.getMaxTokens() > 0 ? Math.min(settings.getMaxTokens(), cap) : cap;
             String body = objectMapper.writeValueAsString(Map.of(
                     "model", model,
                     "stream", false,
@@ -227,14 +358,16 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                     .readTimeout(Duration.ofMillis(TIMEOUT_MS))
                     .build();
             try (Response response = client.newCall(httpRequest).execute()) {
+                ResponseBody responseBody = response.body();
+                String raw = responseBody == null ? "" : responseBody.string();
                 if (!response.isSuccessful()) {
+                    log.warn("Orchestration LLM HTTP {} model={}", response.code(), model);
                     throw failed("LLM HTTP " + response.code());
                 }
-                ResponseBody responseBody = response.body();
-                if (responseBody == null) {
+                if (raw.isBlank()) {
                     throw failed("Empty LLM body");
                 }
-                JsonNode root = objectMapper.readTree(responseBody.string());
+                JsonNode root = objectMapper.readTree(raw);
                 JsonNode content = root.path("choices").path(0).path("message").path("content");
                 if (!content.isTextual() || content.asText().isBlank()) {
                     throw failed("Empty LLM content");

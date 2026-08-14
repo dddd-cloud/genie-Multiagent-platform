@@ -21,6 +21,7 @@ public final class ConfiguredReactAgentFactory {
             On failure use:
             {"status":"FAILURE","output":null,"errorCode":"EXECUTION_ERROR","retryable":true}
             Inside output, escape every double-quote as \\" and every newline as \\n.
+            Keep output under 20000 characters: compact facts and sources, not a full search dump.
             When tools are available, you MUST call them for live/external facts (tickets, schedules, search, dates) instead of guessing or refusing.
             Prefer answering without tools only when the tool list is empty or the question needs no external data.
             For train/ticket tools: use trainFilterFlags=G for 高铁, set earliestStartTime/latestStartTime for the requested window, limitedNum=60 (never 0), sortFlag=startTime, format=text.
@@ -30,13 +31,16 @@ public final class ConfiguredReactAgentFactory {
             Do NOT re-query for a fuller timetable. Do NOT invent times missing from schedule.
             If the user message describes a single step objective for you as one sub-agent, answer ONLY that objective.
             Do not discuss which other agents are available, and do not rewrite the whole multi-agent plan.
+            If the user or your step asks for an html, markdown, or downloadable file, you MUST call file_tool with command=upload, a filename ending in .html or .md, description, and the full file content BEFORE the SUCCESS JSON. Put the returned file link into output.
             """;
 
     /** Short nudge only — never re-inject the full system prompt (skills) each step. */
     private static final String NEXT_STEP_NUDGE = """
-            After the latest tool result: either call one more truly necessary tool, or finish NOW with ONLY the SUCCESS/FAILURE JSON object.
+            After the latest tool result: if you still need to write an html/md file and have not called file_tool upload yet, call file_tool now. Otherwise finish NOW with ONLY the SUCCESS/FAILURE JSON object. Do not call another tool.
+            Put compact bullets and sources into output (under 20000 characters). Do not paste the full search report.
             If a schedule block is present, answer from it (include all departures when asked). Do not call get-tickets again.
             """;
+    static final int MAX_OBSERVE_CHARS = 2_000;
 
     public ReactImplAgent create(
             AgentContext context,
@@ -70,8 +74,8 @@ public final class ConfiguredReactAgentFactory {
         agent.setNextStepPromptSnapshot(NEXT_STEP_NUDGE);
         agent.setLlm(new LLM(profile.resolvedModelName(), ""));
         agent.setMaxSteps(boundedSteps);
-        // Schedule summaries are compact but may list ~60 trains.
-        agent.setMaxObserve(8000);
+        agent.setMaxObserve(MAX_OBSERVE_CHARS);
+        agent.setFinishWithoutToolsAfterObservations(true);
         agent.setLlmTimeoutSeconds(600);
         agent.setAvailableTools(context.getToolCollection());
         return agent;

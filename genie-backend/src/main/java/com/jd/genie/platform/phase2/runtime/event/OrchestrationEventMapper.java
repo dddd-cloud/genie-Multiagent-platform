@@ -64,6 +64,17 @@ public final class OrchestrationEventMapper {
             String response,
             String completionStatus
     ) {
+        return finalResponse(requestId, runId, sequence, response, completionStatus, List.of());
+    }
+
+    public GptProcessResult finalResponse(
+            String requestId,
+            String runId,
+            long sequence,
+            String response,
+            String completionStatus,
+            List<Map<String, Object>> fileList
+    ) {
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("schemaVersion", 2);
         event.put("eventId", requestId + ":" + sequence);
@@ -83,13 +94,18 @@ public final class OrchestrationEventMapper {
         event.put("errorCode", null);
         event.put("steps", List.of());
         event.put("completionStatus", completionStatus);
+        Map<String, Object> resultMap = new LinkedHashMap<>();
+        resultMap.put("orchestrationEvent", event);
+        if (fileList != null && !fileList.isEmpty()) {
+            resultMap.put("fileList", List.copyOf(fileList));
+        }
         return GptProcessResult.builder()
                 .status("success")
                 .response(response)
                 .responseAll(response)
                 .finished(true)
                 .packageType("result")
-                .resultMap(Map.of("orchestrationEvent", event))
+                .resultMap(resultMap)
                 .build();
     }
 }

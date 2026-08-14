@@ -11,7 +11,12 @@ import com.jd.genie.platform.phase2.configuration.skill.entity.SkillDefinitionEn
 import com.jd.genie.platform.phase2.configuration.skill.exception.SkillConfigurationException;
 import com.jd.genie.platform.phase2.configuration.skill.mapper.SkillDefinitionMapper;
 import com.jd.genie.platform.phase2.configuration.skill.model.SkillStatus;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.LoadedSkillPackage;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageLoader;
 import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
+import com.jd.genie.platform.phase2contract.dto.SkillEntrypointView;
+import com.jd.genie.platform.phase2contract.enums.SkillPackageMode;
+import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -37,6 +42,7 @@ public class SkillDefinitionService {
     private final SkillDefinitionMapper skillMapper;
     private final AgentSkillBindingMapper bindingMapper;
     private final ObjectProvider<ToolBindingPort> toolBindingPortProvider;
+    private final ObjectProvider<SkillPackageLoader> skillPackageLoaderProvider;
     private final Clock clock = Clock.systemUTC();
 
     @Transactional
@@ -61,13 +67,13 @@ public class SkillDefinitionService {
         entity.setVersion(0L);
         skillMapper.insert(entity);
         toolBindingPort().replaceSkillBindings(user, entity.getId(), capabilityKeys);
-        return toResponse(entity, capabilityKeys);
+        return toResponse(user, entity, capabilityKeys, false);
     }
 
     @Transactional(readOnly = true)
     public SkillResponse getSkill(CurrentUser user, String skillId) {
         SkillDefinitionEntity entity = requireOwnedSkill(user, skillId);
-        return toResponse(entity, skillCapabilityKeys(user, skillId));
+        return toResponse(user, entity, skillCapabilityKeys(user, skillId), true);
     }
 
     @Transactional(readOnly = true)
@@ -81,7 +87,7 @@ public class SkillDefinitionService {
         boolean hasMore = rows.size() > validPageSize;
         List<SkillDefinitionEntity> items = hasMore ? rows.subList(0, validPageSize) : rows;
         return new PageResponse<>(
-            items.stream().map(entity -> toResponse(entity, skillCapabilityKeys(user, entity.getId()))).toList(),
+            items.stream().map(entity -> toResponse(user, entity, skillCapabilityKeys(user, entity.getId()), false)).toList(),
             validPage,
             validPageSize,
             hasMore
@@ -106,14 +112,14 @@ public class SkillDefinitionService {
         int updated = skillMapper.updateOwnedWithVersion(user.tenantId(), user.userId(), update, version, Instant.now(clock));
         classifyZeroRow(user, skillId, updated);
         toolBindingPort().replaceSkillBindings(user, skillId, capabilityKeys);
-        return toResponse(requireOwnedSkill(user, skillId), capabilityKeys);
+        return toResponse(user, requireOwnedSkill(user, skillId), capabilityKeys, true);
     }
 
     @Transactional
     public SkillResponse enableSkill(CurrentUser user, String skillId, Long version) {
         SkillDefinitionEntity entity = requireOwnedSkill(user, skillId);
         if (SkillStatus.ENABLED.name().equals(entity.getStatus())) {
-            return toResponse(entity, skillCapabilityKeys(user, skillId));
+            return toResponse(user, entity, skillCapabilityKeys(user, skillId), true);
         }
         int updated = skillMapper.updateStatusOwnedWithVersion(user.tenantId(), user.userId(), skillId,
             requireVersion(version), SkillStatus.ENABLED.name(), Instant.now(clock));
@@ -125,7 +131,7 @@ public class SkillDefinitionService {
     public SkillResponse disableSkill(CurrentUser user, String skillId, Long version) {
         SkillDefinitionEntity entity = requireOwnedSkill(user, skillId);
         if (SkillStatus.DISABLED.name().equals(entity.getStatus())) {
-            return toResponse(entity, skillCapabilityKeys(user, skillId));
+            return toResponse(user, entity, skillCapabilityKeys(user, skillId), true);
         }
         int updated = skillMapper.updateStatusOwnedWithVersion(user.tenantId(), user.userId(), skillId,
             requireVersion(version), SkillStatus.DISABLED.name(), Instant.now(clock));
@@ -273,10 +279,29 @@ public class SkillDefinitionService {
         return port;
     }
 
-    private SkillResponse toResponse(SkillDefinitionEntity entity, List<String> capabilityKeys) {
+    private SkillResponse toResponse(CurrentUser user, SkillDefinitionEntity entity, List<String> capabilityKeys,
+                                     boolean failClosedOnInvalidPackage) {
+        PackageFields pkg = resolvePackage(user, entity.getId(), failClosedOnInvalidPackage);
         return new SkillResponse(entity.getId(), entity.getName(), entity.getDescription(), entity.getInstruction(),
             entity.getOutputRequirement(), entity.getStatus(), entity.getVersion(), capabilityKeys,
-            entity.getCreatedAt(), entity.getUpdatedAt());
+            entity.getCreatedAt(), entity.getUpdatedAt(), pkg.packageMode(), pkg.packageHash(), pkg.entrypoints());
+    }
+
+    private PackageFields resolvePackage(CurrentUser user, String skillId, boolean failClosedOnInvalidPackage) {
+        SkillPackageLoader loader = skillPackageLoaderProvider.getIfAvailable();
+        if (loader == null) {
+            return PackageFields.unknown();
+        }
+        try {
+            return loader.load(user, skillId)
+                .map(PackageFields::filesystem)
+                .orElseGet(PackageFields::legacy);
+        } catch (Phase2ContractException e) {
+            if (failClosedOnInvalidPackage) {
+                throw e;
+            }
+            return PackageFields.unknown();
+        }
     }
 
     private SkillConfigurationException error(MvpErrorCode code) {
@@ -290,5 +315,31 @@ public class SkillDefinitionService {
         String outputRequirement,
         List<String> capabilityKeys
     ) {
+    }
+
+    private record PackageFields(
+        String packageMode,
+        String packageHash,
+        List<SkillEntrypointView> entrypoints
+    ) {
+        private PackageFields {
+            entrypoints = entrypoints == null ? List.of() : List.copyOf(entrypoints);
+        }
+
+        static PackageFields unknown() {
+            return new PackageFields(null, null, List.of());
+        }
+
+        static PackageFields legacy() {
+            return new PackageFields(SkillPackageMode.LEGACY_SYNTHETIC.name(), null, List.of());
+        }
+
+        static PackageFields filesystem(LoadedSkillPackage loaded) {
+            return new PackageFields(
+                SkillPackageMode.FILESYSTEM.name(),
+                loaded.packageHash(),
+                loaded.entrypoints()
+            );
+        }
     }
 }

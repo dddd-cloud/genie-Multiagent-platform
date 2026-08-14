@@ -18,6 +18,7 @@ import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequest;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator.ValidatedPhase2Request;
+import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationConversationHistory;
 import com.jd.genie.platform.phase2.runtime.orchestration.Phase2OrchestrationRuntime;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
@@ -178,10 +179,12 @@ public class GptProcessServiceImpl implements IGptProcessService {
                         "Phase2 orchestration runtime is not available"
                 );
             }
+            String conversationHistory = OrchestrationConversationHistory.format(trustedRequest.getHistoryMessages());
             RouteDecision route = runtime.selectRoute(
                     request.executionMode(),
                     trustedRequest.getQuery(),
                     request.localContext().conversationSummary(),
+                    conversationHistory,
                     candidates
             );
             if (route.route() == RouteDecision.Route.DIRECT) {
@@ -198,6 +201,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             trustedRequest.getQuery(),
                             request.localContext().conversationSummary(),
                             request.localContext().longTermMemory(),
+                            conversationHistory,
                             candidates,
                             route,
                             observer

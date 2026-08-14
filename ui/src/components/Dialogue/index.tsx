@@ -4,7 +4,8 @@ import remarkGfm from "remark-gfm";
 import AttachmentList from "@/components/AttachmentList";
 import LoadingDot from "@/components/LoadingDot";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import { buildAction, getIcon, buildAttachment } from "@/utils/chat";
+import { USER_STOPPED_COPY } from "@/features/conversation/liveChatRuns";
+import { buildAction, getIcon, buildAttachment, toPublicFileUrl, toDownloadUrl } from "@/utils/chat";
 
 type Props = {
   chat: CHAT.ChatItem;
@@ -242,7 +243,7 @@ const Dialogue: FC<Props> = (props) => {
       ) : null}
       {chat.query ? (
         <div className="w-full mt-[24px] flex justify-end">
-          <div className="max-w-[80%] bg-brand text-white px-12 py-8 rounded-lg rounded-tr-lg rounded-br-sm rounded-bl-lg">
+          <div className="max-w-[80%] bg-[#E8E8ED] text-text-primary px-14 py-10 rounded-[18px] rounded-br-[6px]">
             {chat.query}
           </div>
         </div>
@@ -279,13 +280,52 @@ const Dialogue: FC<Props> = (props) => {
           <ConclusionSection chat={chat} changeFile={changeFile} />
         </div>
       ) : null}
-      {!chat.conclusion && chat.response ? (
+      {!chat.conclusion && chat.stoppedByUser ? (
+        <div
+          className="w-full mt-[24px] text-[15px] leading-[24px] text-text-tertiary"
+          data-testid="chat-stopped-copy"
+        >
+          {chat.response || USER_STOPPED_COPY}
+        </div>
+      ) : null}
+      {!chat.conclusion && !chat.stoppedByUser && chat.response ? (
         <div className="w-full mt-[24px]">
-          <div className="mb-[8px] markdown-body text-[15px] leading-[24px] text-text-primary [&_h1]:text-[18px] [&_h1]:font-semibold [&_h1]:mb-8 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h2]:mb-8 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mb-6 [&_p]:mb-8 [&_strong]:font-semibold">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+          <div className="mb-[8px] markdown-body text-[15px] leading-[24px] text-text-primary [&_h1]:text-[18px] [&_h1]:font-semibold [&_h1]:mb-8 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h2]:mb-8 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mb-6 [&_p]:mb-8 [&_strong]:font-semibold [&_a]:text-brand [&_a]:underline">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              skipHtml
+              components={{
+                a: ({ href, children }) => {
+                  const resolved = toPublicFileUrl(href) || href;
+                  const downloadHref = toDownloadUrl(resolved) || resolved;
+                  const isDownload = Boolean(
+                    downloadHref &&
+                      (/\/file_tool\/download\//.test(downloadHref) ||
+                        /\.(html?|md|csv|txt|json|pptx?)$/i.test(downloadHref)),
+                  );
+                  return (
+                    <a
+                      href={isDownload ? downloadHref : resolved}
+                      download={isDownload ? true : undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {children}
+                    </a>
+                  );
+                },
+              }}
+            >
               {chat.response}
             </ReactMarkdown>
           </div>
+          {(chat.generatedFiles || []).length ? (
+            <AttachmentList
+              files={chat.generatedFiles || []}
+              preview={true}
+              review={changeFile}
+            />
+          ) : null}
         </div>
       ) : null}
       {chat.loading ? <LoadingDot /> : null}

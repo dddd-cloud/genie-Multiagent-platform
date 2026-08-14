@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, type ReactNode } from "react";
 import { Input, Button, Tooltip } from "antd";
 import classNames from "classnames";
 import { TextAreaRef } from "antd/es/input/TextArea";
@@ -14,10 +14,24 @@ type Props = {
   product?: CHAT.Product;
   send: (p: CHAT.TInputInfo) => void;
   dbsShow?: (show: boolean) => void;
+  leftExtra?: ReactNode;
+  /** Live generation: replace send with a ChatGPT-style stop control. */
+  running?: boolean;
+  onStop?: () => void;
 };
 
 const GeneralInput: GenieType.FC<Props> = (props) => {
-  const { placeholder, showBtn, disabled, product, send, dbsShow } = props;
+  const {
+    placeholder,
+    showBtn,
+    disabled,
+    product,
+    send,
+    dbsShow,
+    leftExtra,
+    running,
+    onStop,
+  } = props;
   const [question, setQuestion] = useState<string>("");
   const [deepThink, setDeepThink] = useState<boolean>(false);
   const textareaRef = useRef<TextAreaRef>(null);
@@ -59,7 +73,7 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
       return;
     }
     // 屏蔽状态，不发
-    if (!question || disabled) {
+    if (!question || disabled || running) {
       return;
     }
     send({
@@ -91,8 +105,9 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
   return (
     <div
       className={classNames(
-        "rounded-lg border border-border bg-surface overflow-hidden p-[12px] transition-[border-color,box-shadow] duration-150",
-        "focus-within:border-brand focus-within:shadow-[0_0_0_3px_rgba(64,64,255,0.12)]",
+        "rounded-[28px] border border-black/8 bg-white overflow-visible p-[14px] pb-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        "transition-[border-color,box-shadow] duration-150",
+        "focus-within:border-black/15 focus-within:shadow-[0_8px_28px_rgba(0,0,0,0.06)]",
       )}
     >
       <div className="relative">
@@ -101,7 +116,7 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
           value={question}
           placeholder={placeholder}
           className={classNames(
-            "h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-transparent text-text-primary",
+            "h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-transparent text-text-primary text-[15px]",
             showBtn && product ? "indent-86" : "",
           )}
           onChange={questionChange}
@@ -120,59 +135,80 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
           }}
         />
         {showBtn && product ? (
-          <div className="h-[24px] w-[80px] absolute top-0 left-0 flex items-center justify-center rounded-sm bg-brand-soft text-text-primary text-[12px]">
+          <div className="h-[24px] w-[80px] absolute top-0 left-0 flex items-center justify-center rounded-full bg-[#F2F2F7] text-text-primary text-[12px]">
             <i className={`font_family ${product.img} ${product.color} text-[14px]`}></i>
             <div className="ml-[6px]">{product.name}</div>
           </div>
         ) : null}
       </div>
-      <div className="h-30 flex justify-between items-center mt-[6px]">
-        {showBtn ? (
-          <div className="flex items-center">
-            <Button
-              color={deepThink ? "primary" : "default"}
-              variant="outlined"
-              className={classNames(
-                "text-[12px] p-[8px] h-[28px] transition-colors duration-150",
-                deepThink
-                  ? "hover:text-brand"
-                  : "hover:text-text-primary hover:border-border-strong",
+      <div className="min-h-32 flex justify-between items-center mt-[4px] gap-8">
+        <div className="flex items-center min-w-0">
+          {leftExtra}
+          {showBtn ? (
+            <div className="flex items-center">
+              <Button
+                color={deepThink ? "primary" : "default"}
+                variant="outlined"
+                className={classNames(
+                  "text-[12px] px-[10px] h-[28px] rounded-full transition-colors duration-150",
+                  deepThink
+                    ? "hover:text-brand"
+                    : "hover:text-text-primary hover:border-border-strong",
+                )}
+                onClick={changeThinkStatus}
+              >
+                <i className="font_family icon-shendusikao"></i>
+                <span className="ml-[-4px]">深度研究</span>
+              </Button>
+              {product?.type === "dataAgent" && (
+                <Tooltip placement="right" title="查看知识库">
+                  <i
+                    className="font_family icon-zhishiku cursor-pointer text-text-secondary text-[18px] ml-[8px] border border-border rounded-full p-[3px] hover:bg-[#F2F2F7] transition-colors duration-150"
+                    onClick={() => dbsShow && dbsShow(true)}
+                  ></i>
+                </Tooltip>
               )}
-              onClick={changeThinkStatus}
-            >
-              <i className="font_family icon-shendusikao"></i>
-              <span className="ml-[-4px]">深度研究</span>
-            </Button>
-            {product?.type === "dataAgent" && (
-              <Tooltip placement="right" title="查看知识库">
-                <i
-                  className="font_family icon-zhishiku cursor-pointer text-brand text-[18px] ml-[8px] border border-brand rounded-tr-md rounded-bl-md p-[3px] hover:bg-brand-soft transition-colors duration-150"
-                  onClick={() => dbsShow && dbsShow(true)}
-                ></i>
-              </Tooltip>
-            )}
-          </div>
-        ) : (
-          <div></div>
-        )}
-        <div className="flex items-center">
+            </div>
+          ) : null}
+        </div>
+        <div className="flex items-center shrink-0">
           <span className="text-[12px] text-text-tertiary mr-8 flex items-center">
             {enterTip}
           </span>
-          <Tooltip title="发送">
-            <button
-              type="button"
-              aria-label="发送"
-              disabled={!canSend}
-              className={classNames(
-                "font_family icon-fasongtianchong border-0 bg-transparent p-0 leading-none transition-colors duration-150",
-                canSend
-                  ? "cursor-pointer text-brand hover:text-brand-hover"
-                  : "cursor-not-allowed text-text-tertiary",
-              )}
-              onClick={sendMessage}
-            />
-          </Tooltip>
+          {running ? (
+            <Tooltip title="停止生成">
+              <button
+                type="button"
+                aria-label="停止生成"
+                data-testid="chat-stop-button"
+                className="relative size-28 rounded-full border-0 bg-text-primary text-white cursor-pointer flex items-center justify-center hover:bg-black"
+                onClick={() => onStop?.()}
+              >
+                <span
+                  className="absolute inset-[2px] rounded-full border-[1.5px] border-white/25 border-t-white animate-spin"
+                  aria-hidden
+                />
+                <span className="relative size-[10px] rounded-[2px] bg-white" aria-hidden />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip title="发送">
+              <button
+                type="button"
+                aria-label="发送"
+                disabled={!canSend}
+                className={classNames(
+                  "size-28 rounded-full border-0 flex items-center justify-center transition-colors duration-150",
+                  canSend
+                    ? "cursor-pointer bg-text-primary text-white hover:bg-black"
+                    : "cursor-not-allowed bg-[#EBEBF0] text-[#C7C7CC]",
+                )}
+                onClick={sendMessage}
+              >
+                <i className="font_family icon-fasongtianchong text-[14px] leading-none" />
+              </button>
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>

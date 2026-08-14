@@ -14,6 +14,9 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice(basePackages = "com.jd.genie.platform.phase2.configuration.skill.api")
 public class SkillApiExceptionHandler {
@@ -33,9 +36,15 @@ public class SkillApiExceptionHandler {
         HttpMediaTypeNotSupportedException.class,
         MethodArgumentTypeMismatchException.class,
         MissingServletRequestParameterException.class,
+        MissingServletRequestPartException.class,
+        MaxUploadSizeExceededException.class,
+        MultipartException.class,
         IllegalArgumentException.class
     })
-    ResponseEntity<ApiResponse<Void>> badRequest(Exception ignored) {
+    ResponseEntity<ApiResponse<Void>> badRequest(Exception exception) {
+        if (exception instanceof MaxUploadSizeExceededException) {
+            return error(MvpErrorCode.SKILL_PACKAGE_INVALID);
+        }
         return error(MvpErrorCode.VALIDATION_ERROR);
     }
 

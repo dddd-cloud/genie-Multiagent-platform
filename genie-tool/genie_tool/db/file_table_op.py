@@ -113,9 +113,16 @@ class FileInfoOp(object):
             result = await session.execute(state)
             return result.scalars().all()
 
+def _file_server_url() -> str:
+    raw = (os.getenv("FILE_SERVER_URL") or "").strip()
+    if not raw or raw.lower() in {"none", "null"} or not raw.lower().startswith("http"):
+        return "http://127.0.0.1:1601/v1/file_tool"
+    return raw.rstrip("/")
+
+
 def get_file_preview_url(file_id: str, file_name: str):
-    return f"{os.getenv('FILE_SERVER_URL')}/preview/{file_id}/{file_name}"
+    return f"{_file_server_url()}/preview/{file_id}/{file_name}"
 
 
 def get_file_download_url(file_id: str, file_name: str):
-    return f"{os.getenv('FILE_SERVER_URL')}/download/{file_id}/{file_name}"
+    return f"{_file_server_url()}/download/{file_id}/{file_name}"

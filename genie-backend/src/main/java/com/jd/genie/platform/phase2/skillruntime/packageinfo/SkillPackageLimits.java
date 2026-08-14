@@ -6,6 +6,7 @@ public final class SkillPackageLimits {
     public static final int MAX_RESOURCE_BYTES = 2 * 1024 * 1024;
     public static final int MAX_FILE_COUNT = 256;
     public static final long MAX_PACKAGE_BYTES = 16L * 1024 * 1024;
+    public static final long MAX_IMPORT_ZIP_BYTES = 10L * 1024 * 1024;
     public static final long MAX_BUNDLE_BYTES = 20L * 1024 * 1024;
     public static final int MAX_INPUT_JSON_BYTES = 1024 * 1024;
     public static final int MAX_OUTPUT_JSON_BYTES = 2 * 1024 * 1024;

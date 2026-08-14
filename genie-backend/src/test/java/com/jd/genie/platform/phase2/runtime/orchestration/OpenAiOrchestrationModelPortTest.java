@@ -21,7 +21,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -87,7 +89,116 @@ class OpenAiOrchestrationModelPortTest {
         assertEquals(MvpErrorCode.INTERNAL_ERROR, error.getErrorCode());
     }
 
+    @Test
+    void summarizePromptAnswersTheUserQuestionWithNamedEvidence() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicReference<String> captured = new java.util.concurrent.atomic.AtomicReference<>();
+        OpenAiOrchestrationModelPort port = port(
+                requests,
+                captured,
+                "茅台2024年营收约1221亿元，主要来自高端白酒销售。"
+        );
+
+        String answer = port.summarize(
+                "贵州茅台2024年营收是多少？",
+                List.of(new SummaryEvidence(
+                        "step-1",
+                        "市场研究员",
+                        "核对茅台2024年营收",
+                        "贵州茅台2024年营业总收入约1221亿元。",
+                        null
+                ))
+        );
+
+        assertEquals("茅台2024年营收约1221亿元，主要来自高端白酒销售。", answer);
+        String body = captured.get();
+        assertTrue(body.contains("用户原问题是唯一题目") || body.contains("第一句必须对准这个问题"));
+        assertTrue(body.contains("贵州茅台2024年营收是多少？"));
+        assertTrue(body.contains("市场研究员"));
+        assertTrue(body.contains("核对茅台2024年营收"));
+        assertTrue(body.contains("材料若跑题，忽略"));
+        assertFalse(body.contains("Write ONLY a short Chinese paragraph"));
+        assertFalse(body.contains("## 已完成"));
+    }
+
+    @Test
+    void plannerPromptKeepsObjectivesOnTheUserQuestion() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicReference<String> captured = new java.util.concurrent.atomic.AtomicReference<>();
+        OpenAiOrchestrationModelPort port = port(
+                requests,
+                captured,
+                """
+                {"steps":[{"stepId":"step-1","mode":"SINGLE_AGENT","objective":"核对茅台2024年营收","inputRefs":[],"agentId":"agent-a","subTasks":[]}]}
+                """
+        );
+
+        port.createPlan("贵州茅台2024年营收是多少？", CANDIDATES, 1, Map.of(), Map.of());
+
+        String body = captured.get();
+        assertTrue(body.contains("Do not add a final summary"));
+        assertTrue(body.contains("stay on the user's original query"));
+        assertTrue(body.contains("贵州茅台2024年营收是多少？"));
+        assertFalse(body.contains("Write ONLY a short Chinese paragraph"));
+    }
+
+    @Test
+    void plannerPromptIncludesRecentConversationForFollowUps() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicReference<String> captured = new java.util.concurrent.atomic.AtomicReference<>();
+        OpenAiOrchestrationModelPort port = port(
+                requests,
+                captured,
+                """
+                {"steps":[{"stepId":"step-1","mode":"SINGLE_AGENT","objective":"分析竞品","inputRefs":[],"agentId":"agent-a","subTasks":[]}]}
+                """
+        );
+
+        port.createPlan(
+                "那竞品呢",
+                "user: 茅台市场规模多大\nassistant: 约三千亿。",
+                CANDIDATES,
+                1,
+                Map.of(),
+                Map.of()
+        );
+
+        String body = captured.get();
+        assertTrue(body.contains("那竞品呢"));
+        assertTrue(body.contains("茅台市场规模多大"));
+        assertTrue(body.contains("约三千亿。"));
+        assertTrue(body.contains("recentConversation"));
+        assertTrue(body.contains("use history only to resolve references"));
+    }
+
+    @Test
+    void summarizePromptIncludesRecentConversationForFollowUps() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicReference<String> captured = new java.util.concurrent.atomic.AtomicReference<>();
+        OpenAiOrchestrationModelPort port = port(requests, captured, "竞品份额低于茅台。");
+
+        port.summarize(
+                "那竞品呢",
+                "user: 茅台市场规模多大\nassistant: 约三千亿。",
+                List.of(new SummaryEvidence("step-1", "市场研究员", "分析竞品", "五粮液份额更低。", null))
+        );
+
+        String body = captured.get();
+        assertTrue(body.contains("那竞品呢"));
+        assertTrue(body.contains("茅台市场规模多大"));
+        assertTrue(body.contains("近期对话"));
+        assertTrue(body.contains("用于理解指代"));
+    }
+
     private OpenAiOrchestrationModelPort port(AtomicInteger requests, String... contents) {
+        return port(requests, null, contents);
+    }
+
+    private OpenAiOrchestrationModelPort port(
+            AtomicInteger requests,
+            java.util.concurrent.atomic.AtomicReference<String> capturedBody,
+            String... contents
+    ) {
         GenieConfig config = mock(GenieConfig.class);
         LLMSettings settings = LLMSettings.builder()
                 .model("planner-model")
@@ -97,11 +208,28 @@ class OpenAiOrchestrationModelPortTest {
                 .build();
         when(config.getPlannerModelName()).thenReturn("planner-model");
         when(config.getLlmSettingsMap()).thenReturn(Map.of("planner-model", settings));
-        return new OpenAiOrchestrationModelPort(config, new ObjectMapper(), scriptedClient(requests, contents));
+        return new OpenAiOrchestrationModelPort(
+                config,
+                new ObjectMapper(),
+                scriptedClient(requests, capturedBody, contents)
+        );
     }
 
     private OkHttpClient scriptedClient(AtomicInteger requests, String... contents) {
+        return scriptedClient(requests, null, contents);
+    }
+
+    private OkHttpClient scriptedClient(
+            AtomicInteger requests,
+            java.util.concurrent.atomic.AtomicReference<String> capturedBody,
+            String... contents
+    ) {
         Interceptor scriptedResponse = chain -> {
+            if (capturedBody != null && chain.request().body() != null) {
+                okio.Buffer buffer = new okio.Buffer();
+                chain.request().body().writeTo(buffer);
+                capturedBody.set(buffer.readUtf8());
+            }
             int index = Math.min(requests.getAndIncrement(), contents.length - 1);
             return new Response.Builder()
                     .request(chain.request())

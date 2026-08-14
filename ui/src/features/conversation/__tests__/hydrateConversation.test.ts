@@ -148,7 +148,9 @@ describe('hydrateConversation', () => {
     );
     expect(items[0].loading).toBe(false);
     expect(items[0].persistedStatus).toBe('INTERRUPTED');
-    expect(items[0].errorMessage).toBeTruthy();
+    expect(items[0].stoppedByUser).toBe(true);
+    expect(items[0].response).toBe('已停止生成。你可以继续提问。');
+    expect(items[0].errorMessage).toBeFalsy();
   });
 
   it('marks truncated snapshots', () => {
@@ -293,5 +295,49 @@ describe('hydrateConversation', () => {
       'COMPLETED',
     );
     expect(items[0].orchestrationRecoveryWarning).toBeUndefined();
+  });
+
+  it('restores generatedFiles from resultMap.fileList', () => {
+    const snapshot = {
+      payloadVersion: 1,
+      truncated: false,
+      events: [
+        {
+          status: 'success',
+          response: 'see file',
+          responseAll: 'see file',
+          finished: true,
+          packageType: 'result',
+          resultMap: {
+            fileList: [
+              {
+                fileName: 'page.html',
+                ossUrl: 'http://127.0.0.1:1601/v1/file_tool/download/r/page.html',
+                domainUrl: 'http://127.0.0.1:1601/v1/file_tool/preview/r/page.html',
+                fileSize: 12,
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const items = hydrateConversation(
+      pair({
+        requestId: 'req-file',
+        query: 'make html',
+        assistantStatus: 'COMPLETED',
+        streamSnapshot: JSON.stringify(snapshot),
+        content: 'see file',
+      }),
+      CONV_ID,
+    );
+    expect(items[0].generatedFiles).toEqual([
+      {
+        name: 'page.html',
+        url: 'http://127.0.0.1:1601/v1/file_tool/preview/r/page.html',
+        type: 'html',
+        size: 12,
+      },
+    ]);
   });
 });

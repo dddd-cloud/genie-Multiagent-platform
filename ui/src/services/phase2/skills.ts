@@ -1,5 +1,6 @@
 import type { PageResponse } from '@/contracts';
 import type { Phase2SkillResponse } from '@/contracts/phase2';
+import { requestMvp } from '@/services';
 import { phase2Delete, phase2Get, phase2Post, phase2Put } from './client';
 import type {
   Phase2VersionBody,
@@ -71,4 +72,26 @@ export function disableSkill(
     body,
     signal,
   );
+}
+
+export function importSkillPackage(
+  file: File,
+  skillId?: string,
+  signal?: AbortSignal,
+) {
+  const data = new FormData();
+  data.append('file', file);
+  if (skillId) {
+    data.append('skillId', skillId);
+  }
+  return requestMvp<Phase2SkillResponse>({
+    method: 'POST',
+    url: `${SKILLS_BASE}/import`,
+    data,
+    signal,
+    timeout: 60_000,
+    headers: {
+      'Content-Type': false,
+    },
+  });
 }

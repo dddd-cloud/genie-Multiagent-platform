@@ -16,8 +16,10 @@ declare global {
         tasks: Task[][];
         thought?: string;
         response?: string;
+        generatedFiles?: TFile[];
         taskStatus?: MESSAGE.MsgItem["taskStatus"];
         planList?: PlanItem[];
+        stoppedByUser?: boolean;
       }
     >;
 

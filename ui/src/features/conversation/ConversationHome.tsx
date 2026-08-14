@@ -14,6 +14,8 @@ import {
   demoList,
 } from '@/utils/constants';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
+import ExecutionModeSelector from '@/features/phase2/executionMode/ExecutionModeSelector';
+import type { ExecutionMode } from '@/contracts';
 import { MvpApiError } from '@/services/apiError';
 import { createConversation } from './api';
 import { createRequestId } from './requestId';
@@ -40,6 +42,8 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
   });
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('AUTO');
+  const [allowedAgentIds, setAllowedAgentIds] = useState<string[]>([]);
 
   const showDetail = useCallback((modelInfo: CHAT.ModelInfo) => {
     setCurModel(modelInfo);
@@ -64,6 +68,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
 
       try {
         const requestId = createRequestId();
+        await layout?.discardUnusedDrafts?.();
         const created = await createConversation(null);
         if (!created) {
           message.error('创建会话失败');
@@ -71,6 +76,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
         }
         layout?.upsert({
           ...created,
+          lastMessageAt: new Date().toISOString(),
           lastMessagePreview: null,
         });
         const draft: ConversationDraft = {
@@ -79,8 +85,8 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
           productType: product.type,
           ...(isPhase2Enabled()
             ? {
-              executionMode: 'AUTO' as const,
-              allowedAgentIds: [] as string[],
+              executionMode,
+              allowedAgentIds,
             }
             : {}),
         };
@@ -101,7 +107,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
         setSending(false);
       }
     },
-    [layout, navigate, product.type],
+    [layout, navigate, product.type, executionMode, allowedAgentIds],
   );
 
   const onDemoChip = useCallback(
@@ -201,6 +207,17 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
               void handleSend(info);
             }}
             dbsShow={setDbsShow}
+            leftExtra={
+              isPhase2Enabled() ? (
+                <ExecutionModeSelector
+                  value={executionMode}
+                  disabled={sending}
+                  allowedAgentIds={allowedAgentIds}
+                  onChange={setExecutionMode}
+                  onAllowedAgentIdsChange={setAllowedAgentIds}
+                />
+              ) : null
+            }
           />
         </div>
         <div className="w-full max-w-[720px] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-10 mt-[16px]">

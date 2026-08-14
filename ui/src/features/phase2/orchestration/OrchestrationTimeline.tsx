@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import type { StepMode } from '@/contracts';
+import { useEffect, useRef, type ReactNode } from 'react';
+import classNames from 'classnames';
 import type {
   OrchestrationUiState,
   StepUiState,
@@ -21,93 +21,73 @@ export interface OrchestrationTimelineProps {
   ) => void;
 }
 
-const STATUS_DOT: Record<StepUiStatus | SubTaskUiStatus, string> = {
-  PLANNED: 'bg-text-tertiary',
-  RUNNING: 'bg-brand',
-  COMPLETED: 'bg-success',
-  FAILED: 'bg-danger',
-  SKIPPED: 'bg-text-tertiary',
-  DEGRADED: 'bg-warning',
-};
-
-function Caret({ open }: { open: boolean }) {
+function Spinner() {
   return (
     <span
-      className="inline-block text-[12px] text-text-tertiary transition-transform duration-150"
-      style={{ transform: open ? 'rotate(0deg)' : 'rotate(180deg)' }}
+      className="inline-block size-[12px] shrink-0 rounded-full border-[1.5px] border-black/10 border-t-black/65 animate-spin"
+      aria-hidden
+    />
+  );
+}
+
+function DoneMark() {
+  return (
+    <span
+      className="inline-flex size-[12px] shrink-0 items-center justify-center text-[10px] text-text-tertiary"
       aria-hidden
     >
-      ^
+      ✓
     </span>
   );
 }
 
-function TraceBody({ lines }: { lines: TraceLine[] }) {
-  if (lines.length === 0) {
-    return (
-      <div className="text-[12px] text-text-tertiary px-8 py-6">暂无进展</div>
-    );
-  }
+function Chevron({ open }: { open: boolean }) {
   return (
-    <div className="max-h-[220px] overflow-auto px-8 py-6 font-mono text-[12px] leading-[18px] text-text-secondary whitespace-pre-wrap break-words">
-      {lines.map((line) => (
-        <div key={line.sequence} className="mb-4 last:mb-0">
-          {line.kind !== 'THOUGHT' ? (
-            <span className="text-text-tertiary mr-6">[{line.kind}]</span>
-          ) : null}
-          {line.text}
-          {line.truncated ? (
-            <span className="text-text-tertiary">…</span>
-          ) : null}
-        </div>
-      ))}
-    </div>
+    <svg
+      viewBox="0 0 12 12"
+      className={classNames(
+        'size-12 shrink-0 text-[#C7C7CC] transition-transform duration-200',
+        open ? 'rotate-180' : 'rotate-0',
+      )}
+      aria-hidden
+    >
+      <path
+        d="M3 4.25 L6 7.25 L9 4.25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
-function CollapsibleBlock({
-  title,
-  open,
-  onToggle,
+function StatusGlyph({
   status,
-  badge,
-  children,
-  testId,
+  live,
 }: {
-  title: string;
-  open: boolean;
-  onToggle?: () => void;
   status?: StepUiStatus | SubTaskUiStatus;
-  badge?: string | null;
-  children: ReactNode;
-  testId: string;
+  live?: boolean;
 }) {
+  if (live || status === 'RUNNING') {
+    return <Spinner />;
+  }
+  if (status === 'FAILED') {
+    return (
+      <span className="inline-block size-[6px] shrink-0 rounded-full bg-[#FF3B30]" />
+    );
+  }
+  if (status === 'DEGRADED') {
+    return (
+      <span className="inline-block size-[6px] shrink-0 rounded-full bg-[#FF9F0A]" />
+    );
+  }
+  if (status === 'COMPLETED') {
+    return <DoneMark />;
+  }
   return (
-    <div
-      className="border-t border-border first:border-t-0"
-      data-testid={testId}
-    >
-      <button
-        type="button"
-        className="w-full flex items-center gap-8 px-10 py-8 text-left hover:bg-surface-subtle/80"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        {status ? (
-          <span
-            className={`w-[6px] h-[6px] rounded-full shrink-0 ${STATUS_DOT[status]}`}
-          />
-        ) : null}
-        <span className="flex-1 text-[13px] text-text-primary truncate">
-          {title}
-        </span>
-        {badge ? (
-          <span className="text-[11px] text-text-tertiary shrink-0">{badge}</span>
-        ) : null}
-        <Caret open={open} />
-      </button>
-      {open ? children : null}
-    </div>
+    <span className="inline-block size-[6px] shrink-0 rounded-full bg-black/15" />
   );
 }
 
@@ -131,41 +111,68 @@ function displayAgentName(step: {
   if (id && !looksLikeId(id)) {
     return id;
   }
-  return name || id || step.subTaskId || step.stepId || '';
+  return name || id || '专家';
 }
 
-function stepModeLabel(mode: StepMode | null | undefined): string | null {
-  if (!mode) return null;
-  switch (mode) {
-    case 'MAIN_ONLY':
-      return 'MAIN_ONLY';
-    case 'SINGLE_AGENT':
-      return 'SINGLE_AGENT';
-    case 'PARALLEL_AGENTS':
-      return 'PARALLEL_AGENTS';
-    default:
-      return null;
+function isNoiseLine(line: TraceLine): boolean {
+  const text = (line.text || '').trim();
+  if (!text) {
+    return true;
   }
+  if (
+    /^(STATUS|THOUGHT|OUTPUT|ERROR|RUNNING|COMPLETED|FAILED|PLANNED|SKIPPED|DEGRADED|SUCCESS|PARTIAL|INTERRUPTED|IDLE)$/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    text.startsWith('{') &&
+    (text.includes('"status"') ||
+      text.includes('"eventType"') ||
+      text.includes('"output"'))
+  ) {
+    return true;
+  }
+  return false;
 }
 
-function stepBadge(step: StepUiState): string | null {
+function visibleText(line: TraceLine): string {
+  return (line.text || '')
+    .replace(/^\s*\[(STATUS|THOUGHT|OUTPUT|ERROR)\]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function visibleLines(lines: TraceLine[]): TraceLine[] {
+  return lines.filter((line) => !isNoiseLine(line) && visibleText(line));
+}
+
+function humanStepNote(step: StepUiState): string | null {
   const parts: string[] = [];
-  const mode = stepModeLabel(step.stepMode);
-  if (mode) parts.push(mode);
-  if (step.reviewing) parts.push('review');
-  if (step.fallbackActive) parts.push('fallback');
-  if (step.status === 'DEGRADED') parts.push('degraded');
+  if (step.stepMode === 'PARALLEL_AGENTS') {
+    parts.push('并行');
+  }
+  if (step.reviewing) {
+    parts.push('复核中');
+  }
+  if (step.fallbackActive) {
+    parts.push('换人接手');
+  }
+  if (step.status === 'DEGRADED') {
+    parts.push('部分完成');
+  }
   if (typeof step.retryNo === 'number' && step.retryNo > 0) {
-    parts.push(`retry#${step.retryNo}`);
+    parts.push('再次尝试');
   }
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-function subTaskBadge(sub: SubTaskUiState): string | null {
-  const parts: string[] = [];
-  if (sub.retryNo > 0) parts.push(`retry#${sub.retryNo}`);
-  if (sub.status === 'FAILED' && sub.errorCode) parts.push(sub.errorCode);
-  return parts.length > 0 ? parts.join(' · ') : null;
+function humanSubNote(sub: SubTaskUiState): string | null {
+  if (sub.retryNo > 0) {
+    return '再次尝试';
+  }
+  return null;
 }
 
 function liveProgressHint(
@@ -175,47 +182,36 @@ function liveProgressHint(
   for (const step of steps) {
     if (step.status !== 'RUNNING') continue;
     const runningSubs = Object.values(step.subTasks ?? {}).filter(
-      (s) => s.status === 'RUNNING',
+      (item) => item.status === 'RUNNING',
     );
     if (runningSubs.length > 0) {
-      const names = runningSubs.map((s) => displayAgentName(s)).join(' / ');
-      return `并行执行中：${names}`;
+      const names = runningSubs.map((item) => displayAgentName(item)).join('、');
+      return `${names} 正在协作`;
     }
     if (step.fallbackActive) {
-      return `${displayAgentName(step)} fallback 执行中…`;
+      return `${displayAgentName(step)} 正在接手`;
     }
     if (step.reviewing) {
-      return `${displayAgentName(step)} 评审中…`;
+      return `主规划正在复核 ${displayAgentName(step)} 的结果`;
     }
-    const thought = [...step.lines]
-      .reverse()
-      .find((line) => {
-        if (line.kind !== 'THOUGHT' && line.kind !== 'STATUS') return false;
-        const t = (line.text || '').trim();
-        if (
-          t.startsWith('{') &&
-          t.includes('"status"') &&
-          t.includes('"output"')
-        ) {
-          return false;
-        }
-        return t.length > 0;
-      });
-    if (thought?.text) {
-      const text = thought.text.replace(/\s+/g, ' ').trim();
-      return `${displayAgentName(step)}：${text.slice(0, 48)}${text.length > 48 ? '…' : ''}`;
+    const thought = [...visibleLines(step.lines)].reverse().find((line) => {
+      return line.kind === 'THOUGHT' || line.kind === 'STATUS';
+    });
+    if (thought) {
+      const text = visibleText(thought);
+      return `${displayAgentName(step)} · ${text.slice(0, 72)}${text.length > 72 ? '…' : ''}`;
     }
-    return `${displayAgentName(step)} 执行中…`;
+    return `${displayAgentName(step)} 进行中`;
   }
-  const lastMain = [...state.main.lines].reverse().find((line) => line.text);
-  if (lastMain?.text) {
-    const text = lastMain.text.replace(/\s+/g, ' ').trim();
+  const lastMain = [...visibleLines(state.main.lines)].reverse()[0];
+  if (lastMain) {
+    const text = visibleText(lastMain);
     return `${text.slice(0, 56)}${text.length > 56 ? '…' : ''}`;
   }
   if (steps.length > 0) {
-    return `已安排 ${steps.length} 个步骤`;
+    return `已邀请 ${steps.map(displayAgentName).join('、')}`;
   }
-  return '正在编排…';
+  return '正在安排专家…';
 }
 
 function latestAttemptSteps(
@@ -230,17 +226,133 @@ function latestAttemptSteps(
     if (steps.length > 0) {
       return {
         attemptNo,
-        steps
+        steps,
       };
     }
   }
   return null;
 }
 
+function headerCopy(thinking: boolean, terminal: OrchestrationUiState['terminalStatus']) {
+  if (thinking) {
+    return '正在协同';
+  }
+  if (terminal === 'FAILED') {
+    return '协同未完成';
+  }
+  if (terminal === 'INTERRUPTED') {
+    return '协同已中断';
+  }
+  return '协同完成';
+}
+
+function TraceStream({
+  lines,
+  live,
+}: {
+  lines: TraceLine[];
+  live?: boolean;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const visible = visibleLines(lines);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+  }, [visible, live]);
+
+  if (visible.length === 0) {
+    return live ? (
+      <div className="px-2 py-4 text-[12px] leading-[18px] text-text-tertiary">
+        正在思考
+        <span className="ml-4 inline-block h-[12px] w-[2px] translate-y-[1px] bg-black/35 animate-pulse" />
+      </div>
+    ) : null;
+  }
+
+  return (
+    <div
+      ref={scrollerRef}
+      className="max-h-[240px] overflow-auto py-4 pr-4"
+    >
+      {visible.map((line, index) => {
+        const last = index === visible.length - 1;
+        const text = visibleText(line);
+        const tone =
+          line.kind === 'ERROR'
+            ? 'text-[#FF3B30]'
+            : line.kind === 'OUTPUT'
+              ? 'text-text-primary'
+              : line.kind === 'STATUS'
+                ? 'text-text-tertiary'
+                : 'text-text-secondary';
+        return (
+          <div
+            key={line.sequence}
+            className={classNames(
+              'mb-6 last:mb-0 text-[13px] leading-[20px] whitespace-pre-wrap break-words',
+              tone,
+            )}
+          >
+            {text}
+            {line.truncated ? '…' : ''}
+            {live && last ? (
+              <span className="ml-3 inline-block h-[12px] w-[1.5px] translate-y-[1px] bg-black/40 animate-pulse" />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FoldRow({
+  title,
+  note,
+  open,
+  onToggle,
+  status,
+  live,
+  testId,
+  children,
+}: {
+  title: string;
+  note?: string | null;
+  open: boolean;
+  onToggle?: () => void;
+  status?: StepUiStatus | SubTaskUiStatus;
+  live?: boolean;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <div data-testid={testId}>
+      <button
+        type="button"
+        className="flex w-full items-center gap-8 py-6 text-left"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <StatusGlyph status={status} live={live} />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text-primary">
+          {title}
+        </span>
+        {note ? (
+          <span className="shrink-0 text-[11px] text-text-tertiary">{note}</span>
+        ) : null}
+        <Chevron open={open} />
+      </button>
+      {open ? <div className="pb-4 pl-[20px]">{children}</div> : null}
+    </div>
+  );
+}
+
 /**
- * Collapsible live work panel above the final answer.
- * Default: all collapsed. Header: 思考中 / 已完成思考.
- * Does not render system prompts, full CoT, credentials, raw tool I/O, or Memory body.
+ * ChatGPT / Cursor style collapsible work panel.
+ * Default: master collapsed. Opening master expands every nested fold.
  */
 export default function OrchestrationTimeline({
   state,
@@ -255,133 +367,128 @@ export default function OrchestrationTimeline({
 
   const thinking =
     state.phaseLabel !== 'done' && state.terminalStatus === 'RUNNING';
-  const completionLabel =
-    state.terminalStatus === 'SUCCESS' || state.terminalStatus === 'PARTIAL'
-      ? state.terminalStatus
-      : null;
-  const header = thinking
-    ? '思考中'
-    : completionLabel
-      ? `已完成思考 · ${completionLabel}`
-      : '已完成思考';
+  const header = headerCopy(thinking, state.terminalStatus);
   const latest = latestAttemptSteps(state);
   const liveHint = thinking ? liveProgressHint(state, latest?.steps ?? []) : '';
-  const stepsHaveObjectives = (latest?.steps ?? []).some(
-    (step) => (step.objective || '').trim().length > 0,
-  );
+  const inviteNames = (latest?.steps ?? [])
+    .map(displayAgentName)
+    .filter(Boolean);
 
   return (
     <div
-      className="phase2-orchestration-timeline w-full rounded-md border border-border bg-surface-subtle/40"
+      className="phase2-orchestration-timeline w-full max-w-[720px]"
       data-testid="orchestration-timeline"
     >
       <button
         type="button"
-        className="w-full flex items-center justify-between gap-8 px-12 py-10 text-left"
+        className="flex w-full items-center gap-8 py-2 text-left"
         onClick={onToggleMaster}
         aria-expanded={state.masterOpen}
         data-testid="orchestration-master-toggle"
       >
-        <span className="flex-1 min-w-0 flex items-center gap-8">
+        {thinking ? <Spinner /> : <DoneMark />}
+        <span className="min-w-0 flex-1">
           <span
-            className="text-[13px] text-text-secondary shrink-0"
+            className="block text-[13px] text-text-secondary"
             data-testid="orchestration-completion-status"
           >
             {header}
           </span>
           {liveHint ? (
             <span
-              className="text-[12px] text-text-tertiary truncate"
+              className="mt-2 block truncate text-[12px] leading-[18px] text-text-tertiary"
               data-testid="orchestration-live-hint"
             >
               {liveHint}
             </span>
           ) : null}
         </span>
-        <Caret open={state.masterOpen} />
+        <Chevron open={state.masterOpen} />
       </button>
 
       {state.masterOpen ? (
-        <div data-testid="orchestration-master-body">
-          <CollapsibleBlock
-            title="主 Agent"
+        <div
+          className="mt-4 ml-[6px] border-l border-black/[0.08] pl-14"
+          data-testid="orchestration-master-body"
+        >
+          {inviteNames.length > 0 ? (
+            <div
+              className="mb-8 text-[12px] leading-[18px] text-text-tertiary"
+              data-testid="orchestration-plan-steps"
+            >
+              主规划邀请 {inviteNames.join('、')} 一起完成
+            </div>
+          ) : null}
+
+          <FoldRow
+            title="主规划"
             open={state.main.open}
             onToggle={onToggleMain}
+            live={thinking && (latest?.steps.length ?? 0) === 0}
             testId="orchestration-main"
           >
-            {latest && latest.steps.length > 0 ? (
-              <div
-                className="px-8 pt-6 pb-2 text-[12px] leading-[18px] text-text-secondary"
-                data-testid="orchestration-plan-steps"
-              >
-                <div className="text-text-tertiary mb-4">任务安排</div>
-                {latest.steps.map((step) => (
-                  <div key={step.stepId} className="mb-2">
-                    - [{step.stepId}]
-                    {step.stepMode ? ` (${step.stepMode})` : ''}{' '}
-                    {displayAgentName(step)}：{step.objective}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <TraceBody
-              lines={
-                stepsHaveObjectives
-                  ? state.main.lines.filter(
-                    (line) =>
-                      !(
-                        line.kind === 'OUTPUT' &&
-                          line.text.trimStart().startsWith('任务安排')
-                      ),
-                  )
-                  : state.main.lines
-              }
+            <TraceStream
+              lines={state.main.lines}
+              live={thinking && (latest?.steps.length ?? 0) === 0}
             />
-          </CollapsibleBlock>
+          </FoldRow>
 
           {latest?.steps.map((step) => {
             const subTasks = Object.values(step.subTasks ?? {});
+            const stepLive = thinking && step.status === 'RUNNING';
             return (
-              <CollapsibleBlock
+              <FoldRow
                 key={`${latest.attemptNo}-${step.stepId}`}
-                title={displayAgentName(step) || step.stepId}
+                title={displayAgentName(step)}
+                note={humanStepNote(step)}
                 open={step.open}
                 status={step.status}
-                badge={stepBadge(step)}
+                live={stepLive}
                 onToggle={() => onToggleStep?.(latest.attemptNo, step.stepId)}
                 testId={`orchestration-step-${step.stepId}`}
               >
                 {step.objective ? (
-                  <div className="px-8 pt-4 text-[12px] text-text-tertiary">
-                    目标：{step.objective}
+                  <div className="mb-4 text-[12px] leading-[18px] text-text-tertiary">
+                    {step.objective}
                   </div>
                 ) : null}
-                <TraceBody lines={step.lines} />
-                {subTasks.map((sub) => (
-                  <CollapsibleBlock
-                    key={sub.subTaskId}
-                    title={`${displayAgentName(sub)} · ${sub.subTaskId}`}
-                    open={sub.open}
-                    status={sub.status}
-                    badge={subTaskBadge(sub)}
-                    onToggle={() =>
-                      onToggleSubTask?.(
-                        latest.attemptNo,
-                        step.stepId,
-                        sub.subTaskId,
-                      )
-                    }
-                    testId={`orchestration-subtask-${sub.subTaskId}`}
-                  >
-                    {sub.objective ? (
-                      <div className="px-8 pt-4 text-[12px] text-text-tertiary">
-                        目标：{sub.objective}
-                      </div>
-                    ) : null}
-                    <TraceBody lines={sub.lines} />
-                  </CollapsibleBlock>
-                ))}
-              </CollapsibleBlock>
+                {subTasks.length > 1 ? (
+                  <div className="mb-4 text-[12px] leading-[18px] text-text-tertiary">
+                    同时与{' '}
+                    {subTasks.map((sub) => displayAgentName(sub)).join('、')}{' '}
+                    协作
+                  </div>
+                ) : null}
+                <TraceStream lines={step.lines} live={stepLive} />
+                {subTasks.map((sub) => {
+                  const subLive = thinking && sub.status === 'RUNNING';
+                  return (
+                    <FoldRow
+                      key={sub.subTaskId}
+                      title={displayAgentName(sub)}
+                      note={humanSubNote(sub)}
+                      open={sub.open}
+                      status={sub.status}
+                      live={subLive}
+                      onToggle={() =>
+                        onToggleSubTask?.(
+                          latest.attemptNo,
+                          step.stepId,
+                          sub.subTaskId,
+                        )
+                      }
+                      testId={`orchestration-subtask-${sub.subTaskId}`}
+                    >
+                      {sub.objective ? (
+                        <div className="mb-4 text-[12px] leading-[18px] text-text-tertiary">
+                          {sub.objective}
+                        </div>
+                      ) : null}
+                      <TraceStream lines={sub.lines} live={subLive} />
+                    </FoldRow>
+                  );
+                })}
+              </FoldRow>
             );
           })}
         </div>

@@ -7,6 +7,7 @@ import com.jd.genie.agent.dto.File;
 import com.jd.genie.agent.dto.FileRequest;
 import com.jd.genie.agent.dto.FileResponse;
 import com.jd.genie.agent.tool.BaseTool;
+import com.jd.genie.agent.util.FileToolUrls;
 import com.jd.genie.agent.util.SpringContextHolder;
 import com.jd.genie.agent.util.StringUtil;
 import com.jd.genie.config.GenieConfig;
@@ -80,6 +81,12 @@ public class FileTool implements BaseTool {
             Map<String, Object> params = (Map<String, Object>) input;
             String command = (String) params.getOrDefault("command", "");
             FileRequest fileRequest = JSON.parseObject(JSON.toJSONString(input), FileRequest.class);
+            if (fileRequest.getFileName() == null || fileRequest.getFileName().isBlank()) {
+                Object filename = params.get("filename");
+                if (filename instanceof String name && !name.isBlank()) {
+                    fileRequest.setFileName(name);
+                }
+            }
             fileRequest.setRequestId(agentContext.getRequestId());
             if ("upload".equals(command)) {
                 return uploadFile(fileRequest, true, false);
@@ -132,6 +139,13 @@ public class FileTool implements BaseTool {
             }
             String result = response.body().string();
             FileResponse fileResponse = JSON.parseObject(result, FileResponse.class);
+            String interpreterBase = genieConfig.getCodeInterpreterUrl();
+            fileResponse.setOssUrl(FileToolUrls.publicUrl(
+                    fileResponse.getOssUrl(), interpreterBase, "download",
+                    fileRequest.getRequestId(), fileRequest.getFileName()));
+            fileResponse.setDomainUrl(FileToolUrls.publicUrl(
+                    fileResponse.getDomainUrl(), interpreterBase, "preview",
+                    fileRequest.getRequestId(), fileRequest.getFileName()));
             log.info("{} file tool upload response {}", agentContext.getRequestId(), result);
             // 构建前端格式
             Map<String, Object> resultMap = new HashMap<>();

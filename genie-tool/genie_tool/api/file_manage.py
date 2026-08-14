@@ -77,7 +77,15 @@ async def download_file(file_id: str, file_name: str):
     file_info = await FileInfoOp.get_by_file_id(file_id=file_id)
     if not file_info or not os.path.exists(file_info.file_path):
         return Response(content="File not found", status_code=404)
-    return FileResponse(file_info.file_path, filename=os.path.basename(file_name))
+    return FileResponse(
+        file_info.file_path,
+        filename=os.path.basename(file_name),
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+    )
 
 
 @router.get("/preview/{file_id}/{file_name}")

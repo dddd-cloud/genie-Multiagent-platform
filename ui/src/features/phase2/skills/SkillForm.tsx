@@ -30,19 +30,19 @@ export function emptySkillFormState(): SkillFormState {
 
 export function skillToFormState(skill: Phase2SkillResponse): SkillFormState {
   return {
-    name: skill.name,
-    description: skill.description,
-    instruction: skill.instruction,
-    outputRequirement: skill.outputRequirement,
-    capabilityKeys: [...skill.capabilityKeys],
+    name: skill.name ?? '',
+    description: skill.description ?? '',
+    instruction: skill.instruction ?? '',
+    outputRequirement: skill.outputRequirement ?? '',
+    capabilityKeys: [...(skill.capabilityKeys ?? [])],
     version: skill.version,
     status: skill.status,
   };
 }
 
 export function validateSkillForm(state: SkillFormState): string | null {
-  if (!state.name.trim()) return '请填写 Skill 名称';
-  if (!state.instruction.trim()) return '请填写 instruction';
+  if (!state.name?.trim()) return '请填写 Skill 名称';
+  if (!state.instruction?.trim()) return '请填写 instruction';
   return null;
 }
 
@@ -104,7 +104,7 @@ const SkillForm: GenieType.FC<SkillFormProps> = memo(
           <TextArea
             className="mt-6"
             rows={3}
-            value={value.outputRequirement}
+            value={value.outputRequirement ?? ''}
             disabled={locked}
             onChange={(e) => patch({ outputRequirement: e.target.value })}
             data-testid="skill-output-requirement"

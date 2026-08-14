@@ -1,4 +1,5 @@
 import { copyText, downloadFile, formatTimestamp, showMessage } from "@/utils";
+import { toPublicFileUrl, toDownloadUrl } from "@/utils/chat";
 import { keyBy } from "lodash";
 import React, { useMemo, useState } from "react";
 import ActionViewFrame from "./ActionViewFrame";
@@ -43,7 +44,7 @@ const FileList: GenieType.FC<{
           return {
             ...item,
             name: item.fileName!,
-            url: item.domainUrl!,
+            url: toPublicFileUrl(item.domainUrl || item.ossUrl) || item.domainUrl!,
             task,
             messageTime: formatTimestamp(task.messageTime),
             type: extension!
@@ -91,7 +92,7 @@ const FileList: GenieType.FC<{
     switch (fileItem.type) {
       case 'ppt':
       case 'html':
-        content = <HTMLRenderer htmlUrl={fileItem.url} className="h-full" />;
+        content = <HTMLRenderer htmlUrl={toPublicFileUrl(fileItem.url) || fileItem.url} className="h-full" />;
         break;
       case 'csv':
       case 'xlsx':
@@ -139,7 +140,7 @@ const FileList: GenieType.FC<{
         <Tooltip title="下载">
           <i
             className="font_family rounded-[4px] size-20 flex items-center justify-center icon-xiazai mr-6 cursor-pointer hover:bg-gray-200"
-            onClick={() => downloadFile(fileItem?.url.replace('preview', 'download'), fileItem.name)}
+            onClick={() => downloadFile(toDownloadUrl(fileItem?.url), fileItem.name)}
           ></i>
         </Tooltip>
         {/* excel文件不支持复制 */}

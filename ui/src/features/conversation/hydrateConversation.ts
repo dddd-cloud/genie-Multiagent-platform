@@ -4,17 +4,19 @@ import type {
   OutputStyle,
 } from '@/contracts';
 import { OUTPUT_STYLES } from '@/contracts';
-import { combineData, handleTaskData } from '@/utils/chat';
+import { combineData, extractGeneratedFiles, handleTaskData } from '@/utils/chat';
 import { extractOrchestrationEventFromResult } from '@/features/phase2/orchestration/parseOrchestrationEvent';
 import { extractOrchestrationTraceFromResult } from '@/features/phase2/orchestration/parseOrchestrationTrace';
 import {
   createInitialOrchestrationState,
   markOrchestrationDone,
+  markOrchestrationInterrupted,
   reduceOrchestrationEvent,
   reduceOrchestrationTrace,
 } from '@/features/phase2/orchestration/orchestrationReducer';
 import type { OrchestrationUiState } from '@/features/phase2/orchestration/types';
 import { extractBrowserSkillSignalFromResult } from '@/features/phase2/skillRuntime/signal';
+import { USER_STOPPED_COPY } from './liveChatRuns';
 import { parseSnapshot } from './snapshot';
 import type { PersistedChatItem } from './types';
 
@@ -159,6 +161,10 @@ function replaySnapshot(
     } else if (event.response) {
       item.response = event.response;
     }
+    const generated = extractGeneratedFiles(event.resultMap);
+    if (generated.length) {
+      item.generatedFiles = generated;
+    }
   }
 
   if (sawOrchestration && orchestration) {
@@ -276,6 +282,16 @@ function applyAssistant(
       break;
     case 'INTERRUPTED':
       item.loading = false;
+      if (assistant.errorCode === 'CLIENT_DISCONNECTED') {
+        item.stoppedByUser = true;
+        item.response = USER_STOPPED_COPY;
+        item.errorCode = null;
+        item.errorMessage = null;
+        if (item.orchestration) {
+          item.orchestration = markOrchestrationInterrupted(item.orchestration);
+        }
+        break;
+      }
       item.errorCode = assistant.errorCode;
       item.errorMessage =
         assistant.errorMessage ??

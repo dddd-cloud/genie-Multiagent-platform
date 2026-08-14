@@ -31,6 +31,18 @@ class SkillPackageLoaderTest {
     }
 
     @Test
+    void extraLicenseAndReadmeFilesAreIgnored() throws IOException {
+        Path root = packageRoot(temp, user, "skill-a");
+        writeValid(root, "Filesystem instruction", "resource one");
+        Files.writeString(root.resolve("LICENSE.txt"), "copyright");
+        Files.writeString(root.resolve("README.md"), "readme");
+        LoadedSkillPackage loaded = loader(temp).load(user, "skill-a").orElseThrow();
+        assertEquals("Filesystem instruction", loaded.instructionMarkdown());
+        assertFalse(loaded.resourceManifest().contains("LICENSE.txt"));
+        assertFalse(loaded.resourceManifest().contains("README.md"));
+    }
+
+    @Test
     void validPackageUsesFilesystemInstructionResourcesAndEntrypoints() throws IOException {
         Path root = packageRoot(temp, user, "skill-a");
         writeValid(root, "Filesystem instruction", "resource one");

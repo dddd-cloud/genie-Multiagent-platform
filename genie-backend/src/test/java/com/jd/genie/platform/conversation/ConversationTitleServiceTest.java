@@ -136,21 +136,21 @@ class ConversationTitleServiceTest {
 
     @Test
     void titleAlgorithmNormalizesWhitespaceAndUsesDefaultForBlank() {
-        assertEquals("hello world", titleService.generateTitle("  hello\n\r\tworld  "));
+        assertEquals("hello wor", titleService.generateTitle("  hello\n\r\tworld  "));
         assertEquals(DEFAULT_TITLE, titleService.generateTitle(null));
         assertEquals(DEFAULT_TITLE, titleService.generateTitle(" \n\t  "));
     }
 
     @Test
     void titleAlgorithmKeepsChineseEmojiAndTruncatesByUnicodeCodePoint() {
-        String thirtyCodePoints = "一二三四五六七八九十" + "一二三四五六七八九十" + "一二三四五六七八九十";
-        assertEquals(30, titleService.generateTitle(thirtyCodePoints).codePointCount(0, thirtyCodePoints.length()));
-        String withExtra = thirtyCodePoints + "🙂tail";
-        assertEquals(thirtyCodePoints, titleService.generateTitle(withExtra));
-        String emojiTitle = "🙂".repeat(30) + "尾巴";
+        String nineCodePoints = "一二三四五六七八九";
+        assertEquals(9, titleService.generateTitle(nineCodePoints).codePointCount(0, nineCodePoints.length()));
+        String withExtra = nineCodePoints + "十🙂tail";
+        assertEquals(nineCodePoints, titleService.generateTitle(withExtra));
+        String emojiTitle = "🙂".repeat(9) + "尾巴";
         String generated = titleService.generateTitle(emojiTitle);
-        assertEquals(30, generated.codePointCount(0, generated.length()));
-        assertEquals("🙂".repeat(30), generated);
+        assertEquals(9, generated.codePointCount(0, generated.length()));
+        assertEquals("🙂".repeat(9), generated);
     }
 
     @Test

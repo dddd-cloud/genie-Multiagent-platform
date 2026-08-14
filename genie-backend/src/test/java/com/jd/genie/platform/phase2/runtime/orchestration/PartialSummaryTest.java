@@ -81,7 +81,6 @@ class PartialSummaryTest {
                 .findFirst()
                 .orElseThrow()
                 .getResponse();
-        assertTrue(finalAnswer.contains("## 已完成"));
-        assertTrue(finalAnswer.contains("## 未完成"));
+        assertTrue(finalAnswer.contains("final answer"));
     }
 }

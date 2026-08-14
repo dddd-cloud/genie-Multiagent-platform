@@ -42,7 +42,9 @@ const SkillPackageInfoPanel: GenieType.FC<SkillPackageInfoPanelProps> = memo(
           <Text type="secondary">entrypoints</Text>
           {entrypoints.length === 0 ? (
             <div className="mt-4 text-[12px] text-text-tertiary">
-              当前后端未返回 entrypoints
+              {mode === 'FILESYSTEM'
+                ? '未声明可执行入口（仅指令文档，可直接绑定到 Agent）'
+                : '当前后端未返回 entrypoints'}
             </div>
           ) : (
             <ul className="mt-4 text-[12px] text-text-secondary list-disc pl-16">

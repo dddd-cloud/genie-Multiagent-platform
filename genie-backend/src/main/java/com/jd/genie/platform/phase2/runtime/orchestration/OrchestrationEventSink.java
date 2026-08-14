@@ -8,4 +8,7 @@ import java.util.Map;
 @FunctionalInterface
 public interface OrchestrationEventSink {
     void emit(String eventType, OrchestrationStep step, AgentTaskResult result, Map<String, Object> details);
+
+    default void acceptDeliverables(java.util.List<com.jd.genie.agent.dto.File> files) {
+    }
 }

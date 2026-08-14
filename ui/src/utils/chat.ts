@@ -850,16 +850,57 @@ export const getIcon = (type: string): string => {
   return DEFAULT_ICON;
 };
 
+const FILE_TOOL_ORIGIN = 'http://127.0.0.1:1601/v1/file_tool';
+
+export function toPublicFileUrl(url?: string): string | undefined {
+  if (!url) {
+    return url;
+  }
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  const path = trimmed.replace(/^None\/?/i, '').replace(/^\//, '');
+  if (path.startsWith('download/') || path.startsWith('preview/')) {
+    return `${FILE_TOOL_ORIGIN}/${path}`;
+  }
+  if (path.startsWith('v1/file_tool/')) {
+    return `http://127.0.0.1:1601/${path}`;
+  }
+  return trimmed;
+}
+
 export const buildAttachment = (fileList: CHAT.FileList[]) => {
   const result = fileList?.map((item) => {
-    const { domainUrl, fileName, fileSize } = item;
+    const { domainUrl, ossUrl, fileName, fileSize } = item;
     const extension = fileName?.split(".").pop();
     return {
       name: fileName,
-      url: domainUrl,
+      url: toPublicFileUrl(domainUrl || ossUrl) || domainUrl || ossUrl,
       type: extension!,
       size: fileSize,
     };
   });
   return result;
 };
+
+export function toDownloadUrl(url?: string): string | undefined {
+  const publicUrl = toPublicFileUrl(url);
+  if (!publicUrl) {
+    return publicUrl;
+  }
+  return publicUrl.includes('/preview/')
+    ? publicUrl.replace('/preview/', '/download/')
+    : publicUrl;
+}
+
+export function extractGeneratedFiles(resultMap: unknown): CHAT.TFile[] {
+  if (!resultMap || typeof resultMap !== 'object') {
+    return [];
+  }
+  const fileList = (resultMap as { fileList?: CHAT.FileList[] }).fileList;
+  if (!Array.isArray(fileList) || fileList.length === 0) {
+    return [];
+  }
+  return buildAttachment(fileList).filter((file) => Boolean(file?.url && file?.name));
+}

@@ -1,4 +1,5 @@
 import { iconType } from "@/utils/constants";
+import { toDownloadUrl } from "@/utils/chat";
 import docxIcon from "@/assets/icon/docx.png";
 import { Tooltip } from "antd";
 
@@ -39,12 +40,28 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     review?.(f);
   };
 
+  const downloadFile = (f: CHAT.TFile) => {
+    const link = document.createElement('a');
+    link.href = toDownloadUrl(f.url) || f.url;
+    link.download = f.name || 'download';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const renderFile = (f: CHAT.TFile, index: number) => {
     return (
       <div
         key={index}
         className={`group w-200 h-56 rounded-xl border border-[#E9E9F0] p-[8px] box-border flex items-center relative ${preview ? "cursor-pointer" : "cursor-default"}`}
-        onClick={() => reviewFile(f)}
+        onClick={() => {
+          if (!preview) return;
+          downloadFile(f);
+          reviewFile(f);
+        }}
+        data-testid="generated-file-chip"
       >
         <img src={combinIcon(f)} alt={f.name} className="w-32 h-32 shrink" />
         <div className="flex-1 ml-[4px] overflow-hidden">

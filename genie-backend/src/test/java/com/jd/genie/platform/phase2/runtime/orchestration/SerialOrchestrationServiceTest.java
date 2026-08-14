@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -57,13 +58,12 @@ class SerialOrchestrationServiceTest {
         );
 
         assertEquals(List.of("step-1", "step-2"), executionOrder);
-        // Sub-agent must receive the step objective, not the parent orchestration query.
-        org.junit.jupiter.api.Assertions.assertTrue(queries.get(0).contains("first"));
-        org.junit.jupiter.api.Assertions.assertFalse(
-                queries.get(0).contains("请用可用 Agent 各用一句话描述春天，然后汇总成一段话。")
-        );
-        org.junit.jupiter.api.Assertions.assertTrue(queries.get(1).contains("second"));
-        org.junit.jupiter.api.Assertions.assertTrue(queries.get(1).contains("safe-result"));
+        assertTrue(queries.get(0).contains("first"));
+        assertTrue(queries.get(0).contains("请用可用 Agent 各用一句话描述春天，然后汇总成一段话。"));
+        assertTrue(queries.get(0).contains("只用于限定主题"));
+        assertTrue(queries.get(0).contains("禁止整题作答"));
+        assertTrue(queries.get(1).contains("second"));
+        assertTrue(queries.get(1).contains("safe-result"));
         assertEquals(List.of("agent-a", "agent-b"), tools.getCalls().stream()
                 .map(FakeRuntimeToolCollectionPort.CallRecord::agentId)
                 .toList());
@@ -224,6 +224,81 @@ class SerialOrchestrationServiceTest {
                 .map(FakeAgentRuntimeCatalogPort.CallRecord::agentId)
                 .toList());
         assertEquals(null, service.runningStepId());
+    }
+
+    @Test
+    void specialistQueryIncludesRecentConversationHistory() {
+        FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
+        catalog.registerProfile(profile("agent-a"));
+        FakeRuntimeToolCollectionPort tools = new FakeRuntimeToolCollectionPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        List<String> queries = new ArrayList<>();
+        doAnswer(invocation -> {
+            queries.add(invocation.getArgument(0, AgentContext.class).getQuery());
+            return AgentTaskResult.success("ok");
+        }).when(executor).execute(any(), any(), any(), any(Integer.TYPE));
+        SerialOrchestrationService service = new SerialOrchestrationService(catalog, tools, executor, 10);
+
+        service.execute(
+                USER,
+                "那竞品呢",
+                "user: 茅台市场规模多大\nassistant: 约三千亿。",
+                "",
+                List.of(new OrchestrationStep("step-1", "agent-a", "分析竞品", List.of())),
+                (eventType, step, result, details) -> { },
+                () -> false,
+                new java.util.LinkedHashMap<>(),
+                null,
+                1,
+                null
+        );
+
+        assertEquals(1, queries.size());
+        assertTrue(queries.get(0).contains("那竞品呢"));
+        assertTrue(queries.get(0).contains("茅台市场规模多大"));
+        assertTrue(queries.get(0).contains("约三千亿。"));
+        assertTrue(queries.get(0).contains("近期对话"));
+        assertTrue(queries.get(0).contains("分析竞品"));
+    }
+
+    @Test
+    void collectsNonInternalProductFilesAsDeliverables() {
+        FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
+        catalog.registerProfile(profile("agent-a"));
+        FakeRuntimeToolCollectionPort tools = new FakeRuntimeToolCollectionPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        doAnswer(invocation -> {
+            AgentContext context = invocation.getArgument(0);
+            context.getProductFiles().add(com.jd.genie.agent.dto.File.builder()
+                    .fileName("page.html")
+                    .ossUrl("http://127.0.0.1:1601/v1/file_tool/download/r/page.html")
+                    .domainUrl("http://127.0.0.1:1601/v1/file_tool/preview/r/page.html")
+                    .fileSize(12)
+                    .isInternalFile(false)
+                    .build());
+            return AgentTaskResult.success("uploaded");
+        }).when(executor).execute(any(), any(), any(), any(Integer.TYPE));
+        java.util.List<com.jd.genie.agent.dto.File> captured = new ArrayList<>();
+        SerialOrchestrationService service = new SerialOrchestrationService(catalog, tools, executor, 10);
+
+        service.execute(
+                USER,
+                "生成一个品牌落地页 html",
+                List.of(new OrchestrationStep("step-1", "agent-a", "写 html", List.of())),
+                new OrchestrationEventSink() {
+                    @Override
+                    public void emit(String eventType, OrchestrationStep step, AgentTaskResult result, Map<String, Object> details) {
+                    }
+
+                    @Override
+                    public void acceptDeliverables(java.util.List<com.jd.genie.agent.dto.File> files) {
+                        captured.addAll(files);
+                    }
+                }
+        );
+
+        assertEquals(1, captured.size());
+        assertEquals("page.html", captured.get(0).getFileName());
     }
 
     private AgentRuntimeProfile profile(String agentId) {

@@ -12,10 +12,10 @@ test.describe('Phase2 execution modes UI (mock)', () => {
     await createConversationFromSidebar(page);
     const selector = page.getByTestId('execution-mode-selector');
     await expect(selector).toBeVisible();
-    await expect(selector.getByText('AUTO', { exact: true })).toBeVisible();
-    await expect(selector.getByText('DIRECT', { exact: true })).toBeVisible();
-    await expect(
-      selector.getByText('ORCHESTRATED', { exact: true }),
-    ).toBeVisible();
+    await expect(selector).toHaveText(/Auto/);
+    await selector.click();
+    await expect(page.getByRole('option', { name: 'Auto' })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Solo' })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Ensemble' })).toBeVisible();
   });
 });

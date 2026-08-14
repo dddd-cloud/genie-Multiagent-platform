@@ -1,6 +1,7 @@
 package com.jd.genie.agent.agent;
 
 import com.alibaba.fastjson.JSON;
+import com.jd.genie.agent.dto.Memory;
 import com.jd.genie.agent.dto.Message;
 import com.jd.genie.agent.dto.tool.ToolCall;
 import com.jd.genie.agent.dto.tool.ToolChoice;
@@ -9,6 +10,7 @@ import com.jd.genie.agent.enums.RoleType;
 import com.jd.genie.agent.llm.LLM;
 import com.jd.genie.agent.prompt.ToolCallPrompt;
 import com.jd.genie.agent.tool.BaseTool;
+import com.jd.genie.agent.tool.ToolCollection;
 import com.jd.genie.agent.util.FileUtil;
 import com.jd.genie.agent.util.SpringContextHolder;
 import com.jd.genie.config.GenieConfig;
@@ -34,6 +36,8 @@ public class ReactImplAgent extends ReActAgent {
     private Integer llmTimeoutSeconds = 300;
     private String systemPromptSnapshot;
     private String nextStepPromptSnapshot;
+    /** After tool results exist, the next LLM turn must emit text (no tools). */
+    private boolean finishWithoutToolsAfterObservations;
 
     public ReactImplAgent(AgentContext context) {
         setName("react");
@@ -75,14 +79,20 @@ public class ReactImplAgent extends ReActAgent {
 
     @Override
     public boolean think() {
-        // 获取文件内容
-        String filesStr = FileUtil.formatFileInfo(context.getProductFiles(), true);
+        boolean finishTurn = finishWithoutToolsAfterObservations && hasToolObservation(getMemory());
+        String filesStr = finishWithoutToolsAfterObservations
+                ? FileUtil.formatFileNames(context.getProductFiles(), true)
+                : FileUtil.formatFileInfo(context.getProductFiles(), true);
         setSystemPrompt(getSystemPromptSnapshot().replace("{{files}}", filesStr));
         setNextStepPrompt(getNextStepPromptSnapshot().replace("{{files}}", filesStr));
 
-        if (!getMemory().getLastMessage().getRole().equals(RoleType.USER)) {
+        boolean firstTurn = getMemory().getLastMessage().getRole().equals(RoleType.USER);
+        if (!firstTurn) {
             Message userMsg = Message.userMessage(getNextStepPrompt(), null);
             getMemory().addMessage(userMsg);
+        }
+        if (printer != null) {
+            printer.send("tool_thought", firstTurn ? "正在判断需要哪些资料" : "正在根据已有结果继续思考");
         }
         try {
             // 获取带工具选项的响应
@@ -93,8 +103,8 @@ public class ReactImplAgent extends ReActAgent {
                     context,
                     getMemory().getMessages(),
                     Message.systemMessage(getSystemPrompt(), null),
-                    availableTools,
-                    ToolChoice.AUTO, null, context.getIsStream(), timeout
+                    finishTurn ? new ToolCollection() : availableTools,
+                    finishTurn ? ToolChoice.NONE : ToolChoice.AUTO, null, context.getIsStream(), timeout
             );
 
             LLM.ToolCallResponse response = future.get();
@@ -104,7 +114,6 @@ public class ReactImplAgent extends ReActAgent {
             // 记录响应信息
             if (!context.getIsStream() && response.getContent() != null && !response.getContent().isEmpty()) {
                 printer.send("tool_thought", response.getContent());
-
             }
 
             // 创建并添加助手消息
@@ -131,9 +140,18 @@ public class ReactImplAgent extends ReActAgent {
     @Override
     public String act() {
 
-        if (toolCalls.isEmpty()) {
+        if (toolCalls == null || toolCalls.isEmpty()) {
             setState(AgentState.FINISHED);
             return getMemory().getLastMessage().getContent();
+        }
+
+        if (printer != null) {
+            for (ToolCall command : toolCalls) {
+                String intent = describeToolStart(command);
+                if (intent != null && !intent.isBlank()) {
+                    printer.send("tool_thought", intent);
+                }
+            }
         }
 
         // action
@@ -175,6 +193,63 @@ public class ReactImplAgent extends ReActAgent {
     @Override
     public String run(String request) {
         return super.run(request);
+    }
+
+    private static String describeToolStart(ToolCall command) {
+        if (command == null || command.getFunction() == null || command.getFunction().getName() == null) {
+            return null;
+        }
+        String name = command.getFunction().getName();
+        String query = extractArg(command.getFunction().getArguments(), "query");
+        String task = extractArg(command.getFunction().getArguments(), "task");
+        return switch (name) {
+            case "deep_search" -> query == null || query.isBlank()
+                    ? "准备联网搜索"
+                    : "准备联网搜索：" + truncate(query, 80);
+            case "code_interpreter" -> "准备运行代码";
+            case "data_analysis" -> task == null || task.isBlank()
+                    ? "准备分析数据"
+                    : "准备分析数据：" + truncate(task, 80);
+            case "file_tool" -> "准备读写文件";
+            case "report_tool" -> "准备生成报告";
+            default -> "准备使用工具 " + name;
+        };
+    }
+
+    private static String extractArg(String arguments, String key) {
+        if (arguments == null || arguments.isBlank() || key == null) {
+            return null;
+        }
+        try {
+            Object parsed = JSON.parse(arguments);
+            if (parsed instanceof Map<?, ?> map) {
+                Object value = map.get(key);
+                return value == null ? null : String.valueOf(value);
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    static boolean hasToolObservation(Memory memory) {
+        if (memory == null || memory.getMessages() == null) {
+            return false;
+        }
+        for (Message message : memory.getMessages()) {
+            if (message != null && message.getRole() == RoleType.TOOL) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String truncate(String text, int maxChars) {
+        String trimmed = text.replaceAll("\\s+", " ").trim();
+        if (trimmed.length() <= maxChars) {
+            return trimmed;
+        }
+        return trimmed.substring(0, maxChars) + "…";
     }
 
 }

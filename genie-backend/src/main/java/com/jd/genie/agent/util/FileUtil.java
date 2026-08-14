@@ -29,4 +29,26 @@ public class FileUtil {
         }
         return stringBuilder.toString();
     }
+
+    /** Names and URLs only — do not paste file bodies or long search descriptions. */
+    public static String formatFileNames(List<File> files, Boolean filterInternalFile) {
+        if (files == null || files.isEmpty()) {
+            return "";
+        }
+        StringBuilder stringBuilder = new StringBuilder();
+        for (File file : files) {
+            if (Boolean.TRUE.equals(filterInternalFile) && Boolean.TRUE.equals(file.getIsInternalFile())) {
+                continue;
+            }
+            String url = Objects.nonNull(file.getOriginOssUrl()) && !file.getOriginOssUrl().isEmpty()
+                    ? file.getOriginOssUrl()
+                    : file.getOssUrl();
+            stringBuilder.append("fileName:")
+                    .append(file.getFileName() == null ? "" : file.getFileName())
+                    .append(" fileUrl:")
+                    .append(url == null ? "" : url)
+                    .append('\n');
+        }
+        return stringBuilder.toString();
+    }
 }

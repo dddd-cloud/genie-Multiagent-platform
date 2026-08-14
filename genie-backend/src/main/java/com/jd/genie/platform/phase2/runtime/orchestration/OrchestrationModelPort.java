@@ -19,6 +19,15 @@ public interface OrchestrationModelPort {
 
     RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates);
 
+    default RouteDecision selectRoute(
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        return selectRoute(query, conversationSummary, candidates);
+    }
+
     /**
      * Reviews only a single step's safe execution boundary. Implementations must not require raw prompts or tools.
      */
@@ -43,9 +52,46 @@ public interface OrchestrationModelPort {
             Map<String, String> failureMetadata
     );
 
+    default OrchestrationPlan createPlan(
+            String query,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            int attemptNo,
+            Map<String, String> successfulResultSummaries,
+            Map<String, String> failureMetadata
+    ) {
+        return createPlan(query, candidates, attemptNo, successfulResultSummaries, failureMetadata);
+    }
+
     String summarize(
             String query,
             Map<String, String> successfulResultSummaries,
             Map<String, String> failureMetadata
     );
+
+    /**
+     * Preferred summarization entry: named specialist evidence plus the original user question.
+     * Default converts evidence back to the map form for existing test fakes.
+     */
+    default String summarize(String query, List<SummaryEvidence> evidence) {
+        Map<String, String> successes = new java.util.LinkedHashMap<>();
+        Map<String, String> failures = new java.util.LinkedHashMap<>();
+        if (evidence != null) {
+            for (SummaryEvidence item : evidence) {
+                if (item == null || item.stepId() == null || item.stepId().isBlank()) {
+                    continue;
+                }
+                if (item.failed()) {
+                    failures.put(item.stepId(), item.errorCode());
+                } else if (item.output() != null) {
+                    successes.put(item.stepId(), item.output());
+                }
+            }
+        }
+        return summarize(query, successes, failures);
+    }
+
+    default String summarize(String query, String conversationHistory, List<SummaryEvidence> evidence) {
+        return summarize(query, evidence);
+    }
 }

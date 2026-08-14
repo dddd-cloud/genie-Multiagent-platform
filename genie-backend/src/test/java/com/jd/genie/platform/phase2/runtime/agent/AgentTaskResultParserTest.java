@@ -98,4 +98,25 @@ class AgentTaskResultParserTest {
         AgentTaskResult result = parser.parse(clean);
         assertEquals("引用 \"原文\" 也可", result.output());
     }
+
+    @Test
+    void acceptsSuccessOutputAtTwentyThousandCharacters() {
+        String output = "a".repeat(20_000);
+        AgentTaskResult result = parser.parse(
+                "{\"status\":\"SUCCESS\",\"output\":\"" + output + "\",\"errorCode\":null,\"retryable\":false}"
+        );
+        assertEquals(20_000, result.output().length());
+    }
+
+    @Test
+    void rejectsSuccessOutputOverTwentyThousandCharacters() {
+        String output = "a".repeat(20_001);
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> parser.parse(
+                        "{\"status\":\"SUCCESS\",\"output\":\"" + output + "\",\"errorCode\":null,\"retryable\":false}"
+                )
+        );
+        assertEquals(MvpErrorCode.AGENT_INVALID_RESULT, error.getErrorCode());
+    }
 }

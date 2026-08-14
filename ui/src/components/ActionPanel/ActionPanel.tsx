@@ -11,6 +11,7 @@ import SearchListRenderer from "./SearchListRenderer";
 import { PanelItemType } from "./type";
 import { PanelProvider } from ".";
 import { useMemoizedFn } from "ahooks";
+import { toPublicFileUrl, toDownloadUrl } from "@/utils/chat";
 
 interface ActionPanelProps {
   taskItem?: PanelItemType;
@@ -27,8 +28,8 @@ const ActionPanel: GenieType.FC<ActionPanelProps> = React.memo((props) => {
 
   const { resultMap, toolResult } = taskItem || {};
   const [ fileInfo ] = resultMap?.fileInfo || [];
-  const htmlUrl = fileInfo?.domainUrl;
-  const downloadHtmlUrl = fileInfo?.ossUrl;
+  const htmlUrl = toPublicFileUrl(fileInfo?.domainUrl);
+  const downloadHtmlUrl = toDownloadUrl(fileInfo?.ossUrl || fileInfo?.domainUrl);
 
   const { codeOutput } = resultMap || {};
 

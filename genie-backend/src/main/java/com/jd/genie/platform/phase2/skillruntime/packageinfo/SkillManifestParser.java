@@ -20,6 +20,9 @@ public class SkillManifestParser {
 
     public SkillManifest parse(byte[] bytes) {
         String source = new String(bytes, StandardCharsets.UTF_8).replace("\r\n", "\n");
+        if (source.startsWith("\uFEFF")) {
+            source = source.substring(1);
+        }
         if (!source.startsWith("---\n")) throw invalid("SKILL.md frontmatter required");
         int close = source.indexOf("\n---\n", 4);
         if (close < 0) throw invalid("SKILL.md frontmatter not closed");
@@ -31,6 +34,7 @@ public class SkillManifestParser {
         MutableEntrypoint current = null;
         boolean inEntrypoints = false;
         boolean inPackages = false;
+        boolean skippingUnknown = false;
         for (String raw : source.substring(4, close).split("\n", -1)) {
             if (raw.isBlank() || raw.stripLeading().startsWith("#")) continue;
             int indent = raw.length() - raw.stripLeading().length();
@@ -38,9 +42,16 @@ public class SkillManifestParser {
             if (indent == 0) {
                 current = null;
                 inPackages = false;
+                skippingUnknown = false;
                 if (line.equals("entrypoints:")) { inEntrypoints = true; continue; }
                 inEntrypoints = false;
+                if (isEmptyScalar(line)) {
+                    skippingUnknown = true;
+                    continue;
+                }
                 putScalar(root, line);
+            } else if (skippingUnknown) {
+                continue;
             } else if (inEntrypoints && indent == 2 && line.startsWith("- ")) {
                 if (entries.size() >= MAX_ENTRYPOINTS) throw invalid("too many entrypoints");
                 current = new MutableEntrypoint();
@@ -61,8 +72,13 @@ public class SkillManifestParser {
                 throw invalid("invalid frontmatter indentation");
             }
         }
-        if (!"1".equals(required(root, "schemaVersion"))) throw invalid("unsupported schemaVersion");
-        return new SkillManifest(required(root, "name"), required(root, "description"), required(root, "version"),
+        String schemaVersion = root.getOrDefault("schemaVersion", "1");
+        if (!"1".equals(schemaVersion)) throw invalid("unsupported schemaVersion");
+        String version = root.get("version");
+        if (version == null || version.isBlank()) {
+            version = "1.0.0";
+        }
+        return new SkillManifest(required(root, "name"), required(root, "description"), version,
             body, entries.stream().map(this::toView).toList());
     }
 
@@ -82,6 +98,10 @@ public class SkillManifestParser {
             || lower.contains("git+") || spec.contains("/") || spec.contains("\\") || spec.contains("@")
             || spec.contains(":") || spec.contains("..") || !PACKAGE_SPEC.matcher(spec).matches())
             throw invalid("invalid pyodide package spec");
+    }
+    private boolean isEmptyScalar(String line) {
+        int colon = line.indexOf(':');
+        return colon > 0 && line.substring(colon + 1).trim().isEmpty();
     }
     private void putScalar(Map<String, String> values, String line) {
         int colon = line.indexOf(':');

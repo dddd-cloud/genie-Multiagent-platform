@@ -42,13 +42,28 @@ export async function fillComposer(page: Page, text: string): Promise<void> {
   await box.fill(text);
 }
 
+const EXECUTION_MODE_LABELS: Record<
+  'AUTO' | 'DIRECT' | 'ORCHESTRATED',
+  string
+> = {
+  AUTO: 'Auto',
+  DIRECT: 'Solo',
+  ORCHESTRATED: 'Ensemble',
+};
+
 export async function selectExecutionMode(
   page: Page,
   mode: 'AUTO' | 'DIRECT' | 'ORCHESTRATED',
 ): Promise<void> {
-  const group = page.getByTestId('execution-mode-selector');
-  await expect(group).toBeVisible({ timeout: 15_000 });
-  await group.getByText(mode, { exact: true }).click();
+  const trigger = page.getByTestId('execution-mode-selector');
+  await expect(trigger).toBeVisible({ timeout: 15_000 });
+  const option = page.getByRole('option', {
+    name: EXECUTION_MODE_LABELS[mode],
+  });
+  if (!(await option.isVisible().catch(() => false))) {
+    await trigger.click();
+  }
+  await option.click();
 }
 
 /**

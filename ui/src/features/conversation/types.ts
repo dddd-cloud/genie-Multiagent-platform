@@ -14,6 +14,8 @@ export interface PersistedChatItem extends CHAT.ChatItem {
   snapshotTruncated?: boolean;
   orchestration?: OrchestrationUiState;
   orchestrationRecoveryWarning?: boolean;
+  /** Local/user stop — show a muted body line instead of the error card. */
+  stoppedByUser?: boolean;
 }
 
 export interface ConversationDraft {

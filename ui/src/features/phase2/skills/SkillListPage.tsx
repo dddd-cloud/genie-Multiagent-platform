@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, Button, Spin, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Space, Spin, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Phase2SkillResponse } from '@/contracts/phase2';
 import {
@@ -12,6 +12,7 @@ import {
   isVersionConflict,
   phase2ErrorMessage,
 } from '../phase2UiError';
+import SkillImportModal from './SkillImportModal';
 
 const { Title, Text } = Typography;
 
@@ -21,6 +22,7 @@ const SkillListPage: GenieType.FC = memo(() => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -124,9 +126,16 @@ const SkillListPage: GenieType.FC = memo(() => {
           </Title>
           <Text type="secondary">管理 Skill；排序仅在 Agent 编辑页</Text>
         </div>
-        <Button type="primary" onClick={() => navigate('/app/skills/new')}>
-          新建 Skill
-        </Button>
+        <Space>
+          <Button onClick={() => navigate('/app/skills/new')}>新建 Skill</Button>
+          <Button
+            type="primary"
+            onClick={() => setImportOpen(true)}
+            data-testid="skill-import-open"
+          >
+            导入包
+          </Button>
+        </Space>
       </div>
       {error ? (
         <Alert
@@ -150,6 +159,14 @@ const SkillListPage: GenieType.FC = memo(() => {
           locale={{ emptyText: '暂无 Skill' }}
         />
       </Spin>
+      <SkillImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={(skill) => {
+          setImportOpen(false);
+          navigate(`/app/skills/${skill.id}`);
+        }}
+      />
     </div>
   );
 });
