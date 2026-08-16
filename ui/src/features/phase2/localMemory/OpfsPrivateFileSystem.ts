@@ -105,4 +105,48 @@ export class OpfsPrivateFileSystem implements PrivateFileSystem {
       throw error;
     }
   }
+
+  async listConversationSummaries(userId: string) {
+    if (!(await this.isAvailable())) {
+      return [];
+    }
+    const items: Array<{
+      path: string;
+      updatedAt: string;
+      lastSummarizedTurnNo: number | null;
+    }> = [];
+    try {
+      const root = await this.root();
+      let cursor: FileSystemDirectoryHandle = root;
+      for (const segment of ['memory', 'v1', 'users', userId, 'conversations']) {
+        cursor = await cursor.getDirectoryHandle(segment);
+      }
+      const dirHandle = cursor as FileSystemDirectoryHandle & {
+        entries?: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+      };
+      if (typeof dirHandle.entries !== 'function') {
+        return [];
+      }
+      for await (const [conversationId, handle] of dirHandle.entries()) {
+        if (handle.kind !== 'directory') {
+          continue;
+        }
+        try {
+          const dir = handle as FileSystemDirectoryHandle;
+          const fileHandle = await dir.getFileHandle('对话摘要.md');
+          const file = await fileHandle.getFile();
+          items.push({
+            path: `/memory/v1/users/${userId}/conversations/${conversationId}/对话摘要.md`,
+            updatedAt: new Date(file.lastModified).toISOString(),
+            lastSummarizedTurnNo: null,
+          });
+        } catch {
+          // skip missing summary files
+        }
+      }
+    } catch {
+      return [];
+    }
+    return items;
+  }
 }

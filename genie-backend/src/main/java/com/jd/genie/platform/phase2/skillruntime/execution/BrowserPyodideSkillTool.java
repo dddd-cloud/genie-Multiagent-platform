@@ -2,8 +2,10 @@ package com.jd.genie.platform.phase2.skillruntime.execution;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jd.genie.agent.agent.AgentContext;
 import com.jd.genie.agent.tool.BaseTool;
+import com.jd.genie.agent.tool.ToolCollection;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageLimits;
@@ -62,7 +64,7 @@ public final class BrowserPyodideSkillTool implements BaseTool {
             if (!result.success()) throw new Phase2ContractException(MvpErrorCode.SKILL_EXECUTION_FAILED,
                 result.message() == null ? "browser skill execution failed" : result.message());
             validateJson(result.outputJson());
-            return result.outputJson();
+            return visibleToAgent(result.outputJson());
         } catch (TimeoutException e) {
             coordinator.expire(execution.executionId());
             throw new Phase2ContractException(MvpErrorCode.TOOL_TIMEOUT, "browser skill execution timed out", e);
@@ -89,5 +91,53 @@ public final class BrowserPyodideSkillTool implements BaseTool {
     private void validateJson(String value) {
         try { JsonNode ignored = mapper.readTree(value); if (ignored == null) throw new IllegalArgumentException(); }
         catch (Exception e) { throw new Phase2ContractException(MvpErrorCode.TOOL_INVALID_RESPONSE, "invalid JSON", e); }
+    }
+
+    /**
+     * Configured agents only observe 2000 chars, then cannot call file_tool.
+     * Upload generated HTML ourselves and keep the model-visible payload tiny
+     * so the SUCCESS envelope stays valid JSON.
+     */
+    private String visibleToAgent(String outputJson) {
+        try {
+            JsonNode root = mapper.readTree(outputJson);
+            if (root == null || !root.isObject()) {
+                return outputJson;
+            }
+            JsonNode htmlNode = root.get("html");
+            JsonNode filenameNode = root.get("filename");
+            if (htmlNode == null || !htmlNode.isTextual() || htmlNode.asText().isBlank()
+                    || filenameNode == null || !filenameNode.isTextual() || filenameNode.asText().isBlank()) {
+                return outputJson;
+            }
+            String filename = filenameNode.asText();
+            boolean uploaded = uploadGeneratedHtml(filename, htmlNode.asText());
+            ObjectNode copy = root.deepCopy();
+            copy.remove("html");
+            copy.put("htmlOmitted", true);
+            copy.put("previewFile", filename);
+            copy.put("uploaded", uploaded);
+            return mapper.writeValueAsString(copy);
+        } catch (Exception ignored) {
+            return outputJson;
+        }
+    }
+
+    private boolean uploadGeneratedHtml(String filename, String html) {
+        ToolCollection tools = context.getToolCollection();
+        if (tools == null || tools.getTool("file_tool") == null) {
+            return false;
+        }
+        try {
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("command", "upload");
+            params.put("filename", filename);
+            params.put("description", "生成艺术预览");
+            params.put("content", html);
+            Object result = tools.execute("file_tool", params);
+            return result != null;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 }

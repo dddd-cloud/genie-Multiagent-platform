@@ -5,6 +5,7 @@ import java.time.Instant;
 public record ConversationResponse(
     String id,
     String title,
+    boolean privacyMode,
     Instant lastMessageAt,
     Instant createdAt,
     Instant updatedAt

@@ -18,7 +18,6 @@ function chat(partial: Partial<PersistedChatItem> & Pick<PersistedChatItem, 'req
     files: [],
     responseType: 'txt',
     sessionId: 'conv-1',
-    requestId: partial.requestId,
     loading: true,
     forceStop: false,
     tasks: [],
@@ -69,7 +68,7 @@ describe('liveChatRuns', () => {
     expect(run?.chatList[0].stoppedByUser).toBe(true);
     expect(run?.chatList[0].orchestration?.masterOpen).toBe(false);
     expect(run?.chatList[0].orchestration?.terminalStatus).toBe('INTERRUPTED');
-    expect(snapshots.at(-1)).toBe(USER_STOPPED_COPY);
+    expect(snapshots[snapshots.length - 1]).toBe(USER_STOPPED_COPY);
   });
 
   it('finish removes the in-flight run', () => {

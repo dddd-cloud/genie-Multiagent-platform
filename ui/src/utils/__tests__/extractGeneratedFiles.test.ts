@@ -16,7 +16,7 @@ describe('extractGeneratedFiles', () => {
     expect(files).toEqual([
       {
         name: 'brand.html',
-        url: 'http://127.0.0.1:1601/v1/file_tool/preview/r/brand.html',
+        url: '/v1/file_tool/preview/r/brand.html',
         type: 'html',
         size: 128,
       },
@@ -35,8 +35,22 @@ describe('extractGeneratedFiles', () => {
       ],
     });
     expect(files[0].url).toBe(
-      'http://127.0.0.1:1601/v1/file_tool/preview/step-1/自我介绍.html',
+      '/v1/file_tool/preview/step-1/自我介绍.html',
     );
+  });
+
+  it('rewrites docker and loopback file-tool hosts to the UI proxy path', () => {
+    const files = extractGeneratedFiles({
+      fileList: [
+        {
+          fileName: 'art.html',
+          ossUrl: 'http://genie-tool:1601/v1/file_tool/download/r/art.html',
+          domainUrl: 'http://genie-tool:1601/v1/file_tool/preview/r/art.html',
+          fileSize: 64,
+        },
+      ],
+    });
+    expect(files[0].url).toBe('/v1/file_tool/preview/r/art.html');
   });
 
   it('returns empty when fileList is missing', () => {

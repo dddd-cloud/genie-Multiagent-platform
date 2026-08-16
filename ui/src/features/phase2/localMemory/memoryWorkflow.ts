@@ -9,10 +9,7 @@ import { assertValidMemoryPatches } from './memoryPatchValidator';
 import type { MemoryRepository } from './memoryRepository';
 import type { MemoryTaskQueue } from './memoryTaskQueue';
 import {
-  MEMORY_LIMITS,
   MemoryError,
-  codePointLength,
-  type ConversationSummaryDoc,
   type MemoryTaskRecord,
 } from './types';
 
@@ -126,41 +123,15 @@ export class MemoryWorkflow {
   }
 
   async observeCompletedMessages(
-    userId: string,
-    conversationId: string,
-    messages: ConversationMessageResponse[],
-    options?: { forceSummarize?: boolean },
+    _userId: string,
+    _conversationId: string,
+    _messages: ConversationMessageResponse[],
+    _options?: { forceSummarize?: boolean },
   ): Promise<void> {
-    if (userId !== this.userId) {
+    if (_userId !== this.userId) {
       return;
     }
-    if ((await this.repository.getOpfsStatus()) === 'UNAVAILABLE') {
-      this.queue.pauseForUnavailable();
-      return;
-    }
-
-    const turns = groupTurns(messages);
-    for (const turn of turns) {
-      await this.queue.enqueue({
-        conversationId,
-        requestId: turn.requestId,
-        type: 'ANALYZE_TURN',
-      });
-    }
-
-    const shouldSummarize = await this.shouldEnqueueSummarize(
-      conversationId,
-      turns,
-      options?.forceSummarize === true,
-    );
-    if (shouldSummarize && turns.length > 0) {
-      const latest = turns[turns.length - 1];
-      await this.queue.enqueue({
-        conversationId,
-        requestId: latest.requestId,
-        type: 'SUMMARIZE_CONVERSATION',
-      });
-    }
+    // Analyze/summarize persist on the backend after COMPLETED.
   }
 
   async requestSummarizeRebuild(
@@ -168,51 +139,6 @@ export class MemoryWorkflow {
     messages: ConversationMessageResponse[],
   ): Promise<void> {
     await this.observeCompletedMessages(this.userId, conversationId, messages, {forceSummarize: true,});
-  }
-
-  private async shouldEnqueueSummarize(
-    conversationId: string,
-    turns: Array<{ turnNo: number }>,
-    force: boolean,
-  ): Promise<boolean> {
-    if (force) {
-      return true;
-    }
-    if (turns.length === 0) {
-      return false;
-    }
-
-    const summary = await this.repository.readConversationSummary(conversationId);
-    if (summary.status === 'UNAVAILABLE') {
-      this.queue.pauseForUnavailable();
-      return false;
-    }
-    if (summary.status === 'EMPTY' || summary.status === 'CORRUPTED') {
-      return true;
-    }
-    if (summary.status !== 'READY') {
-      return false;
-    }
-
-    const last = summary.doc.lastSummarizedTurnNo;
-    const maxTurn = turns[turns.length - 1].turnNo;
-    if (maxTurn - last >= MEMORY_LIMITS.SUMMARIZE_TURN_DELTA) {
-      return true;
-    }
-
-    const ltm = await this.repository.readLongTermMemory();
-    const ltmText =
-      ltm.status === 'READY' || ltm.status === 'EMPTY'
-        ? (ltm.raw ?? '')
-        : '';
-    const summaryText = summary.raw ?? '';
-    if (
-      codePointLength(ltmText) + codePointLength(summaryText) >=
-      MEMORY_LIMITS.LOCAL_CONTEXT_WARN_CODEPOINTS
-    ) {
-      return true;
-    }
-    return false;
   }
 
   private async execute(task: MemoryTaskRecord): Promise<void> {
@@ -339,9 +265,7 @@ export class MemoryWorkflow {
       );
     }
 
-    const patches = assertValidMemoryPatches(response.patches);
-    const next = this.repository.applyPatches(current.doc, patches);
-    await this.repository.writeLongTermMemory(next);
+    assertValidMemoryPatches(response.patches);
     this.onLog?.({
       type: task.type,
       conversationId: task.conversationId,
@@ -432,15 +356,6 @@ export class MemoryWorkflow {
       );
     }
 
-    const maxTurn = turns[turns.length - 1]?.turnNo ?? lastSummarized;
-    const doc: ConversationSummaryDoc = {
-      schemaVersion: 1,
-      conversationId: task.conversationId,
-      lastSummarizedTurnNo: maxTurn,
-      updatedAt: new Date().toISOString(),
-      sections: sectionsResult.doc,
-    };
-    await this.repository.writeConversationSummary(doc);
     this.onLog?.({
       type: task.type,
       conversationId: task.conversationId,

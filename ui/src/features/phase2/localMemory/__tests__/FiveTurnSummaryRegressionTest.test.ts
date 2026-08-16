@@ -91,24 +91,19 @@ async function setup() {
 }
 
 describe('FiveTurnSummaryRegressionTest', () => {
-  it('enqueues SUMMARIZE_CONVERSATION after 5 completed turns past lastSummarizedTurnNo=0', async () => {
+  it('does not enqueue analyze or summarize after completed turns', async () => {
     const { store, workflow } = await setup();
     await workflow.observeCompletedMessages(USER, CONV, turns(5));
 
     const tasks = await store.listTasks(USER);
-    expect(
-      tasks.some((t) => t.type === 'SUMMARIZE_CONVERSATION'),
-    ).toBe(true);
+    expect(tasks).toHaveLength(0);
   });
 
-  it('does not enqueue SUMMARIZE with only 4 turns when summary is READY', async () => {
+  it('does not enqueue from the frontend when only 4 turns are completed', async () => {
     const { store, workflow } = await setup();
     await workflow.observeCompletedMessages(USER, CONV, turns(4));
 
     const tasks = await store.listTasks(USER);
-    expect(
-      tasks.some((t) => t.type === 'SUMMARIZE_CONVERSATION'),
-    ).toBe(false);
-    expect(tasks.some((t) => t.type === 'ANALYZE_TURN')).toBe(true);
+    expect(tasks).toHaveLength(0);
   });
 });

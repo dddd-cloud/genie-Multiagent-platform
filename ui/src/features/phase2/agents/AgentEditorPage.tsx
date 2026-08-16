@@ -49,6 +49,10 @@ const AgentEditorPage: GenieType.FC = memo(() => {
   const [error, setError] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    version: number;
+  } | null>(null);
 
   const loadMeta = useCallback(async (signal?: AbortSignal) => {
     const [modelList, skillList, capList] = await Promise.all([
@@ -183,33 +187,43 @@ const AgentEditorPage: GenieType.FC = memo(() => {
       message.warning('ONLINE 状态不可删除，请先下线');
       return;
     }
-    if (!agentId || form.version == null) return;
-    Modal.confirm({
-      title: '确认删除该 Agent？',
-      okType: 'danger',
-      onOk: async () => {
-        if (versionConflict) {
-          message.warning('请先重新加载服务器版本');
-          return;
-        }
-        setSaving(true);
-        setError(null);
-        try {
-          await deleteAgent(agentId, { version: form.version! });
-          message.success('已删除');
-          navigate('/app/agents');
-        } catch (err: unknown) {
-          if (isVersionConflict(err)) {
-            setVersionConflict(true);
-            setError(phase2ErrorMessage(err));
-            return;
-          }
-          setError(phase2ErrorMessage(err));
-        } finally {
-          setSaving(false);
-        }
-      },
-    });
+    if (versionConflict) {
+      message.warning('请先重新加载服务器版本');
+      return;
+    }
+    if (!agentId) {
+      setError('Agent 标识缺失，请返回列表后重新进入');
+      return;
+    }
+    if (form.version == null) {
+      setError('Agent 详情尚未加载完成，请稍候重试');
+      return;
+    }
+    setDeleteTarget({ id: agentId, version: form.version });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteAgent(deleteTarget.id, { version: deleteTarget.version });
+      setDeleteTarget(null);
+      message.success('已删除');
+      navigate('/app/agents');
+    } catch (err: unknown) {
+      if (isVersionConflict(err)) {
+        setVersionConflict(true);
+        setDeleteTarget(null);
+        setError(phase2ErrorMessage(err));
+        return;
+      }
+      setError(phase2ErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const isOnline = form.status === 'ONLINE';
@@ -305,6 +319,25 @@ const AgentEditorPage: GenieType.FC = memo(() => {
           onClose={() => setTestOpen(false)}
         />
       ) : null}
+
+      <Modal
+        title="确认删除该 Agent？"
+        open={deleteTarget !== null}
+        okText="删除"
+        cancelText="取消"
+        okType="danger"
+        confirmLoading={saving}
+        maskClosable={!saving}
+        closable={!saving}
+        onOk={() => void confirmDelete()}
+        onCancel={() => {
+          if (!saving) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <Text>下线后的 Agent 将被删除，此操作不可恢复。</Text>
+      </Modal>
     </div>
   );
 });

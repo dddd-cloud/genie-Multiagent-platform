@@ -63,6 +63,26 @@ public interface OrchestrationModelPort {
         return createPlan(query, candidates, attemptNo, successfulResultSummaries, failureMetadata);
     }
 
+    default OrchestrationPlan createPlan(
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
+            List<AgentCapabilitySummary> candidates,
+            int attemptNo,
+            Map<String, String> successfulResultSummaries,
+            Map<String, String> failureMetadata
+    ) {
+        return createPlan(
+            query,
+            conversationHistory,
+            candidates,
+            attemptNo,
+            successfulResultSummaries,
+            failureMetadata
+        );
+    }
+
     String summarize(
             String query,
             Map<String, String> successfulResultSummaries,
@@ -93,5 +113,15 @@ public interface OrchestrationModelPort {
 
     default String summarize(String query, String conversationHistory, List<SummaryEvidence> evidence) {
         return summarize(query, evidence);
+    }
+
+    default String summarize(
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
+            List<SummaryEvidence> evidence
+    ) {
+        return summarize(query, conversationHistory, evidence);
     }
 }

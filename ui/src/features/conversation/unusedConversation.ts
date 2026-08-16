@@ -21,16 +21,27 @@ export type NewConversationAction =
   | { type: 'create' };
 
 export function resolveNewConversationAction(
-  items: readonly Pick<ConversationListItem, 'id' | 'lastMessageAt'>[],
+  items: readonly Pick<ConversationListItem, 'id' | 'lastMessageAt' | 'privacyMode'>[],
   currentId?: string | null,
+  privacyMode = false,
 ): NewConversationAction {
+  const matchesPrivacy = (
+    item: Pick<ConversationListItem, 'privacyMode'>,
+  ) => item.privacyMode === true === privacyMode;
   const current = currentId
     ? items.find((item) => item.id === currentId)
     : undefined;
-  if (current && isUnusedConversation(current)) {
+  if (current && isUnusedConversation(current) && matchesPrivacy(current)) {
     return { type: 'noop' };
   }
-  const unused = unusedConversationIds(items);
+  const unused = items
+    .filter(
+      (item) =>
+        isUnusedConversation(item) &&
+        matchesPrivacy(item) &&
+        item.id !== currentId,
+    )
+    .map((item) => item.id);
   if (unused.length > 0) {
     return { type: 'reuse', id: unused[0] };
   }

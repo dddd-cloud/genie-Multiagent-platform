@@ -42,6 +42,10 @@ const SkillEditorPage: GenieType.FC = memo(() => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    version: number;
+  } | null>(null);
 
   const loadSkill = useCallback(
     async (signal?: AbortSignal) => {
@@ -179,38 +183,48 @@ const SkillEditorPage: GenieType.FC = memo(() => {
   };
 
   const handleDelete = () => {
-    if (!skillId || form.version == null) return;
-    Modal.confirm({
-      title: '确认删除该 Skill？',
-      okType: 'danger',
-      onOk: async () => {
-        if (versionConflict) {
-          message.warning('请先重新加载服务器版本');
-          return;
-        }
-        setSaving(true);
-        setError(null);
-        try {
-          await deleteSkill(skillId, { version: form.version! });
-          message.success('已删除');
-          navigate('/app/skills');
-        } catch (err: unknown) {
-          if (isSkillInUse(err)) {
-            setError(phase2ErrorMessage(err));
-            message.error(phase2ErrorMessage(err));
-            return;
-          }
-          if (isVersionConflict(err)) {
-            setVersionConflict(true);
-            setError(phase2ErrorMessage(err));
-            return;
-          }
-          setError(phase2ErrorMessage(err));
-        } finally {
-          setSaving(false);
-        }
-      },
-    });
+    if (versionConflict) {
+      message.warning('请先重新加载服务器版本');
+      return;
+    }
+    if (!skillId) {
+      setError('Skill 标识缺失，请返回列表后重新进入');
+      return;
+    }
+    if (form.version == null) {
+      setError('Skill 详情尚未加载完成，请稍候重试');
+      return;
+    }
+    setDeleteTarget({ id: skillId, version: form.version });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteSkill(deleteTarget.id, { version: deleteTarget.version });
+      setDeleteTarget(null);
+      message.success('已删除');
+      navigate('/app/skills');
+    } catch (err: unknown) {
+      if (isSkillInUse(err)) {
+        setError(phase2ErrorMessage(err));
+        message.error(phase2ErrorMessage(err));
+        return;
+      }
+      if (isVersionConflict(err)) {
+        setVersionConflict(true);
+        setDeleteTarget(null);
+        setError(phase2ErrorMessage(err));
+        return;
+      }
+      setError(phase2ErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -292,6 +306,24 @@ const SkillEditorPage: GenieType.FC = memo(() => {
           ) : null}
         </div>
       </Spin>
+      <Modal
+        title="确认删除该 Skill？"
+        open={deleteTarget !== null}
+        okText="删除"
+        cancelText="取消"
+        okType="danger"
+        confirmLoading={saving}
+        maskClosable={!saving}
+        closable={!saving}
+        onOk={() => void confirmDelete()}
+        onCancel={() => {
+          if (!saving) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <Text>删除后将无法恢复。若仍被 Agent 引用，删除会被拒绝。</Text>
+      </Modal>
     </div>
   );
 });

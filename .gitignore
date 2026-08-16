@@ -23,11 +23,13 @@ node_modules/
 **/session*
 **/*.session
 **/.joycode/
+**/.joyagent/
 **/local-memory*
 **/opfs-state*
 
 # Per-user Skill Package workspace (never commit); keep skills/builtin/
 skills/users/
+**/skills/users/
 
 # IDE workspace state (local only)
 .vscode/settings.json

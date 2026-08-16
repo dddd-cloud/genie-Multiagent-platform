@@ -52,6 +52,36 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
         WHERE c.tenant_id = #{tenantId}
           AND c.owner_id = #{ownerId}
           AND c.deleted_at IS NULL
+          AND m.id = #{messageId}
+        """)
+    ConversationMessageEntity selectOwnedMessage(@Param("tenantId") String tenantId,
+                                                 @Param("ownerId") String ownerId,
+                                                 @Param("messageId") String messageId);
+
+    @Select("""
+        SELECT m.*
+        FROM conversation_message m
+        JOIN conversation c ON c.id = m.conversation_id
+        WHERE c.tenant_id = #{tenantId}
+          AND c.owner_id = #{ownerId}
+          AND c.deleted_at IS NULL
+          AND m.conversation_id = #{conversationId}
+          AND m.request_id = #{requestId}
+          AND m.role = #{role}
+        """)
+    ConversationMessageEntity selectOwnedMessageByRequestRole(@Param("tenantId") String tenantId,
+                                                              @Param("ownerId") String ownerId,
+                                                              @Param("conversationId") String conversationId,
+                                                              @Param("requestId") String requestId,
+                                                              @Param("role") String role);
+
+    @Select("""
+        SELECT m.*
+        FROM conversation_message m
+        JOIN conversation c ON c.id = m.conversation_id
+        WHERE c.tenant_id = #{tenantId}
+          AND c.owner_id = #{ownerId}
+          AND c.deleted_at IS NULL
           AND m.conversation_id = #{conversationId}
         ORDER BY m.turn_no ASC, m.created_at ASC, m.id ASC
         """)

@@ -19,7 +19,8 @@ import {
   createSafeMemoryLogger,
 } from './memoryWorkflow';
 import { emptyLongTermMemoryDoc } from './markdownSerializer';
-import { OpfsPrivateFileSystem } from './OpfsPrivateFileSystem';
+import { HttpPrivateFileSystem } from './HttpPrivateFileSystem';
+import { migrateOpfsToDiskIfEmpty } from './opfsDiskMigration';
 import type { PrivateFileSystem } from './PrivateFileSystem';
 import type { MemoryIndexStore } from './MemoryIndexStore';
 import {
@@ -98,11 +99,12 @@ const LocalMemoryProvider: GenieType.FC<LocalMemoryProviderProps> = memo(
     } = props;
 
     const [opfsStatus, setOpfsStatus] = useState<OpfsStatus>('EMPTY');
+    const [diskRootPath, setDiskRootPath] = useState<string | null>(null);
     const bundleRef = useRef<RuntimeBundle | null>(null);
     const [bundleVersion, setBundleVersion] = useState(0);
 
     useEffect(() => {
-      const fs = fileSystem ?? new OpfsPrivateFileSystem();
+      const fs = fileSystem ?? new HttpPrivateFileSystem();
       const store = indexStore ?? new IndexedDbMemoryIndexStore();
       const bundle = createRuntime(userId, fs, store);
       bundleRef.current = bundle;
@@ -119,6 +121,16 @@ const LocalMemoryProvider: GenieType.FC<LocalMemoryProviderProps> = memo(
           bundle.queue.pauseForUnavailable();
           return;
         }
+        if (!fileSystem) {
+          try {
+            await migrateOpfsToDiskIfEmpty(userId, fs);
+          } catch {
+            // Migration is best-effort; disk remains the authority.
+          }
+        }
+        if (fs instanceof HttpPrivateFileSystem) {
+          setDiskRootPath(await fs.readRootPath());
+        }
         setOpfsStatus('READY');
         if (autoStart) {
           bundle.queue.start();
@@ -131,6 +143,7 @@ const LocalMemoryProvider: GenieType.FC<LocalMemoryProviderProps> = memo(
         bundle.workflow.abort();
         bundleRef.current = null;
         setOpfsStatus('EMPTY');
+        setDiskRootPath(null);
       };
     }, [userId, fileSystem, indexStore, autoStart]);
 
@@ -272,6 +285,7 @@ const LocalMemoryProvider: GenieType.FC<LocalMemoryProviderProps> = memo(
       return {
         userId,
         opfsStatus,
+        diskRootPath,
         repository: bundle?.repository ?? null,
         queue: bundle?.queue ?? null,
         workflow: bundle?.workflow ?? null,
@@ -289,6 +303,7 @@ const LocalMemoryProvider: GenieType.FC<LocalMemoryProviderProps> = memo(
     }, [
       userId,
       opfsStatus,
+      diskRootPath,
       refreshStatus,
       observeCompletedMessages,
       listSummaryIndex,

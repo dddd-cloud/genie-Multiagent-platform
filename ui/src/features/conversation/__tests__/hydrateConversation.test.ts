@@ -334,7 +334,7 @@ describe('hydrateConversation', () => {
     expect(items[0].generatedFiles).toEqual([
       {
         name: 'page.html',
-        url: 'http://127.0.0.1:1601/v1/file_tool/preview/r/page.html',
+        url: '/v1/file_tool/preview/r/page.html',
         type: 'html',
         size: 12,
       },

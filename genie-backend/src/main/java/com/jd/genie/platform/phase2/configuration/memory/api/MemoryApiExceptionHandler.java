@@ -3,6 +3,7 @@ package com.jd.genie.platform.phase2.configuration.memory.api;
 import com.jd.genie.platform.contract.ApiResponse;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.configuration.memory.exception.MemoryAnalysisException;
+import com.jd.genie.platform.phase2.memory.store.MemoryStoreException;
 import com.jd.genie.platform.phase2contract.error.Phase2ErrorHttpStatus;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,11 @@ public class MemoryApiExceptionHandler {
 
     @ExceptionHandler(MemoryAnalysisException.class)
     ResponseEntity<ApiResponse<Void>> memory(MemoryAnalysisException exception) {
+        return error(safeCode(exception.code()));
+    }
+
+    @ExceptionHandler(MemoryStoreException.class)
+    ResponseEntity<ApiResponse<Void>> store(MemoryStoreException exception) {
         return error(safeCode(exception.code()));
     }
 

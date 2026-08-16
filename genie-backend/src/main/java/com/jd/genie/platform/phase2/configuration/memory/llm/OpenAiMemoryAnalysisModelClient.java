@@ -3,6 +3,7 @@ package com.jd.genie.platform.phase2.configuration.memory.llm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.agent.llm.LLMSettings;
+import com.jd.genie.agent.llm.LlmSettingsResolver;
 import com.jd.genie.config.GenieConfig;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.configuration.memory.exception.MemoryAnalysisException;
@@ -96,13 +97,8 @@ public class OpenAiMemoryAnalysisModelClient implements MemoryAnalysisModelClien
     }
 
     private LLMSettings resolveSettings() {
-        String modelName = genieConfig.getReactModelName();
-        Map<String, LLMSettings> settingsMap = genieConfig.getLlmSettingsMap();
-        if (modelName == null || modelName.isBlank() || settingsMap == null) {
-            throw failed();
-        }
-        LLMSettings settings = settingsMap.get(modelName);
-        if (settings == null || blank(settings.getApiKey()) || blank(settings.getBaseUrl())) {
+        LLMSettings settings = LlmSettingsResolver.resolveComplete(genieConfig);
+        if (settings == null) {
             throw failed();
         }
         return settings;

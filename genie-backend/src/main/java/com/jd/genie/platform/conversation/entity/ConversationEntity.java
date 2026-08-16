@@ -15,6 +15,7 @@ public class ConversationEntity implements Serializable {
     private String tenantId;
     private String ownerId;
     private String title;
+    private Boolean privacyMode;
     private Long nextTurnNo;
     private Instant lastMessageAt;
     private Instant createdAt;

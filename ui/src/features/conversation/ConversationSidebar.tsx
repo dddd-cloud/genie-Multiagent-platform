@@ -156,8 +156,15 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
             >
               <div className="flex items-center justify-between gap-8">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[14px] text-text-primary truncate leading-[22px]">
-                    {item.title}
+                  <div className="flex items-center gap-6 min-w-0">
+                    <div className="text-[14px] text-text-primary truncate leading-[22px]">
+                      {item.title}
+                    </div>
+                    {item.privacyMode ? (
+                      <span className="shrink-0 rounded-full bg-[#F0F0F2] px-6 py-1 text-[10px] text-text-tertiary">
+                        隐私
+                      </span>
+                    ) : null}
                   </div>
                   {item.lastMessageAt ? (
                     <div className="text-[11px] text-text-tertiary mt-2 leading-[16px]">

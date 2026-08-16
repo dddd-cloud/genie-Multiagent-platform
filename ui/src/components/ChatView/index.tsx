@@ -175,8 +175,6 @@ async function resolvePhase2LocalContext(
     };
   }
 
-  let ltmRaw = '';
-  let summaryRaw = '';
   let corrupted = false;
   let unavailable = false;
 
@@ -191,12 +189,6 @@ async function resolvePhase2LocalContext(
     }
     if (ltm.status === 'CORRUPTED' || summary.status === 'CORRUPTED') {
       corrupted = true;
-    }
-    if (ltm.status === 'READY' && typeof ltm.raw === 'string') {
-      ltmRaw = ltm.raw;
-    }
-    if (summary.status === 'READY' && typeof summary.raw === 'string') {
-      summaryRaw = summary.raw;
     }
     if (ltm.status === 'ERROR' || summary.status === 'ERROR') {
       unavailable = true;
@@ -255,7 +247,7 @@ async function resolvePhase2LocalContext(
     return {
       action: 'continue',
       longTermMemory: '',
-      conversationSummary: ''
+      conversationSummary: '',
     };
   }
 
@@ -264,14 +256,14 @@ async function resolvePhase2LocalContext(
     return {
       action: 'continue',
       longTermMemory: '',
-      conversationSummary: ''
+      conversationSummary: '',
     };
   }
 
   return {
     action: 'continue',
-    longTermMemory: ltmRaw,
-    conversationSummary: summaryRaw,
+    longTermMemory: '',
+    conversationSummary: '',
   };
 }
 

@@ -221,6 +221,7 @@ const ConversationPage: GenieType.FC = memo(() => {
           ctx.upsert({
             id: conv.id,
             title: conv.title,
+            privacyMode: conv.privacyMode === true,
             lastMessageAt: conv.lastMessageAt,
             createdAt: conv.createdAt,
             updatedAt: conv.updatedAt,
@@ -342,28 +343,37 @@ const ConversationPage: GenieType.FC = memo(() => {
   void rawMessages;
 
   return (
-    <ChatView
-      key={conversationId}
-      conversationId={conversationId}
-      conversationTitle={conversation.title}
-      initialChats={chats}
-      mode={derivedMode}
-      executionMode={executionMode}
-      allowedAgentIds={allowedAgentIds}
-      onExecutionModeChange={setExecutionMode}
-      onAllowedAgentIdsChange={setAllowedAgentIds}
-      initialDraft={
-        pendingDraft
-          ? {
-            requestId: pendingDraft.requestId,
-            inputInfo: pendingDraft.inputInfo,
-          }
-          : undefined
-      }
-      detachedRunning={detachedRunning}
-      onReloadMessages={onReloadMessages}
-      onConversationChanged={refreshConversationMeta}
-    />
+    <>
+      {conversation.privacyMode ? (
+        <div className="px-24 pt-12">
+          <div className="rounded-lg bg-[#F5F5F7] px-14 py-10 text-[13px] text-text-secondary">
+            隐私模式：此对话不会写入记忆。
+          </div>
+        </div>
+      ) : null}
+      <ChatView
+        key={conversationId}
+        conversationId={conversationId}
+        conversationTitle={conversation.title}
+        initialChats={chats}
+        mode={derivedMode}
+        executionMode={executionMode}
+        allowedAgentIds={allowedAgentIds}
+        onExecutionModeChange={setExecutionMode}
+        onAllowedAgentIdsChange={setAllowedAgentIds}
+        initialDraft={
+          pendingDraft
+            ? {
+              requestId: pendingDraft.requestId,
+              inputInfo: pendingDraft.inputInfo,
+            }
+            : undefined
+        }
+        detachedRunning={detachedRunning}
+        onReloadMessages={onReloadMessages}
+        onConversationChanged={refreshConversationMeta}
+      />
+    </>
   );
 });
 

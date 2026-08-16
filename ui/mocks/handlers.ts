@@ -23,7 +23,8 @@ const CSRF_TOKEN = 'mvp-mock-csrf-token';
 type ConversationFixture = {
   code: string;
   message: string;
-  data: ConversationResponse & {
+  data: Omit<ConversationResponse, 'privacyMode'> & {
+    privacyMode?: boolean;
     messages: Array<Record<string, unknown>>;
   };
 };
@@ -136,6 +137,7 @@ function seedHistoryListItems(): void {
     delete (rest as { messages?: unknown }).messages;
     mockState.conversations.set(id, {
       ...rest,
+      privacyMode: rest.privacyMode === true,
       lastMessagePreview: null,
     });
   }
@@ -252,12 +254,14 @@ export const handlers: HttpHandler[] = [
 
     const body = (await request.json().catch(() => ({}))) as {
       title?: string | null;
+      privacyMode?: boolean;
     };
     const now = new Date().toISOString();
     const id = `conv-${crypto.randomUUID()}`;
     const item: ConversationListItem = {
       id,
       title: body.title?.trim() || '新对话',
+      privacyMode: body.privacyMode === true,
       lastMessageAt: null,
       createdAt: now,
       updatedAt: now,
@@ -330,6 +334,7 @@ export const handlers: HttpHandler[] = [
       ({
         id,
         title: HISTORY_FIXTURES[id]!.data.title,
+        privacyMode: HISTORY_FIXTURES[id]!.data.privacyMode === true,
         lastMessageAt: HISTORY_FIXTURES[id]!.data.lastMessageAt,
         createdAt: HISTORY_FIXTURES[id]!.data.createdAt,
         updatedAt: HISTORY_FIXTURES[id]!.data.updatedAt,

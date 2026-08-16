@@ -77,6 +77,38 @@ class SerialOrchestrationServiceTest {
     }
 
     @Test
+    void injectsLongTermMemoryAndConversationSummaryIntoSpecialistQuery() {
+        FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
+        catalog.registerProfile(profile("agent-a"));
+        FakeRuntimeToolCollectionPort tools = new FakeRuntimeToolCollectionPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        List<String> queries = new ArrayList<>();
+        doAnswer(invocation -> {
+            AgentContext context = invocation.getArgument(0);
+            queries.add(context.getQuery());
+            return AgentTaskResult.success("ok");
+        }).when(executor).execute(any(), any(), any(), any(Integer.TYPE));
+        SerialOrchestrationService service = new SerialOrchestrationService(catalog, tools, executor, 10);
+
+        service.execute(
+                USER,
+                "我是谁？",
+                UntrustedLocalContext.body("林晓，杭州 Java 后端", "当前目标：测试记忆"),
+                List.of(new OrchestrationStep("step-1", "agent-a", "根据记忆回答身份", List.of())),
+                (eventType, step, result, details) -> { },
+                () -> false,
+                new java.util.LinkedHashMap<>(),
+                null,
+                1
+        );
+
+        assertEquals(1, queries.size());
+        assertTrue(queries.get(0).contains("UNTRUSTED_LOCAL_CONTEXT"));
+        assertTrue(queries.get(0).contains("林晓，杭州 Java 后端"));
+        assertTrue(queries.get(0).contains("当前目标：测试记忆"));
+    }
+
+    @Test
     void neverRunsMoreThanOneBusinessAgentAtATime() {
         FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
         catalog.registerProfile(profile("agent-a"));

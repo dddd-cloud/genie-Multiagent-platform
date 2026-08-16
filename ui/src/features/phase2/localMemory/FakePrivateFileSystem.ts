@@ -56,6 +56,22 @@ export class FakePrivateFileSystem implements PrivateFileSystem {
     this.files.delete(path);
   }
 
+  async listConversationSummaries(userId: string) {
+    const prefix = `/memory/v1/users/${userId}/conversations/`;
+    const items = [];
+    for (const [path] of this.files) {
+      if (!path.startsWith(prefix) || !path.endsWith('/对话摘要.md')) {
+        continue;
+      }
+      items.push({
+        path,
+        updatedAt: new Date().toISOString(),
+        lastSummarizedTurnNo: null as number | null,
+      });
+    }
+    return items;
+  }
+
   seed(path: string, content: string): void {
     assertAllowedMemoryPath(path);
     this.files.set(path, content);

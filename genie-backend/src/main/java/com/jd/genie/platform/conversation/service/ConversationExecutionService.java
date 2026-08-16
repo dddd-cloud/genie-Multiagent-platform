@@ -16,6 +16,8 @@ import com.jd.genie.platform.conversation.exception.DuplicateConstraintClassifie
 import com.jd.genie.platform.conversation.mapper.ConversationMapper;
 import com.jd.genie.platform.conversation.mapper.ConversationMessageMapper;
 import com.jd.genie.platform.conversation.snapshot.SnapshotValidator;
+import com.jd.genie.platform.phase2.memory.capture.MemoryTurnCaptureService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
@@ -43,6 +45,7 @@ public class ConversationExecutionService implements ConversationExecutionPort {
     private final ConversationMessageMapper conversationMessageMapper;
     private final ConversationHistoryService conversationHistoryService;
     private final ConversationTitleService conversationTitleService;
+    private final MemoryTurnCaptureService memoryTurnCaptureService;
     private final Clock clock = Clock.systemUTC();
 
     @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}")
@@ -52,18 +55,43 @@ public class ConversationExecutionService implements ConversationExecutionPort {
     public ConversationExecutionService(ConversationMapper conversationMapper,
                                         ConversationMessageMapper conversationMessageMapper,
                                         ConversationHistoryService conversationHistoryService,
-                                        ConversationTitleService conversationTitleService) {
-        this.conversationMapper = conversationMapper;
-        this.conversationMessageMapper = conversationMessageMapper;
-        this.conversationHistoryService = conversationHistoryService;
-        this.conversationTitleService = conversationTitleService;
+                                        ConversationTitleService conversationTitleService,
+                                        ObjectProvider<MemoryTurnCaptureService> memoryTurnCaptureService) {
+        this(
+            conversationMapper,
+            conversationMessageMapper,
+            conversationHistoryService,
+            conversationTitleService,
+            memoryTurnCaptureService == null ? null : memoryTurnCaptureService.getIfAvailable()
+        );
     }
 
     public ConversationExecutionService(ConversationMapper conversationMapper,
                                         ConversationMessageMapper conversationMessageMapper) {
         this(conversationMapper, conversationMessageMapper,
             new ConversationHistoryService(conversationMapper, conversationMessageMapper),
-            new ConversationTitleService(conversationMapper));
+            new ConversationTitleService(conversationMapper),
+            (MemoryTurnCaptureService) null);
+    }
+
+    public ConversationExecutionService(ConversationMapper conversationMapper,
+                                 ConversationMessageMapper conversationMessageMapper,
+                                 ConversationHistoryService conversationHistoryService,
+                                 ConversationTitleService conversationTitleService) {
+        this(conversationMapper, conversationMessageMapper, conversationHistoryService, conversationTitleService,
+            (MemoryTurnCaptureService) null);
+    }
+
+    ConversationExecutionService(ConversationMapper conversationMapper,
+                                 ConversationMessageMapper conversationMessageMapper,
+                                 ConversationHistoryService conversationHistoryService,
+                                 ConversationTitleService conversationTitleService,
+                                 MemoryTurnCaptureService memoryTurnCaptureService) {
+        this.conversationMapper = conversationMapper;
+        this.conversationMessageMapper = conversationMessageMapper;
+        this.conversationHistoryService = conversationHistoryService;
+        this.conversationTitleService = conversationTitleService;
+        this.memoryTurnCaptureService = memoryTurnCaptureService;
     }
     @Override
     @Transactional
@@ -152,6 +180,9 @@ public class ConversationExecutionService implements ConversationExecutionPort {
             valid.payloadVersion(),
             Instant.now(clock)
         ));
+        if (memoryTurnCaptureService != null) {
+            memoryTurnCaptureService.scheduleAfterComplete(validUser, valid.assistantMessageId());
+        }
     }
 
     @Override

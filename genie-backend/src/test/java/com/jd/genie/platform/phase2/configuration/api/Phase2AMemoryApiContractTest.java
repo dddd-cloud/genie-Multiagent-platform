@@ -8,6 +8,7 @@ import com.jd.genie.platform.phase2.configuration.memory.dto.MemoryPatchResponse
 import com.jd.genie.platform.phase2.configuration.memory.exception.MemoryAnalysisException;
 import com.jd.genie.platform.phase2.configuration.memory.service.ConversationSummaryAnalysisService;
 import com.jd.genie.platform.phase2.configuration.memory.service.MemoryAnalysisService;
+import com.jd.genie.platform.phase2.memory.store.MemoryDocumentService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
@@ -28,10 +29,11 @@ class Phase2AMemoryApiContractTest extends Phase2AApiTestSupport {
     void returnsFrozenMemoryPatchAndUsesCurrentUser() throws Exception {
         MemoryAnalysisService memoryService = mock(MemoryAnalysisService.class);
         ConversationSummaryAnalysisService summaryService = mock(ConversationSummaryAnalysisService.class);
+        MemoryDocumentService memoryDocuments = mock(MemoryDocumentService.class);
         when(memoryService.analyzeTurn(any())).thenReturn(new MemoryPatchResponse(1, List.of(
             new MemoryPatchItem("UPSERT", "回答偏好", "answerStyle", "concise")
         )));
-        var mvc = mvc(new Phase2MemoryController(memoryService, summaryService, currentUserProvider));
+        var mvc = mvc(new Phase2MemoryController(memoryService, summaryService, memoryDocuments, currentUserProvider));
 
         mvc.perform(post("/api/v2/memory/analyze-turn").contentType(MediaType.APPLICATION_JSON).content(json(new MemoryAnalysisRequest(
                 "conversation-1", "用户说喜欢简洁", "好的", "", "COMPLETED"))))
@@ -46,9 +48,10 @@ class Phase2AMemoryApiContractTest extends Phase2AApiTestSupport {
     void mapsModelAndMalformedFailuresWithoutLeakingMessageText() throws Exception {
         MemoryAnalysisService memoryService = mock(MemoryAnalysisService.class);
         ConversationSummaryAnalysisService summaryService = mock(ConversationSummaryAnalysisService.class);
+        MemoryDocumentService memoryDocuments = mock(MemoryDocumentService.class);
         when(memoryService.analyzeTurn(any())).thenThrow(new MemoryAnalysisException(
             MvpErrorCode.MEMORY_ANALYSIS_FAILED, "secret user message body"));
-        var mvc = mvc(new Phase2MemoryController(memoryService, summaryService, currentUserProvider));
+        var mvc = mvc(new Phase2MemoryController(memoryService, summaryService, memoryDocuments, currentUserProvider));
 
         mvc.perform(post("/api/v2/memory/analyze-turn").contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isBadGateway())

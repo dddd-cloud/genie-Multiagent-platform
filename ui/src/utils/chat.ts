@@ -850,24 +850,33 @@ export const getIcon = (type: string): string => {
   return DEFAULT_ICON;
 };
 
-const FILE_TOOL_ORIGIN = 'http://127.0.0.1:1601/v1/file_tool';
+const FILE_TOOL_PATH = '/v1/file_tool';
+const FILE_TOOL_HOST = /^(https?:\/\/(?:127\.0\.0\.1|localhost|genie-tool)(?::1601)?)(\/.*)?$/i;
+
+function toFileToolPath(path: string): string | undefined {
+  const normalized = path.replace(/^None\/?/i, '').replace(/^\//, '');
+  if (normalized.startsWith('v1/file_tool/')) {
+    return `/${normalized}`;
+  }
+  if (normalized.startsWith('download/') || normalized.startsWith('preview/')) {
+    return `${FILE_TOOL_PATH}/${normalized}`;
+  }
+  return undefined;
+}
 
 export function toPublicFileUrl(url?: string): string | undefined {
   if (!url) {
     return url;
   }
   const trimmed = url.trim();
+  const hosted = trimmed.match(FILE_TOOL_HOST);
+  if (hosted) {
+    return toFileToolPath(hosted[2] || '') || trimmed;
+  }
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
-  const path = trimmed.replace(/^None\/?/i, '').replace(/^\//, '');
-  if (path.startsWith('download/') || path.startsWith('preview/')) {
-    return `${FILE_TOOL_ORIGIN}/${path}`;
-  }
-  if (path.startsWith('v1/file_tool/')) {
-    return `http://127.0.0.1:1601/${path}`;
-  }
-  return trimmed;
+  return toFileToolPath(trimmed) || trimmed;
 }
 
 export const buildAttachment = (fileList: CHAT.FileList[]) => {

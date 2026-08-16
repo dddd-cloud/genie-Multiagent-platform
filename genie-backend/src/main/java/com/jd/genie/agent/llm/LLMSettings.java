@@ -1,5 +1,6 @@
 package com.jd.genie.agent.llm;
 
+import com.alibaba.fastjson.annotation.JSONField;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,6 +24,7 @@ public class LLMSettings {
     /**
      * 最大生成 token 数量
      */
+    @JSONField(name = "maxTokens", alternateNames = {"max_tokens"})
     private int maxTokens;
 
     /**
@@ -38,6 +40,7 @@ public class LLMSettings {
     /**
      * API 密钥
      */
+    @JSONField(name = "apiKey", alternateNames = {"apikey"})
     private String apiKey;
 
     /**
@@ -48,11 +51,13 @@ public class LLMSettings {
     /**
      * 基础 URL
      */
+    @JSONField(name = "baseUrl", alternateNames = {"base_url"})
     private String baseUrl;
 
     /**
      * 接口 URL
      */
+    @JSONField(name = "interfaceUrl", alternateNames = {"interface_url"})
     private String interfaceUrl;
 
     /**
@@ -63,6 +68,7 @@ public class LLMSettings {
     /**
      * 最大输入 token 数量
      */
+    @JSONField(name = "maxInputTokens", alternateNames = {"max_input_tokens"})
     private int maxInputTokens;
 
     /**

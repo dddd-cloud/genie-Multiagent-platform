@@ -235,10 +235,14 @@ export class MemoryRepository {
   }
 
   async listSummaryIndex() {
-    const records = await this.index.listIndex(this.userId);
-    return records.filter((record) =>
-      record.path.includes('/conversations/'),
-    );
+    const listed = await this.fs.listConversationSummaries(this.userId);
+    return listed.map((item) => ({
+      userId: this.userId,
+      path: item.path,
+      schemaVersion: 1 as const,
+      updatedAt: item.updatedAt,
+      lastSummarizedTurnNo: item.lastSummarizedTurnNo,
+    }));
   }
 
   private async writeVerified(path: string, content: string): Promise<void> {

@@ -34,6 +34,8 @@ genie:
     admin-password: ${GENIE_BOOTSTRAP_ADMIN_PASSWORD:}
   conversation:
     title-model: ${GENIE_TITLE_MODEL:${DEFAULT_MODEL:qwen3.7-max}}
+  memory:
+    dir: ${GENIE_MEMORY_DIR:}
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
   configuration:

@@ -9,10 +9,12 @@ import {
 function item(
   id: string,
   lastMessageAt: string | null,
+  privacyMode = false,
 ): ConversationListItem {
   return {
     id,
     title: id,
+    privacyMode,
     lastMessageAt,
     createdAt: '2026-08-14T00:00:00Z',
     updatedAt: '2026-08-14T00:00:00Z',
@@ -63,5 +65,25 @@ describe('unusedConversation', () => {
         'used',
       ),
     ).toEqual({ type: 'create' });
+  });
+
+  it('does not reuse a privacy draft when creating a normal conversation', () => {
+    expect(
+      resolveNewConversationAction(
+        [item('privacy-draft', null, true)],
+        'used',
+        false,
+      ),
+    ).toEqual({ type: 'create' });
+  });
+
+  it('reuses a privacy draft only when privacy mode is on', () => {
+    expect(
+      resolveNewConversationAction(
+        [item('privacy-draft', null, true), item('normal-draft', null, false)],
+        'used',
+        true,
+      ),
+    ).toEqual({ type: 'reuse', id: 'privacy-draft' });
   });
 });

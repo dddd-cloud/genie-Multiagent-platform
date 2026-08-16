@@ -133,7 +133,16 @@ public final class Phase2OrchestrationRuntime {
 
             Map<String, String> successes = new LinkedHashMap<>();
             OrchestrationPlan plan = planValidator.validate(
-                    modelPort.createPlan(query, conversationHistory, candidates, 1, Map.of(), Map.of()),
+                    modelPort.createPlan(
+                            query,
+                            conversationHistory,
+                            longTermMemory,
+                            conversationSummary,
+                            candidates,
+                            1,
+                            Map.of(),
+                            Map.of()
+                    ),
                     candidates
             );
             List<OrchestrationPlanStepView> steps = plan.steps().stream()
@@ -144,7 +153,7 @@ public final class Phase2OrchestrationRuntime {
             java.util.concurrent.atomic.AtomicBoolean degraded = new java.util.concurrent.atomic.AtomicBoolean(false);
             java.util.List<com.jd.genie.agent.dto.File> deliverableFiles = new java.util.ArrayList<>();
             Map<String, AgentTaskResult> results = serialService.execute(
-                    user, query, conversationHistory, longTermMemory, plan.steps(),
+                    user, query, conversationHistory, UntrustedLocalContext.body(longTermMemory, conversationSummary), plan.steps(),
                     new OrchestrationEventSink() {
                         @Override
                         public void emit(String eventType, OrchestrationStep step, AgentTaskResult result, Map<String, Object> details) {
@@ -178,6 +187,8 @@ public final class Phase2OrchestrationRuntime {
                     sequence,
                     query,
                     conversationHistory,
+                    longTermMemory,
+                    conversationSummary,
                     steps,
                     results,
                     successes,
@@ -269,6 +280,8 @@ public final class Phase2OrchestrationRuntime {
             AtomicLong sequence,
             String query,
             String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
             List<OrchestrationPlanStepView> steps,
             Map<String, AgentTaskResult> results,
             Map<String, String> successes,
@@ -284,7 +297,8 @@ public final class Phase2OrchestrationRuntime {
         String fallback = fallbackAnswer(query, evidence);
         String answer;
         try {
-            String overview = modelPort.summarize(query, conversationHistory, evidence);
+            String overview = modelPort.summarize(
+                    query, conversationHistory, longTermMemory, conversationSummary, evidence);
             answer = overview == null || overview.isBlank() ? fallback : overview.trim();
             emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
             traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总完成", false);

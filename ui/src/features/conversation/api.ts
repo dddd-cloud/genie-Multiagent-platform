@@ -10,8 +10,11 @@ import { requestMvp } from '@/services/mvp';
 
 const BASE = '/api/v1/conversations';
 
-export function createConversation(title?: string | null) {
-  const data: CreateConversationRequest = { title: title ?? null };
+export function createConversation(title?: string | null, privacyMode = false) {
+  const data: CreateConversationRequest = {
+    title: title ?? null,
+    privacyMode,
+  };
   return requestMvp<ConversationResponse>({
     method: 'POST',
     url: BASE,

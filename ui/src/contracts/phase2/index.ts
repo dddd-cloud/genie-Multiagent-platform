@@ -52,6 +52,12 @@ export type {
   MemoryPatchItem,
   MemoryPatchResponse,
   ConversationSummaryResponse,
+  MemoryFileResponse,
+  MemoryFileStatus,
+  MemoryStatusResponse,
+  MemorySummaryIndexItem,
+  MemorySummaryIndexResponse,
+  MemoryMarkdownWriteRequest,
 } from './memory';
 
 export {

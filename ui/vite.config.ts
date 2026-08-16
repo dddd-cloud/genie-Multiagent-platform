@@ -36,6 +36,13 @@ export default defineConfig(({ command, mode, isPreview }) => {
         target: env.SERVICE_BASE_URL,
         changeOrigin: true,
       },
+      '/v1/file_tool': {
+        target:
+          env.FILE_TOOL_BASE_URL ||
+          process.env.FILE_TOOL_BASE_URL ||
+          'http://genie-tool:1601',
+        changeOrigin: true,
+      },
     };
 
   return {

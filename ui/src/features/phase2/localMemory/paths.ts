@@ -62,6 +62,14 @@ export function isAllowedMemoryPath(path: string): boolean {
   return false;
 }
 
+export function conversationIdFromSummaryPath(path: string): string | null {
+  const match =
+    /^\/memory\/v1\/users\/[^/]+\/conversations\/([^/]+)\/对话摘要\.md$/.exec(
+      path,
+    );
+  return match?.[1] ?? null;
+}
+
 export function assertAllowedMemoryPath(path: string): void {
   if (!isAllowedMemoryPath(path)) {
     throw new Error(`Disallowed memory path: ${path}`);

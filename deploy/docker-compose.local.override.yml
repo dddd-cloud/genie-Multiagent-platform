@@ -22,10 +22,25 @@ services:
       AUTOBOTS_AUTOAGENT_KNOWLEDGE_URL: http://genie-tool:1601
       AUTOBOTS_AUTOAGENT_DATA_ANALYSIS_URL: http://genie-tool:1601
       AUTOBOTS_AUTOAGENT_MCP_CLIENT_URL: http://genie-client:8188
+      GENIE_MEMORY_DIR: /var/lib/joyagent/memory
+
+  genie-tool:
+    ports:
+      - "1601:1601"
+    environment:
+      USE_JD_SEARCH_GATEWAY: ${USE_JD_SEARCH_GATEWAY:-false}
+      USE_SEARCH_ENGINE: ${USE_SEARCH_ENGINE:-serp}
+      SERPER_SEARCH_URL: ${SERPER_SEARCH_URL:-https://google.serper.dev/search}
+      SERPER_SEARCH_API_KEY: ${SERPER_SEARCH_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-}
 
   ui:
     environment:
       VITE_PHASE2_ENABLED: ${VITE_PHASE2_ENABLED:-false}
+      VITE_PYODIDE_INDEX_URL: ${VITE_PYODIDE_INDEX_URL:-https://cdn.jsdelivr.net/pyodide/v0.27.7/full/}
+      FILE_TOOL_BASE_URL: http://genie-tool:1601
     volumes:
       - ../docs:/workspace/docs:ro
       # Keep package-manager writes off the Windows source bind mount.

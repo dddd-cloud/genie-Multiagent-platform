@@ -69,7 +69,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
       try {
         const requestId = createRequestId();
         await layout?.discardUnusedDrafts?.();
-        const created = await createConversation(null);
+        const created = await createConversation(null, layout?.privacyMode === true);
         if (!created) {
           message.error('创建会话失败');
           return;

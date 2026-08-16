@@ -17,7 +17,10 @@ import com.jd.genie.platform.contract.CurrentUserProvider;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequest;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator;
+import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator.LocalContextSnapshot;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator.ValidatedPhase2Request;
+import com.jd.genie.platform.phase2.memory.store.LocalMemorySnapshot;
+import com.jd.genie.platform.phase2.memory.store.MemoryDocumentService;
 import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationConversationHistory;
 import com.jd.genie.platform.phase2.runtime.orchestration.Phase2OrchestrationRuntime;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
@@ -51,6 +54,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
     private final AgentHistoryMessageMapper historyMessageMapper;
     private final ObjectProvider<AgentRuntimeCatalogPort> agentRuntimeCatalogPortProvider;
     private final ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider;
+    private final ObjectProvider<MemoryDocumentService> memoryDocumentServiceProvider;
     private final Phase2GptQueryRequestValidator phase2RequestValidator;
     private final long sseTimeoutMillis;
     private final long maxSnapshotBytes;
@@ -96,6 +100,32 @@ public class GptProcessServiceImpl implements IGptProcessService {
                 executionPort,
                 agentRuntimeCatalogPortProvider,
                 new StaticListableBeanFactory().getBeanProvider(Phase2OrchestrationRuntime.class),
+                new StaticListableBeanFactory().getBeanProvider(MemoryDocumentService.class),
+                sseTimeoutMillis,
+                maxSnapshotBytes,
+                historyMaxTurns,
+                historyMaxCharacters
+        );
+    }
+
+    public GptProcessServiceImpl(
+            IMultiAgentService multiAgentService,
+            CurrentUserProvider currentUserProvider,
+            ConversationExecutionPort executionPort,
+            ObjectProvider<AgentRuntimeCatalogPort> agentRuntimeCatalogPortProvider,
+            ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider,
+            @Value("${GENIE_SSE_TIMEOUT_MILLIS:3600000}") long sseTimeoutMillis,
+            @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}") long maxSnapshotBytes,
+            @Value("${GENIE_HISTORY_MAX_TURNS:6}") int historyMaxTurns,
+            @Value("${GENIE_HISTORY_MAX_CHARACTERS:12000}") int historyMaxCharacters
+    ) {
+        this(
+                multiAgentService,
+                currentUserProvider,
+                executionPort,
+                agentRuntimeCatalogPortProvider,
+                orchestrationRuntimeProvider,
+                new StaticListableBeanFactory().getBeanProvider(MemoryDocumentService.class),
                 sseTimeoutMillis,
                 maxSnapshotBytes,
                 historyMaxTurns,
@@ -110,6 +140,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
             ConversationExecutionPort executionPort,
             ObjectProvider<AgentRuntimeCatalogPort> agentRuntimeCatalogPortProvider,
             ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider,
+            ObjectProvider<MemoryDocumentService> memoryDocumentServiceProvider,
             @Value("${GENIE_SSE_TIMEOUT_MILLIS:3600000}") long sseTimeoutMillis,
             @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}") long maxSnapshotBytes,
             @Value("${GENIE_HISTORY_MAX_TURNS:6}") int historyMaxTurns,
@@ -122,6 +153,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
         this.historyMessageMapper = new AgentHistoryMessageMapper();
         this.agentRuntimeCatalogPortProvider = agentRuntimeCatalogPortProvider;
         this.orchestrationRuntimeProvider = orchestrationRuntimeProvider;
+        this.memoryDocumentServiceProvider = memoryDocumentServiceProvider;
         this.phase2RequestValidator = new Phase2GptQueryRequestValidator(requestFactory);
         this.sseTimeoutMillis = requirePositive(sseTimeoutMillis, "sseTimeoutMillis");
         this.maxSnapshotBytes = requirePositive(maxSnapshotBytes, "maxSnapshotBytes");
@@ -142,10 +174,10 @@ public class GptProcessServiceImpl implements IGptProcessService {
         ValidatedPhase2Request request = phase2RequestValidator.validate(externalRequest, currentUser);
         List<AgentCapabilitySummary> candidates = loadCandidateSnapshot(currentUser, request);
         if ("DIRECT".equals(request.executionMode())) {
-            return executeTrustedRequest(currentUser, withDirectRuntimeContext(request));
+            return executeTrustedRequest(currentUser, withDirectRuntimeContext(currentUser, request));
         }
         if ("AUTO".equals(request.executionMode()) && candidates.isEmpty()) {
-            return executeTrustedRequest(currentUser, withDirectRuntimeContext(request));
+            return executeTrustedRequest(currentUser, withDirectRuntimeContext(currentUser, request));
         }
         if ("ORCHESTRATED".equals(request.executionMode()) && candidates.isEmpty()) {
             throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
@@ -170,7 +202,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
             ValidatedPhase2Request request,
             List<AgentCapabilitySummary> candidates
     ) {
-        GptQueryReq trustedRequest = withDirectRuntimeContext(request);
+        GptQueryReq trustedRequest = withDirectRuntimeContext(currentUser, request);
         return executePreparedRequest(currentUser, trustedRequest, (observer, cancellableCall) -> {
             Phase2OrchestrationRuntime runtime = orchestrationRuntimeProvider.getIfAvailable();
             if (runtime == null) {
@@ -180,15 +212,16 @@ public class GptProcessServiceImpl implements IGptProcessService {
                 );
             }
             String conversationHistory = OrchestrationConversationHistory.format(trustedRequest.getHistoryMessages());
+            LocalContextSnapshot localContext = effectiveLocalContext(currentUser, request);
             RouteDecision route = runtime.selectRoute(
                     request.executionMode(),
                     trustedRequest.getQuery(),
-                    request.localContext().conversationSummary(),
+                    localContext.conversationSummary(),
                     conversationHistory,
                     candidates
             );
             if (route.route() == RouteDecision.Route.DIRECT) {
-                startAgent(withDirectRuntimeContext(request), observer, cancellableCall);
+                startAgent(withDirectRuntimeContext(currentUser, request), observer, cancellableCall);
                 return;
             }
             // Return SseEmitter first; sync execute() would buffer all SSE until the request thread finishes.
@@ -199,8 +232,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             trustedRequest.getRequestId(),
                             UUID.randomUUID().toString(),
                             trustedRequest.getQuery(),
-                            request.localContext().conversationSummary(),
-                            request.localContext().longTermMemory(),
+                            localContext.conversationSummary(),
+                            localContext.longTermMemory(),
                             conversationHistory,
                             candidates,
                             route,
@@ -223,22 +256,44 @@ public class GptProcessServiceImpl implements IGptProcessService {
         return conversationStreamCoordinator.execute(currentUser, request, starter);
     }
 
-    private GptQueryReq withDirectRuntimeContext(ValidatedPhase2Request request) {
+    private GptQueryReq withDirectRuntimeContext(CurrentUser currentUser, ValidatedPhase2Request request) {
         GptQueryReq trustedRequest = request.trustedRequest();
-        String localContext = "[UNTRUSTED_LOCAL_CONTEXT]\nlongTermMemory:\n"
-                + request.localContext().longTermMemory()
+        LocalContextSnapshot localContext = effectiveLocalContext(currentUser, request);
+        String encoded = "[UNTRUSTED_LOCAL_CONTEXT]\nlongTermMemory:\n"
+                + localContext.longTermMemory()
                 + "\nconversationSummary:\n"
-                + request.localContext().conversationSummary()
+                + localContext.conversationSummary()
                 + "\n[/UNTRUSTED_LOCAL_CONTEXT]";
         trustedRequest.setRuntimeBasePrompt(appendRuntimeContext(
                 trustedRequest.getRuntimeBasePrompt(),
-                localContext
+                encoded
         ));
         trustedRequest.setRuntimeSopPrompt(appendRuntimeContext(
                 trustedRequest.getRuntimeSopPrompt(),
-                localContext
+                encoded
         ));
         return trustedRequest;
+    }
+
+    private LocalContextSnapshot effectiveLocalContext(CurrentUser currentUser, ValidatedPhase2Request request) {
+        MemoryDocumentService documents = memoryDocumentServiceProvider.getIfAvailable();
+        if (documents == null) {
+            return request.localContext();
+        }
+        try {
+            LocalMemorySnapshot snapshot = documents.loadForQuery(
+                    currentUser.tenantId(),
+                    currentUser.userId(),
+                    request.trustedRequest().getSessionId()
+            );
+            return new LocalContextSnapshot(
+                    snapshot.longTermMemory() == null ? "" : snapshot.longTermMemory(),
+                    snapshot.conversationSummary() == null ? "" : snapshot.conversationSummary()
+            );
+        } catch (RuntimeException ex) {
+            log.warn("Disk memory unavailable, conversationId={}", request.trustedRequest().getSessionId());
+            return new LocalContextSnapshot("", "");
+        }
     }
 
     private String appendRuntimeContext(String existingPrompt, String localContext) {

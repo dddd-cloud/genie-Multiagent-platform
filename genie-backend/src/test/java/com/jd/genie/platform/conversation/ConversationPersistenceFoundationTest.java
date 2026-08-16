@@ -281,11 +281,7 @@ class ConversationPersistenceFoundationTest {
     }
 
     private List<String> loadV003Statements() {
-        return List.of(readResource("db/migration/V003__conversation.sql").split(";"))
-            .stream()
-            .map(String::trim)
-            .filter(statement -> !statement.isEmpty())
-            .toList();
+        return ConversationSchemaStatements.load();
     }
 
     private String readResource(String path) {

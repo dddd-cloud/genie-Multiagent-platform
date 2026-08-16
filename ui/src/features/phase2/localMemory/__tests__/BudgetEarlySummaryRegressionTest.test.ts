@@ -52,7 +52,7 @@ function completedPair(
 }
 
 describe('BudgetEarlySummaryRegressionTest', () => {
-  it('enqueues SUMMARIZE when LTM+summary >= WARN even if 5-turn rule does not fire', async () => {
+  it('does not enqueue SUMMARIZE from the frontend when over budget', async () => {
     const fs = new FakePrivateFileSystem();
     const store = new FakeMemoryIndexStore();
     const repository = new MemoryRepository(USER, fs, store);
@@ -117,8 +117,6 @@ describe('BudgetEarlySummaryRegressionTest', () => {
     await workflow.observeCompletedMessages(USER, CONV, messages);
 
     const tasks = await store.listTasks(USER);
-    expect(
-      tasks.some((t) => t.type === 'SUMMARIZE_CONVERSATION'),
-    ).toBe(true);
+    expect(tasks).toHaveLength(0);
   });
 });

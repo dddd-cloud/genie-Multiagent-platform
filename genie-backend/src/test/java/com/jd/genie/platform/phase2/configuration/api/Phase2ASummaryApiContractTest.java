@@ -8,6 +8,7 @@ import com.jd.genie.platform.phase2.configuration.memory.dto.ConversationSummary
 import com.jd.genie.platform.phase2.configuration.memory.exception.MemoryAnalysisException;
 import com.jd.genie.platform.phase2.configuration.memory.service.ConversationSummaryAnalysisService;
 import com.jd.genie.platform.phase2.configuration.memory.service.MemoryAnalysisService;
+import com.jd.genie.platform.phase2.memory.store.MemoryDocumentService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
@@ -30,7 +31,8 @@ class Phase2ASummaryApiContractTest extends Phase2AApiTestSupport {
         ConversationSummaryAnalysisService summaryService = mock(ConversationSummaryAnalysisService.class);
         when(summaryService.summarize(any())).thenReturn(new ConversationSummaryResponse(1,
             "## 当前目标\n- demo\n\n## 已确认事实\n- fact\n\n## 已完成内容\n- done\n\n## 未解决事项\n- none"));
-        var mvc = mvc(new Phase2MemoryController(memoryService, summaryService, currentUserProvider));
+        var mvc = mvc(new Phase2MemoryController(
+            memoryService, summaryService, mock(MemoryDocumentService.class), currentUserProvider));
 
         mvc.perform(post("/api/v2/memory/summarize-conversation").contentType(MediaType.APPLICATION_JSON).content(json(
                 new ConversationSummaryAnalysisRequest("conversation-1", "", List.of(
@@ -47,7 +49,8 @@ class Phase2ASummaryApiContractTest extends Phase2AApiTestSupport {
         ConversationSummaryAnalysisService summaryService = mock(ConversationSummaryAnalysisService.class);
         when(summaryService.summarize(any())).thenThrow(new MemoryAnalysisException(MvpErrorCode.SUMMARY_FAILED,
             "raw summary with SECRET"));
-        var mvc = mvc(new Phase2MemoryController(memoryService, summaryService, currentUserProvider));
+        var mvc = mvc(new Phase2MemoryController(
+            memoryService, summaryService, mock(MemoryDocumentService.class), currentUserProvider));
 
         mvc.perform(post("/api/v2/memory/summarize-conversation").contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isBadGateway())

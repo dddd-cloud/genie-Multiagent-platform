@@ -1293,6 +1293,102 @@ export const phase2Handlers: HttpHandler[] = [
     return HttpResponse.json(memorySummary);
   }),
 
+  http.get('/api/v2/memory/status', () => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    return HttpResponse.json(
+      ok({
+        available: true,
+        rootPath: 'C:/Users/mock/.joyagent/memory',
+        userId: mockState.user?.id ?? 'mock-user',
+      }),
+    );
+  }),
+
+  http.get('/api/v2/memory/long-term', () => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const markdown = getPhase2State().memoryLongTerm;
+    if (markdown == null) {
+      return HttpResponse.json(ok({ status: 'EMPTY', markdown: null, reason: null }));
+    }
+    return HttpResponse.json(ok({ status: 'READY', markdown, reason: null }));
+  }),
+
+  http.put('/api/v2/memory/long-term', async ({ request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const body = (await readJsonBody(request)) as { markdown?: string };
+    const markdown = typeof body.markdown === 'string' ? body.markdown : '';
+    getPhase2State().memoryLongTerm = markdown;
+    return HttpResponse.json(ok({ status: 'READY', markdown, reason: null }));
+  }),
+
+  http.delete('/api/v2/memory/long-term', async ({ request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    getPhase2State().memoryLongTerm = null;
+    return HttpResponse.json(ok(null));
+  }),
+
+  http.get('/api/v2/memory/summaries', () => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const userId = mockState.user?.id ?? 'mock-user';
+    const items = [...getPhase2State().memorySummaries.entries()].map(
+      ([conversationId, markdown]) => ({
+        conversationId,
+        path: `/memory/v1/users/${userId}/conversations/${conversationId}/对话摘要.md`,
+        updatedAt: new Date().toISOString(),
+        lastSummarizedTurnNo: null,
+        markdown,
+      }),
+    );
+    return HttpResponse.json(ok({ items: items.map(({ markdown: _markdown, ...item }) => item) }));
+  }),
+
+  http.get('/api/v2/memory/conversations/:conversationId/summary', ({ params }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const conversationId = String(params.conversationId ?? '');
+    const markdown = getPhase2State().memorySummaries.get(conversationId) ?? null;
+    if (markdown == null) {
+      return HttpResponse.json(ok({ status: 'EMPTY', markdown: null, reason: null }));
+    }
+    return HttpResponse.json(ok({ status: 'READY', markdown, reason: null }));
+  }),
+
+  http.put(
+    '/api/v2/memory/conversations/:conversationId/summary',
+    async ({ request, params }) => {
+      const authError = requireAuth();
+      if (authError) return authError;
+      const csrfError = requireCsrf(request);
+      if (csrfError) return csrfError;
+      const conversationId = String(params.conversationId ?? '');
+      const body = (await readJsonBody(request)) as { markdown?: string };
+      const markdown = typeof body.markdown === 'string' ? body.markdown : '';
+      getPhase2State().memorySummaries.set(conversationId, markdown);
+      return HttpResponse.json(ok({ status: 'READY', markdown, reason: null }));
+    },
+  ),
+
+  http.delete(
+    '/api/v2/memory/conversations/:conversationId/summary',
+    async ({ request, params }) => {
+      const authError = requireAuth();
+      if (authError) return authError;
+      const csrfError = requireCsrf(request);
+      if (csrfError) return csrfError;
+      getPhase2State().memorySummaries.delete(String(params.conversationId ?? ''));
+      return HttpResponse.json(ok(null));
+    },
+  ),
+
   http.post('/web/api/v2/gpt/queryAgentStreamIncr', async ({ request }) => {
     const authError = requireAuth();
     if (authError) return authError;
@@ -1369,6 +1465,7 @@ export const phase2Handlers: HttpHandler[] = [
         mockState.conversations.set(conversationId, {
           id: conversationId,
           title: query.slice(0, 32) || '新对话',
+          privacyMode: false,
           lastMessageAt: now,
           createdAt: now,
           updatedAt: now,

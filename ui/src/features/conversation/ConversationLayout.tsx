@@ -7,10 +7,11 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { Button, message } from 'antd';
-import { FormOutlined } from '@ant-design/icons';
+import { EyeInvisibleOutlined, FormOutlined } from '@ant-design/icons';
 import type { ConversationListItem } from '@/contracts';
 import { useAuth } from '@/features/auth/useAuth';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
@@ -47,6 +48,7 @@ export interface ConversationLayoutContextValue {
   items: ConversationListItem[];
   discardUnusedDrafts: (exceptId?: string | null) => Promise<void>;
   touch: (id: string) => void;
+  privacyMode: boolean;
 }
 
 const ConversationLayoutContext =
@@ -64,6 +66,7 @@ function toListItem(
   return {
     id: item.id,
     title: item.title,
+    privacyMode: item.privacyMode === true,
     lastMessageAt: item.lastMessageAt,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -83,6 +86,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
   itemsRef.current = state.items;
   const conversationIdRef = useRef(conversationId);
   const creatingRef = useRef(false);
+  const [privacyMode, setPrivacyMode] = useState(false);
 
   const loadPage = useCallback(async (page: number, more = false) => {
     dispatch({
@@ -208,6 +212,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
       const action = resolveNewConversationAction(
         itemsRef.current,
         conversationId,
+        privacyMode,
       );
       if (action.type === 'noop') {
         return;
@@ -218,7 +223,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
         return;
       }
       await discardUnusedDrafts();
-      const created = await createConversation(null);
+      const created = await createConversation(null, privacyMode);
       if (!created) {
         message.error('创建会话失败');
         return;
@@ -246,7 +251,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
     } finally {
       creatingRef.current = false;
     }
-  }, [conversationId, discardUnusedDrafts, navigate]);
+  }, [conversationId, discardUnusedDrafts, navigate, privacyMode]);
 
   const handleRename = useCallback(
     async (id: string, title: string) => {
@@ -366,8 +371,9 @@ const ConversationLayout: GenieType.FC = memo(() => {
       items: state.items,
       discardUnusedDrafts,
       touch,
+      privacyMode,
     }),
-    [discardUnusedDrafts, reload, remove, state.items, touch, upsert],
+    [discardUnusedDrafts, reload, remove, state.items, touch, upsert, privacyMode],
   );
 
   const layout = (
@@ -387,7 +393,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
               退出
             </Button>
           </div>
-          <div className="w-full px-10 pt-10 pb-8 border-b border-border">
+          <div className="w-full px-10 pt-10 pb-8 border-b border-border flex flex-col gap-4">
             <button
               type="button"
               onClick={handleNew}
@@ -397,6 +403,27 @@ const ConversationLayout: GenieType.FC = memo(() => {
               <FormOutlined className="text-[15px] text-text-secondary" />
               <span>新会话</span>
             </button>
+            <button
+              type="button"
+              aria-pressed={privacyMode}
+              aria-label="隐私模式"
+              title="开启后，新对话不会写入长期记忆和对话笔记"
+              onClick={() => setPrivacyMode((on) => !on)}
+              className={[
+                'w-full flex items-center gap-8 rounded-[8px] px-10 py-8 text-[13px] leading-[20px] border-0 cursor-pointer',
+                privacyMode
+                  ? 'bg-[#F0F0F2] text-text-primary'
+                  : 'bg-transparent text-text-secondary hover:bg-[#F5F5F7]',
+              ].join(' ')}
+            >
+              <EyeInvisibleOutlined className="text-[15px]" />
+              <span>隐私模式</span>
+            </button>
+            {privacyMode ? (
+              <div className="px-10 text-[11px] leading-[16px] text-text-tertiary">
+                新对话不会写入记忆
+              </div>
+            ) : null}
           </div>
           {isPhase2Enabled() ? <Phase2Navigation /> : null}
           <div className="flex-1 min-h-0 w-full">

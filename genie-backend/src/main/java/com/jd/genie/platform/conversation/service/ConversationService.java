@@ -44,7 +44,9 @@ public class ConversationService {
         entity.setId(UUID.randomUUID().toString());
         entity.setTenantId(user.tenantId());
         entity.setOwnerId(user.userId());
+        boolean privacyMode = request != null && request.privacyModeEnabled();
         entity.setTitle(normalizeOptionalTitle(request == null ? null : request.title()));
+        entity.setPrivacyMode(privacyMode);
         entity.setNextTurnNo(1L);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -70,6 +72,7 @@ public class ConversationService {
             .map(row -> new ConversationListItemResponse(
                 row.getId(),
                 row.getTitle(),
+                Boolean.TRUE.equals(row.getPrivacyMode()),
                 row.getLastMessageAt(),
                 row.getCreatedAt(),
                 row.getUpdatedAt(),
@@ -149,6 +152,7 @@ public class ConversationService {
         return new ConversationResponse(
             entity.getId(),
             entity.getTitle(),
+            Boolean.TRUE.equals(entity.getPrivacyMode()),
             entity.getLastMessageAt(),
             entity.getCreatedAt(),
             entity.getUpdatedAt()

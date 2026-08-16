@@ -8,6 +8,7 @@ import type { MemoryWorkflow } from './memoryWorkflow';
 export type LocalMemoryContextValue = {
   userId: string;
   opfsStatus: OpfsStatus;
+  diskRootPath: string | null;
   repository: MemoryRepository | null;
   queue: MemoryTaskQueue | null;
   workflow: MemoryWorkflow | null;

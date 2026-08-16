@@ -32,11 +32,13 @@ public final class ConfiguredReactAgentFactory {
             If the user message describes a single step objective for you as one sub-agent, answer ONLY that objective.
             Do not discuss which other agents are available, and do not rewrite the whole multi-agent plan.
             If the user or your step asks for an html, markdown, or downloadable file, you MUST call file_tool with command=upload, a filename ending in .html or .md, description, and the full file content BEFORE the SUCCESS JSON. Put the returned file link into output.
+            If a skill tool already returned token/previewFile/uploaded, do NOT paste html into output and do NOT call file_tool. Finish with SUCCESS whose output is one short sentence containing the token.
             """;
 
     /** Short nudge only — never re-inject the full system prompt (skills) each step. */
     private static final String NEXT_STEP_NUDGE = """
-            After the latest tool result: if you still need to write an html/md file and have not called file_tool upload yet, call file_tool now. Otherwise finish NOW with ONLY the SUCCESS/FAILURE JSON object. Do not call another tool.
+            After the latest tool result: finish NOW with ONLY the SUCCESS/FAILURE JSON object. Do not call another tool.
+            If the tool JSON has token or previewFile, output one short sentence with that token. Never paste html or file content into output.
             Put compact bullets and sources into output (under 20000 characters). Do not paste the full search report.
             If a schedule block is present, answer from it (include all departures when asked). Do not call get-tickets again.
             """;

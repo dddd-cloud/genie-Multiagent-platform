@@ -30,6 +30,8 @@ export type Phase2MockState = {
   forceVersionConflict: boolean;
   forceSkillInUse: boolean;
   forceMcpError: boolean;
+  memoryLongTerm: string | null;
+  memorySummaries: Map<string, string>;
 };
 
 function seedAgents(): Map<string, Phase2AgentResponse> {
@@ -77,6 +79,8 @@ export function createInitialPhase2State(): Phase2MockState {
     forceVersionConflict: false,
     forceSkillInUse: false,
     forceMcpError: false,
+    memoryLongTerm: null,
+    memorySummaries: new Map(),
   };
 }
 
@@ -108,6 +112,9 @@ export function resetPhase2State(partial?: Partial<Phase2MockState>): void {
   }
   if (partial?.models) {
     phase2State.models = partial.models;
+  }
+  if (partial?.memorySummaries) {
+    phase2State.memorySummaries = partial.memorySummaries;
   }
 }
 

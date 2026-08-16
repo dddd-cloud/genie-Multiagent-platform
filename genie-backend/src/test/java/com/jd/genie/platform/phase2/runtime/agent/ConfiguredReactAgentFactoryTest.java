@@ -54,6 +54,7 @@ class ConfiguredReactAgentFactoryTest {
             assertEquals(true, agent.isFinishWithoutToolsAfterObservations());
             assertEquals(true, agent.getSystemPrompt().contains("file_tool"));
             assertEquals(true, agent.getNextStepPrompt().contains("Do not call another tool"));
+            assertEquals(true, agent.getNextStepPrompt().contains("Never paste html"));
             assertSame(tools, agent.getAvailableTools());
             assertSame(printer, context.getPrinter());
         } finally {

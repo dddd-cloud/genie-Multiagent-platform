@@ -151,6 +151,7 @@ class ConversationCrudApiTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("OK"))
             .andExpect(jsonPath("$.data.title").value("新对话"))
+            .andExpect(jsonPath("$.data.privacyMode").value(false))
             .andExpect(jsonPath("$.data.createdAt").value(not("")))
             .andReturn()
             .getResponse()
@@ -170,6 +171,23 @@ class ConversationCrudApiTest {
                 .content("{\"title\":\"" + "x".repeat(201) + "\"}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void createConversationCanEnablePrivacyMode() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/conversations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"privacyMode\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.privacyMode").value(true))
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+
+        String conversationId = objectMapper.readTree(response).get("data").get("id").asText();
+        Number privacyMode = jdbcTemplate.queryForObject(
+            "SELECT privacy_mode FROM conversation WHERE id = ?", Number.class, conversationId);
+        assertEquals(1, privacyMode.intValue());
     }
 
     @Test
@@ -298,11 +316,7 @@ class ConversationCrudApiTest {
     }
 
     private List<String> loadV003Statements() {
-        return List.of(readResource("db/migration/V003__conversation.sql").split(";"))
-            .stream()
-            .map(String::trim)
-            .filter(statement -> !statement.isEmpty())
-            .toList();
+        return ConversationSchemaStatements.load();
     }
 
     private String readResource(String path) {
@@ -340,6 +354,7 @@ class ConversationCrudApiTest {
         conversation.setTenantId(tenantId);
         conversation.setOwnerId(ownerId);
         conversation.setTitle(title);
+        conversation.setPrivacyMode(false);
         conversation.setLastMessageAt(lastMessageAt);
         conversation.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z").plusSeconds(Math.abs(id.hashCode() % 1000)));
         conversation.setUpdatedAt(conversation.getCreatedAt());
