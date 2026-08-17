@@ -41,6 +41,7 @@ describe('ExecutionModeSelectorTest', () => {
     );
     expect(screen.queryByRole('option', { name: 'Solo' })).toBeNull();
     expect(screen.queryByRole('option', { name: 'Ensemble' })).toBeNull();
+    expect(screen.queryByTestId('allowed-agent-selector')).toBeNull();
   });
 
   it('expands three modes when the trigger is clicked', () => {
@@ -49,6 +50,7 @@ describe('ExecutionModeSelectorTest', () => {
     expect(screen.getByRole('option', { name: 'Auto' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Solo' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Ensemble' })).toBeTruthy();
+    expect(screen.queryByText('市场研究员')).toBeNull();
   });
 
   it('notifies onChange when selecting DIRECT', () => {
@@ -59,7 +61,7 @@ describe('ExecutionModeSelectorTest', () => {
     expect(onChange).toHaveBeenCalledWith('DIRECT');
   });
 
-  it('selects all ONLINE agents after choosing ORCHESTRATED', async () => {
+  it('selects all ONLINE agents after choosing ORCHESTRATED without listing them in the mode menu', async () => {
     const onAgents = vi.fn();
     const Harness = () => {
       const [mode, setMode] = useState<ExecutionMode>('AUTO');
@@ -80,9 +82,13 @@ describe('ExecutionModeSelectorTest', () => {
     expect(screen.getByTestId('execution-mode-selector')).toHaveTextContent(
       'Ensemble',
     );
+    expect(screen.queryByText('市场研究员')).toBeNull();
+    expect(screen.getByTestId('allowed-agent-selector')).toHaveTextContent(
+      'All',
+    );
   });
 
-  it('shows agent list under ORCHESTRATED and can deselect', async () => {
+  it('opens the agent picker beside Ensemble and can deselect', async () => {
     const onAgents = vi.fn();
     render(
       <ExecutionModeSelector
@@ -91,11 +97,54 @@ describe('ExecutionModeSelectorTest', () => {
         onAllowedAgentIdsChange={onAgents}
       />,
     );
-    fireEvent.click(screen.getByTestId('execution-mode-selector'));
+    fireEvent.click(screen.getByTestId('allowed-agent-selector'));
     await waitFor(() => {
       expect(screen.getByText('市场研究员')).toBeTruthy();
     });
     fireEvent.click(screen.getByText('市场研究员'));
     expect(onAgents).toHaveBeenCalledWith(['a2']);
+  });
+
+  it('clears every agent from the picker', async () => {
+    const onAgents = vi.fn();
+    render(
+      <ExecutionModeSelector
+        value="ORCHESTRATED"
+        allowedAgentIds={['a1', 'a2']}
+        onAllowedAgentIdsChange={onAgents}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('allowed-agent-selector'));
+    await waitFor(() => {
+      expect(screen.getByTestId('allowed-agent-clear')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('allowed-agent-clear'));
+    expect(onAgents).toHaveBeenCalledWith([]);
+  });
+
+  it('shows 未选择 after clearing, then All after selecting all again', async () => {
+    const Harness = () => {
+      const [ids, setIds] = useState<string[]>(['a1', 'a2']);
+      return (
+        <ExecutionModeSelector
+          value="ORCHESTRATED"
+          allowedAgentIds={ids}
+          onAllowedAgentIdsChange={setIds}
+        />
+      );
+    };
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('allowed-agent-selector'));
+    await waitFor(() => {
+      expect(screen.getByTestId('allowed-agent-clear')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('allowed-agent-clear'));
+    expect(screen.getByTestId('allowed-agent-selector')).toHaveTextContent(
+      '未选择',
+    );
+    fireEvent.click(screen.getByTestId('allowed-agent-all'));
+    expect(screen.getByTestId('allowed-agent-selector')).toHaveTextContent(
+      'All',
+    );
   });
 });
