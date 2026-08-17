@@ -14,6 +14,7 @@ public class MemoryAnalysisPromptFactory {
             Create patches only for durable user facts, preferences, goals, or constraints explicitly stated by the user.
             Do not infer memory from assistant suggestions. Do not include secrets, credentials, tokens, cookies, IDs, file paths, markdown headings, code fences, HTML, YAML front matter, or unknown schema fields.
             For DELETE, value must be null. For UPSERT, value must be a concise plain text string.
+            Each patch object must contain exactly operation, section, key, value. No extra keys.
             """;
     }
 

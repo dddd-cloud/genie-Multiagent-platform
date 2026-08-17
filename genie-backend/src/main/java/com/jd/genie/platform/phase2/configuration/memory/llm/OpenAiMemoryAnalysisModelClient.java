@@ -58,7 +58,7 @@ public class OpenAiMemoryAnalysisModelClient implements MemoryAnalysisModelClien
                 "model", settings.getModel() == null || settings.getModel().isBlank() ? genieConfig.getReactModelName() : settings.getModel(),
                 "stream", false,
                 "temperature", 0,
-                "max_tokens", settings.getMaxTokens() > 0 ? settings.getMaxTokens() : DEFAULT_MAX_TOKENS,
+                "max_tokens", DEFAULT_MAX_TOKENS,
                 "messages", List.of(
                     Map.of("role", "system", "content", request.systemPrompt()),
                     Map.of("role", "user", "content", request.userPrompt())

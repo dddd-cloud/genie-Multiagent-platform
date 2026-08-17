@@ -68,6 +68,23 @@ class MemoryPatchValidatorTest {
             """);
     }
 
+    @Test
+    void modelOutputDropsExtraFieldsAndCodeFences() {
+        var fromFence = validator.parseModelOutput("""
+            ```json
+            {"schemaVersion":1,"patches":[{"operation":"UPSERT","section":"基本信息","key":"姓名","value":"林晓","confidence":0.9}]}
+            ```
+            """);
+        var fromTrailingText = validator.parseModelOutput("""
+            here you go
+            {"schemaVersion":1,"note":"ok","patches":[{"operation":"UPSERT","section":"基本信息","key":"城市","value":"杭州"}]}
+            thanks
+            """);
+
+        assertEquals("林晓", fromFence.patches().get(0).value());
+        assertEquals("杭州", fromTrailingText.patches().get(0).value());
+    }
+
     private void assertMemoryFailed(String json) {
         MemoryAnalysisException ex = assertThrows(MemoryAnalysisException.class, () -> validator.parseAndValidate(json));
         assertEquals(MvpErrorCode.MEMORY_ANALYSIS_FAILED, ex.code());

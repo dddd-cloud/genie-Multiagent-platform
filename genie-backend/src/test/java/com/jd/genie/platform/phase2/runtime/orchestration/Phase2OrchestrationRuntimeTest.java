@@ -97,6 +97,17 @@ class Phase2OrchestrationRuntimeTest {
     }
 
     @Test
+    void mainOnlyPlanIsReassignedToFirstCandidate() {
+        OrchestrationPlan plan = new OrchestrationPlan(List.of(
+                new OrchestrationStep("step-1", StepMode.MAIN_ONLY, "Reply in one sentence", List.of(), null, List.of())
+        ));
+        OrchestrationPlan remapped = Phase2OrchestrationRuntime.assignCandidatesToMainOnlySteps(plan, CANDIDATES);
+        assertEquals(StepMode.SINGLE_AGENT, remapped.steps().get(0).mode());
+        assertEquals("agent-a", remapped.steps().get(0).agentId());
+        new OrchestrationPlanValidator().validate(remapped, CANDIDATES);
+    }
+
+    @Test
     void followUpTurnPassesConversationHistoryToPlannerSpecialistAndSummarizer() {
         RecordingCatalogPort catalog = new RecordingCatalogPort();
         ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);

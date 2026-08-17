@@ -101,6 +101,50 @@ class MemoryTurnCaptureServiceTest {
         assertEquals(MemoryFileSnapshot.Status.EMPTY, documents.readLongTerm("u").status());
     }
 
+    @Test
+    void analyzeFailureStillWritesConversationSummary() {
+        ConversationMapper conversations = mock(ConversationMapper.class);
+        ConversationMessageMapper messages = mock(ConversationMessageMapper.class);
+        MemoryAnalysisService analysis = mock(MemoryAnalysisService.class);
+        ConversationSummaryAnalysisService summary = mock(ConversationSummaryAnalysisService.class);
+        MemoryDocumentService documents = new MemoryDocumentService(new MemoryDiskStore(tempDir.toString()));
+        MemoryTurnCaptureService service = new MemoryTurnCaptureService(
+            conversations, messages, analysis, summary, documents, Runnable::run);
+
+        when(conversations.selectOwnedConversation("t", "u", "conv-1")).thenReturn(conversation("conv-1", false));
+        when(messages.selectOwnedMessage("t", "u", "a1")).thenReturn(assistant("a1", "conv-1", "req-1", 1L, "hello"));
+        when(messages.selectOwnedMessageByRequestRole("t", "u", "conv-1", "req-1", "USER"))
+            .thenReturn(user("u1", "conv-1", "req-1", 1L, "我叫林晓"));
+        when(messages.selectMessagesByOwnedConversation("t", "u", "conv-1")).thenReturn(List.of(
+            user("u1", "conv-1", "req-1", 1L, "我叫林晓"),
+            assistant("a1", "conv-1", "req-1", 1L, "hello")
+        ));
+        when(analysis.analyzeTurn(any(MemoryAnalysisRequest.class)))
+            .thenThrow(new RuntimeException("analyze failed"));
+        when(summary.summarize(any(ConversationSummaryAnalysisRequest.class))).thenReturn(
+            new ConversationSummaryResponse(1, """
+                ## 当前目标
+                - 自我介绍
+
+                ## 已确认事实
+                - 林晓
+
+                ## 已完成内容
+                - 暂无
+
+                ## 未解决事项
+                - 暂无
+                """)
+        );
+
+        service.capture(user(), "a1");
+
+        verify(summary).summarize(any(ConversationSummaryAnalysisRequest.class));
+        MemoryFileSnapshot note = documents.readSummary("u", "conv-1");
+        assertEquals(MemoryFileSnapshot.Status.READY, note.status());
+        assertFalse(note.markdown() == null || !note.markdown().contains("林晓"));
+    }
+
     private static CurrentUser user() {
         return new CurrentUser("t", "u", "u", "u", UserRole.USER);
     }

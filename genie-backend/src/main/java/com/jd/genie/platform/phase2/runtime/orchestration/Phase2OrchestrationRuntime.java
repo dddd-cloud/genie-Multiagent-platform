@@ -16,6 +16,7 @@ import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationSubTaskView;
+import com.jd.genie.platform.phase2contract.enums.StepMode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.LinkedHashMap;
@@ -133,15 +134,18 @@ public final class Phase2OrchestrationRuntime {
 
             Map<String, String> successes = new LinkedHashMap<>();
             OrchestrationPlan plan = planValidator.validate(
-                    modelPort.createPlan(
-                            query,
-                            conversationHistory,
-                            longTermMemory,
-                            conversationSummary,
-                            candidates,
-                            1,
-                            Map.of(),
-                            Map.of()
+                    assignCandidatesToMainOnlySteps(
+                            modelPort.createPlan(
+                                    query,
+                                    conversationHistory,
+                                    longTermMemory,
+                                    conversationSummary,
+                                    candidates,
+                                    1,
+                                    Map.of(),
+                                    Map.of()
+                            ),
+                            candidates
                     ),
                     candidates
             );
@@ -377,6 +381,48 @@ public final class Phase2OrchestrationRuntime {
                 agentName(subTask.agentId(), candidates),
                 subTask.objective()
         );
+    }
+
+    /**
+     * MAIN_ONLY has no DirectFallbackExecutor in production wiring, so a planner
+     * that emits MAIN_ONLY (typical for greetings) fails immediately. Reassign
+     * those steps to the first online candidate so Ensemble can finish.
+     */
+    static OrchestrationPlan assignCandidatesToMainOnlySteps(
+            OrchestrationPlan plan,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        if (plan == null || plan.steps() == null || candidates == null || candidates.isEmpty()) {
+            return plan;
+        }
+        String fallbackId = null;
+        for (AgentCapabilitySummary candidate : candidates) {
+            if (candidate != null && candidate.agentId() != null && !candidate.agentId().isBlank()) {
+                fallbackId = candidate.agentId();
+                break;
+            }
+        }
+        if (fallbackId == null) {
+            return plan;
+        }
+        List<OrchestrationStep> remapped = new java.util.ArrayList<>();
+        boolean changed = false;
+        for (OrchestrationStep step : plan.steps()) {
+            if (step != null && step.mode() == StepMode.MAIN_ONLY) {
+                remapped.add(new OrchestrationStep(
+                        step.stepId(),
+                        StepMode.SINGLE_AGENT,
+                        step.objective(),
+                        step.inputRefs(),
+                        fallbackId,
+                        List.of()
+                ));
+                changed = true;
+            } else {
+                remapped.add(step);
+            }
+        }
+        return changed ? new OrchestrationPlan(remapped) : plan;
     }
 
     private String agentName(String agentId, List<AgentCapabilitySummary> candidates) {

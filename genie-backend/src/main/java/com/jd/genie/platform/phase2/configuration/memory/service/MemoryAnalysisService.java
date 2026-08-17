@@ -66,7 +66,8 @@ public class MemoryAnalysisService {
                 promptFactory.userPrompt(request),
                 timeoutMs
             );
-            return patchValidator.parseAndValidate(modelClient.analyzeMemory(modelRequest).content());
+            String content = modelClient.analyzeMemory(modelRequest).content();
+            return patchValidator.parseModelOutput(content);
         } catch (MemoryAnalysisException ex) {
             throw ex;
         } catch (Exception ex) {

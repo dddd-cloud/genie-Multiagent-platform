@@ -121,8 +121,26 @@ public class MemoryTurnCaptureService {
         if (userMessage == null) {
             return;
         }
-        analyzeTurn(user.userId(), assistant.getConversationId(), userMessage, assistant);
-        maybeSummarize(user, assistant.getConversationId());
+        try {
+            analyzeTurn(user.userId(), assistant.getConversationId(), userMessage, assistant);
+        } catch (Exception ex) {
+            log.warn(
+                "Long-term memory analyze skipped, userId={}, conversationId={}",
+                user.userId(),
+                assistant.getConversationId(),
+                ex
+            );
+        }
+        try {
+            maybeSummarize(user, assistant.getConversationId());
+        } catch (Exception ex) {
+            log.warn(
+                "Conversation summary skipped, userId={}, conversationId={}",
+                user.userId(),
+                assistant.getConversationId(),
+                ex
+            );
+        }
     }
 
     private void analyzeTurn(

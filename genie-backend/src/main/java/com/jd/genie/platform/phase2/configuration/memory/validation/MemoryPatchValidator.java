@@ -49,6 +49,14 @@ public class MemoryPatchValidator {
         this.markdownGuard = markdownGuard;
     }
 
+    /**
+     * Model output is often wrapped in markdown or carries extra keys.
+     * Strip those, then apply the frozen patch schema.
+     */
+    public MemoryPatchResponse parseModelOutput(String rawContent) {
+        return parseAndValidate(sanitizeModelJson(rawContent));
+    }
+
     public MemoryPatchResponse parseAndValidate(String rawContent) {
         if (blank(rawContent) || codePoints(rawContent) > MAX_RESPONSE_CODE_POINTS || looksWrapped(rawContent)) {
             throw failed();
@@ -139,6 +147,64 @@ public class MemoryPatchValidator {
 
     private boolean textNode(JsonNode node) {
         return node != null && node.isTextual();
+    }
+
+    private String sanitizeModelJson(String rawContent) {
+        if (blank(rawContent) || codePoints(rawContent) > MAX_RESPONSE_CODE_POINTS) {
+            throw failed();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(extractJsonObject(rawContent));
+            if (root == null || !root.isObject()) {
+                throw failed();
+            }
+            var sanitized = objectMapper.createObjectNode();
+            JsonNode schemaVersion = root.get("schemaVersion");
+            if (schemaVersion != null && schemaVersion.isNumber()) {
+                sanitized.put("schemaVersion", schemaVersion.asInt());
+            } else if (schemaVersion != null) {
+                sanitized.set("schemaVersion", schemaVersion);
+            }
+            var patches = objectMapper.createArrayNode();
+            JsonNode rawPatches = root.get("patches");
+            if (rawPatches != null && rawPatches.isArray()) {
+                for (JsonNode patch : rawPatches) {
+                    if (patch == null || !patch.isObject()) {
+                        continue;
+                    }
+                    var item = objectMapper.createObjectNode();
+                    for (String field : PATCH_FIELDS) {
+                        if (patch.has(field)) {
+                            item.set(field, patch.get(field));
+                        }
+                    }
+                    patches.add(item);
+                }
+            }
+            sanitized.set("patches", patches);
+            return objectMapper.writeValueAsString(sanitized);
+        } catch (MemoryAnalysisException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw failed();
+        }
+    }
+
+    private String extractJsonObject(String rawContent) {
+        String trimmed = rawContent.trim();
+        if (trimmed.startsWith("```")) {
+            int firstNl = trimmed.indexOf('\n');
+            int lastFence = trimmed.lastIndexOf("```");
+            if (firstNl > 0 && lastFence > firstNl) {
+                trimmed = trimmed.substring(firstNl + 1, lastFence).trim();
+            }
+        }
+        int start = trimmed.indexOf('{');
+        int end = trimmed.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return trimmed.substring(start, end + 1);
+        }
+        return trimmed;
     }
 
     private boolean looksWrapped(String value) {

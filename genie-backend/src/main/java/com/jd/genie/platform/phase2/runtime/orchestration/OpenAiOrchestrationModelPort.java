@@ -310,7 +310,8 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 Rules:
                 - 1..6 top-level steps; stepId values are unique
                 - inputRefs may only uniquely reference earlier top-level stepIds
-                - MAIN_ONLY requires agentId null and subTasks []
+                - MAIN_ONLY requires agentId null and subTasks []; do not use MAIN_ONLY when candidates is non-empty
+                - When candidates is non-empty, use SINGLE_AGENT or PARALLEL_AGENTS so a real Agent runs the work
                 - SINGLE_AGENT requires a candidate agentId and subTasks []
                 - PARALLEL_AGENTS requires agentId null and 2..4 subTasks
                 - Every subTask must contain exactly subTaskId, agentId, objective; subTaskId values are unique across the plan
