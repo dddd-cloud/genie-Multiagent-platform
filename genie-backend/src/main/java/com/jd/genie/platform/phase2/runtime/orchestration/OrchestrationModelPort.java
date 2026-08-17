@@ -3,6 +3,7 @@ package com.jd.genie.platform.phase2.runtime.orchestration;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
+import com.jd.genie.platform.phase2contract.dto.MasterPersona;
 
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,20 @@ public interface OrchestrationModelPort {
             List<AgentCapabilitySummary> candidates
     ) {
         return selectRoute(query, conversationSummary, candidates);
+    }
+
+    /**
+     * Deepest routing entry. {@code masterPersona} carries the team master overlay, or
+     * {@link MasterPersona#none()} when the platform default master is in effect.
+     */
+    default RouteDecision selectRoute(
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            MasterPersona masterPersona
+    ) {
+        return selectRoute(query, conversationSummary, conversationHistory, candidates);
     }
 
     /**
@@ -83,6 +98,33 @@ public interface OrchestrationModelPort {
         );
     }
 
+    /**
+     * Deepest planning entry. {@code masterPersona} carries the team master overlay, or
+     * {@link MasterPersona#none()} when the platform default master is in effect.
+     */
+    default OrchestrationPlan createPlan(
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
+            List<AgentCapabilitySummary> candidates,
+            int attemptNo,
+            Map<String, String> successfulResultSummaries,
+            Map<String, String> failureMetadata,
+            MasterPersona masterPersona
+    ) {
+        return createPlan(
+            query,
+            conversationHistory,
+            longTermMemory,
+            conversationSummary,
+            candidates,
+            attemptNo,
+            successfulResultSummaries,
+            failureMetadata
+        );
+    }
+
     String summarize(
             String query,
             Map<String, String> successfulResultSummaries,
@@ -123,5 +165,20 @@ public interface OrchestrationModelPort {
             List<SummaryEvidence> evidence
     ) {
         return summarize(query, conversationHistory, evidence);
+    }
+
+    /**
+     * Deepest summarization entry. {@code masterPersona} carries the team master overlay, or
+     * {@link MasterPersona#none()} when the platform default master is in effect.
+     */
+    default String summarize(
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
+            List<SummaryEvidence> evidence,
+            MasterPersona masterPersona
+    ) {
+        return summarize(query, conversationHistory, longTermMemory, conversationSummary, evidence);
     }
 }

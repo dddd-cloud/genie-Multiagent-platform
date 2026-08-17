@@ -56,6 +56,15 @@ export function updateConversation(id: string, title: string) {
   });
 }
 
+export function updateConversationPrivacy(id: string, privacyMode: boolean) {
+  const data: UpdateConversationRequest = { privacyMode };
+  return requestMvp<ConversationResponse>({
+    method: 'PATCH',
+    url: `${BASE}/${id}`,
+    data,
+  });
+}
+
 export function deleteConversation(id: string) {
   return requestMvp<null>({
     method: 'DELETE',

@@ -237,7 +237,8 @@ public final class ConversationStreamObserver {
                     snapshotPruner.serialize(snapshotBuffer.snapshot(), maxSnapshotBytes),
                     StreamSnapshotBuffer.PAYLOAD_VERSION
             );
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            log.warn("Partial snapshot serialization failed, persisting without snapshot: {}", error.getMessage(), error);
             return new PartialSnapshot(null, null);
         }
     }

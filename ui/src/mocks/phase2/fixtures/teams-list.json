@@ -1,0 +1,17 @@
+{
+  "code": "OK",
+  "message": "success",
+  "data": [
+    {
+      "id": "team-research-001",
+      "name": "调研小组",
+      "description": "由研究 Agent 主导，写作 Agent 负责成稿",
+      "masterAgentId": "agent-research-001",
+      "masterAgentName": "Research Agent",
+      "memberAgentIds": ["agent-writer-002"],
+      "version": 1,
+      "createdAt": "2026-08-01T00:00:00Z",
+      "updatedAt": "2026-08-02T00:00:00Z"
+    }
+  ]
+}

@@ -60,11 +60,13 @@ class Phase2AMySqlMigrationTest {
             .filter(info -> info.getVersion() != null)
             .collect(Collectors.toMap(info -> info.getVersion().getVersion(), MigrationInfo::getState));
 
-        assertEquals(Set.of("001", "002", "003", "004"), states.keySet());
+        // Later phases keep appending migrations, so assert the Phase2-A prefix plus overall success.
+        assertTrue(states.keySet().containsAll(Set.of("001", "002", "003", "004")));
         assertEquals(MigrationState.SUCCESS, states.get("001"));
         assertEquals(MigrationState.SUCCESS, states.get("002"));
         assertEquals(MigrationState.SUCCESS, states.get("003"));
         assertEquals(MigrationState.SUCCESS, states.get("004"));
+        assertTrue(states.values().stream().allMatch(state -> state == MigrationState.SUCCESS));
         assertEquals(0, flyway.validateWithResult().errorDetails == null ? 0 : 1);
     }
 

@@ -32,6 +32,19 @@ export interface Phase2AgentResponse {
   updatedAt: string;
 }
 
+/** A team is one master Agent plus the sub Agents that execute its plan. */
+export interface Phase2TeamResponse {
+  id: string;
+  name: string;
+  description: string;
+  masterAgentId: string;
+  masterAgentName: string | null;
+  memberAgentIds: string[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Phase2SkillResponse {
   id: string;
   name: string;
@@ -85,6 +98,8 @@ export interface Phase2McpToolResponse {
 export type Phase2ManagementData =
   | Phase2AgentResponse
   | Phase2AgentResponse[]
+  | Phase2TeamResponse
+  | Phase2TeamResponse[]
   | Phase2SkillResponse
   | Phase2SkillResponse[]
   | Phase2ModelResponse[]

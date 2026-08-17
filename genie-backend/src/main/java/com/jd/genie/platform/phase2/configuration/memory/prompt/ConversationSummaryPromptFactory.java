@@ -16,6 +16,10 @@ public class ConversationSummaryPromptFactory {
             ## 已完成内容
             ## 未解决事项
             Merge completed new turns into the existing summary. Do not include secrets, credentials, tokens, cookies, code fences, HTML, YAML front matter, hidden reasoning, or extra headings.
+
+            Valid response (newlines inside markdown must be escaped as \\n):
+            {"schemaVersion":1,"markdown":"## 当前目标\\n- 完成季度报告\\n\\n## 已确认事实\\n- 数据截至 2024Q3\\n\\n## 已完成内容\\n- 已产出数据表\\n\\n## 未解决事项\\n- 尚缺竞品对比\\n"}
+            Invalid: markdown code fences around the JSON, prose outside the JSON, extra fields, more or fewer than the four H2 sections.
             """;
     }
 

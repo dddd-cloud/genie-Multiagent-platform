@@ -34,7 +34,7 @@ public class MemoryInputValidator {
     }
 
     public void validateSummaryRequest(ConversationSummaryAnalysisRequest request) {
-        if (request == null || blank(request.conversationId())) {
+        if (request == null || blank(request.conversationId()) || request.newTurns() == null) {
             throw validation();
         }
         checkLength(request.currentSummary(), MAX_CURRENT_SUMMARY_CODE_POINTS);

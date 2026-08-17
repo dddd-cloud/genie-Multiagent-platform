@@ -327,7 +327,7 @@ export const handlers: HttpHandler[] = [
       return HttpResponse.json(userIsolation404, { status: 404 });
     }
 
-    const body = (await request.json()) as { title: string };
+    const body = (await request.json()) as { title?: string; privacyMode?: boolean };
     const now = new Date().toISOString();
     const base =
       item ??
@@ -343,7 +343,9 @@ export const handlers: HttpHandler[] = [
 
     const updated: ConversationListItem = {
       ...base,
-      title: body.title,
+      title: body.title ?? base.title,
+      privacyMode:
+        typeof body.privacyMode === 'boolean' ? body.privacyMode : base.privacyMode,
       updatedAt: now,
     };
     mockState.conversations.set(id, updated);

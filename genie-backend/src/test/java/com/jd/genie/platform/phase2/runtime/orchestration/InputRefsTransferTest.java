@@ -59,7 +59,8 @@ class InputRefsTransferTest {
         assertNotNull(consumer);
         assertTrue(consumer.getBasePrompt().contains("allowed-output"));
         assertFalse(consumer.getBasePrompt().contains("unrelated-output"));
-        assertFalse(consumer.getBasePrompt().contains("original-query"));
+        // The user question is carried as a topic bound only, never as the step's own task.
+        assertTrue(consumer.getBasePrompt().contains("只用于限定主题"));
     }
 
     private AgentRuntimeProfile profile(String agentId) {

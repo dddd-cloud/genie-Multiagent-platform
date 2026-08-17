@@ -9,6 +9,7 @@ import {
 } from '../requestValidation';
 
 const SESSION = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const TEAM = '11111111-2222-3333-4444-555555555555';
 
 function baseInput(
   overrides: Partial<Parameters<typeof buildPhase2GptQueryRequest>[0]> = {},
@@ -158,5 +159,48 @@ describe('Phase2RequestBuilderTest', () => {
     if (!ok.ok) return;
     expect(ok.request.allowedAgentIds).toEqual([]);
     expect(ok.request.deepThink).toBe(1);
+  });
+
+  it('omits teamId unless a team is selected', () => {
+    const withoutTeam = buildPhase2GptQueryRequest(baseInput({ teamId: null }));
+    expect(withoutTeam.ok).toBe(true);
+    if (!withoutTeam.ok) return;
+    expect('teamId' in withoutTeam.request).toBe(false);
+
+    const withTeam = buildPhase2GptQueryRequest(
+      baseInput({ executionMode: 'ORCHESTRATED', teamId: TEAM }),
+    );
+    expect(withTeam.ok).toBe(true);
+    if (!withTeam.ok) return;
+    expect(withTeam.request.teamId).toBe(TEAM);
+  });
+
+  it('rejects a non-UUID teamId', () => {
+    const result = buildPhase2GptQueryRequest(baseInput({ teamId: 'team-1' }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('INVALID_TEAM_ID');
+  });
+
+  it('rejects teamId in DIRECT mode', () => {
+    const result = buildPhase2GptQueryRequest(
+      baseInput({ executionMode: 'DIRECT', teamId: TEAM }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('DIRECT_TEAM_FORBIDDEN');
+  });
+
+  it('rejects teamId together with allowedAgentIds', () => {
+    const result = buildPhase2GptQueryRequest(
+      baseInput({
+        executionMode: 'ORCHESTRATED',
+        allowedAgentIds: ['a1'],
+        teamId: TEAM,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('TEAM_AND_ALLOWED_AGENTS_EXCLUSIVE');
   });
 });

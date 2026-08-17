@@ -30,7 +30,7 @@ function handlePlanMessage(
   eventData: MESSAGE.EventData,
   currentChat: CHAT.ChatItem
 ) {
-  if (!eventData.taskId) {
+  if (eventData.taskId) {
     currentChat.multiAgent.plan = {
       taskId: eventData.taskId,
       ...eventData?.resultMap,

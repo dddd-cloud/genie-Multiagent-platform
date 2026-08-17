@@ -62,8 +62,7 @@ class DegradedContinueTest {
                 model,
                 new OrchestrationPlanValidator(),
                 serial,
-                new OrchestrationEventMapper(),
-                (objective, observer, cancellableCall) -> AgentTaskResult.success("degraded-output")
+                new OrchestrationEventMapper()
         );
         AgentStage6TestSupport.RecordingChannel channel = AgentStage6TestSupport.channel();
         var observer = AgentStage6TestSupport.observer(channel);

@@ -4,7 +4,8 @@ export interface CreateConversationRequest {
 }
 
 export interface UpdateConversationRequest {
-  title: string;
+  title?: string;
+  privacyMode?: boolean;
 }
 
 export interface ConversationResponse {

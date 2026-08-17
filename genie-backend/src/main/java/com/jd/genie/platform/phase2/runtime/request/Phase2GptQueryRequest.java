@@ -19,6 +19,7 @@ public class Phase2GptQueryRequest {
     private Integer deepThink;
     private String outputStyle;
     private List<String> allowedAgentIds;
+    private String teamId;
     private LocalContext localContext;
 
     @Data

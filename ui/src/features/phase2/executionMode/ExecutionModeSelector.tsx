@@ -6,7 +6,9 @@ import {
   type ExecutionMode,
   type Phase2AgentResponse,
 } from '@/contracts';
+import type { Phase2TeamResponse } from '@/contracts/phase2';
 import { listAgents } from '@/services/phase2/agents';
+import { listTeams } from '@/services/phase2/teams';
 import { ALLOWED_AGENTS_MAX, dedupeAllowedAgentIds } from './requestValidation';
 
 export interface ExecutionModeSelectorProps {
@@ -14,6 +16,8 @@ export interface ExecutionModeSelectorProps {
   onChange?: (mode: ExecutionMode) => void;
   allowedAgentIds?: readonly string[];
   onAllowedAgentIdsChange?: (agentIds: string[]) => void;
+  teamId?: string | null;
+  onTeamIdChange?: (teamId: string | null) => void;
   disabled?: boolean;
 }
 
@@ -35,16 +39,24 @@ const pillClassName = (disabled: boolean) =>
       : 'cursor-pointer hover:bg-black/[0.04] hover:text-text-primary',
   );
 
+const rowClassName =
+  'flex w-full items-center gap-8 border-0 bg-transparent px-14 py-7 text-left text-[13px] transition-colors duration-150 hover:bg-black/[0.03]';
+
 export default function ExecutionModeSelector({
   value = 'AUTO',
   onChange,
   allowedAgentIds = [],
   onAllowedAgentIdsChange,
+  teamId = null,
+  onTeamIdChange,
   disabled = false,
 }: ExecutionModeSelectorProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [agents, setAgents] = useState<Phase2AgentResponse[]>([]);
+  const [teams, setTeams] = useState<Phase2TeamResponse[]>([]);
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const autoFilledRef = useRef(false);
   const [cleared, setCleared] = useState(false);
@@ -56,6 +68,9 @@ export default function ExecutionModeSelector({
     value === 'DIRECT' ? [] : dedupeAllowedAgentIds(allowedAgentIds);
   const allSelected =
     onlineIds.length > 0 && onlineIds.every((id) => selectedIds.includes(id));
+  /** With teams available the second pill picks a team; 自定义 falls back to agents. */
+  const teamBranch = teams.length > 0 && !customMode;
+  const selectedTeam = teams.find((team) => team.id === teamId) ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -77,10 +92,37 @@ export default function ExecutionModeSelector({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await listTeams();
+        if (!cancelled) {
+          setTeams(list ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setTeams([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setTeamsLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (value !== 'ORCHESTRATED') {
       autoFilledRef.current = false;
       setCleared(false);
       setAgentOpen(false);
+      setCustomMode(false);
+      return;
+    }
+    if (!teamsLoaded || teamBranch) {
       return;
     }
     if (autoFilledRef.current || onlineIds.length === 0) {
@@ -88,7 +130,14 @@ export default function ExecutionModeSelector({
     }
     autoFilledRef.current = true;
     onAllowedAgentIdsChange?.(onlineIds);
-  }, [value, onlineKey, onlineIds, onAllowedAgentIdsChange]);
+  }, [
+    value,
+    onlineKey,
+    onlineIds,
+    onAllowedAgentIdsChange,
+    teamsLoaded,
+    teamBranch,
+  ]);
 
   useEffect(() => {
     if (!modeOpen && !agentOpen) {
@@ -119,8 +168,15 @@ export default function ExecutionModeSelector({
       return;
     }
     onChange?.(mode);
+    setModeOpen(false);
     if (mode === 'ORCHESTRATED') {
       setCleared(false);
+      setCustomMode(false);
+      if (teamBranch) {
+        autoFilledRef.current = false;
+        onAllowedAgentIdsChange?.([]);
+        return;
+      }
       if (onlineIds.length > 0) {
         autoFilledRef.current = true;
         onAllowedAgentIdsChange?.(onlineIds);
@@ -128,12 +184,46 @@ export default function ExecutionModeSelector({
         autoFilledRef.current = false;
         onAllowedAgentIdsChange?.([]);
       }
-    } else {
-      autoFilledRef.current = false;
-      setCleared(false);
-      onAllowedAgentIdsChange?.([]);
-      setAgentOpen(false);
+      return;
     }
+    autoFilledRef.current = false;
+    setCleared(false);
+    setCustomMode(false);
+    onAllowedAgentIdsChange?.([]);
+    onTeamIdChange?.(null);
+    setAgentOpen(false);
+  };
+
+  const selectTeam = (id: string) => {
+    if (disabled) {
+      return;
+    }
+    onTeamIdChange?.(id);
+    onAllowedAgentIdsChange?.([]);
+    setAgentOpen(false);
+  };
+
+  const enterCustom = () => {
+    if (disabled) {
+      return;
+    }
+    setCustomMode(true);
+    onTeamIdChange?.(null);
+    setCleared(false);
+    if (onlineIds.length > 0) {
+      autoFilledRef.current = true;
+      onAllowedAgentIdsChange?.(onlineIds);
+    }
+  };
+
+  const backToTeams = () => {
+    if (disabled) {
+      return;
+    }
+    setCustomMode(false);
+    autoFilledRef.current = false;
+    setCleared(false);
+    onAllowedAgentIdsChange?.([]);
   };
 
   const selectAll = () => {
@@ -178,6 +268,10 @@ export default function ExecutionModeSelector({
     }
     return String(selectedIds.length);
   };
+
+  const secondPillLabel = teamBranch
+    ? (selectedTeam?.name ?? '选择团队')
+    : agentTriggerLabel();
 
   return (
     <div ref={rootRef} className="flex items-center min-w-0">
@@ -249,7 +343,7 @@ export default function ExecutionModeSelector({
             disabled={disabled}
             aria-expanded={agentOpen}
             aria-haspopup="listbox"
-            data-testid="allowed-agent-selector"
+            data-testid={teamBranch ? 'team-selector' : 'allowed-agent-selector'}
             className={pillClassName(disabled)}
             onClick={() => {
               if (disabled) {
@@ -260,7 +354,7 @@ export default function ExecutionModeSelector({
             }}
           >
             <span className="max-w-[120px] truncate font-medium">
-              {agentTriggerLabel()}
+              {secondPillLabel}
             </span>
             <span aria-hidden className="inline-flex">
               <DownOutlined
@@ -272,11 +366,67 @@ export default function ExecutionModeSelector({
             </span>
           </button>
 
-          {agentOpen ? (
+          {agentOpen && teamBranch ? (
+            <div
+              role="listbox"
+              className={classNames(menuClassName, 'w-[220px]')}
+              data-testid="team-menu"
+            >
+              <div className="max-h-[220px] overflow-y-auto">
+                {teams.map((team) => {
+                  const active = team.id === teamId;
+                  return (
+                    <button
+                      key={team.id}
+                      type="button"
+                      data-testid={`team-option-${team.id}`}
+                      className={classNames(
+                        rowClassName,
+                        'justify-between',
+                        active ? 'text-text-primary' : 'text-text-secondary',
+                      )}
+                      onClick={() => selectTeam(team.id)}
+                    >
+                      <span className="truncate">{team.name}</span>
+                      {active ? (
+                        <span aria-hidden className="text-[12px]">
+                          ✓
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="my-4 border-t border-black/6" />
+              <button
+                type="button"
+                data-testid="team-custom"
+                className={classNames(rowClassName, 'text-text-secondary')}
+                onClick={enterCustom}
+              >
+                自定义
+              </button>
+            </div>
+          ) : null}
+
+          {agentOpen && !teamBranch ? (
             <div
               role="listbox"
               className={classNames(menuClassName, 'w-[220px]')}
             >
+              {teams.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    data-testid="team-back"
+                    className={classNames(rowClassName, 'text-text-secondary')}
+                    onClick={backToTeams}
+                  >
+                    返回团队
+                  </button>
+                  <div className="my-4 border-t border-black/6" />
+                </>
+              ) : null}
               <button
                 type="button"
                 data-testid="allowed-agent-clear"
@@ -316,8 +466,7 @@ export default function ExecutionModeSelector({
                         key={agent.id}
                         type="button"
                         className={classNames(
-                          'flex w-full items-center gap-8 border-0 bg-transparent px-14 py-7 text-left text-[13px]',
-                          'transition-colors duration-150 hover:bg-black/[0.03]',
+                          rowClassName,
                           checked ? 'text-text-primary' : 'text-text-secondary',
                         )}
                         onClick={() => toggleAgent(agent.id)}

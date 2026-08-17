@@ -74,6 +74,7 @@ export type {
   McpAuthType,
   McpServerStatus,
   Phase2AgentResponse,
+  Phase2TeamResponse,
   Phase2SkillResponse,
   Phase2ModelResponse,
   Phase2McpServerResponse,

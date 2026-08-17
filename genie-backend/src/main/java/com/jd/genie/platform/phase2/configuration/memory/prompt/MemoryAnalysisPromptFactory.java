@@ -15,6 +15,12 @@ public class MemoryAnalysisPromptFactory {
             Do not infer memory from assistant suggestions. Do not include secrets, credentials, tokens, cookies, IDs, file paths, markdown headings, code fences, HTML, YAML front matter, or unknown schema fields.
             For DELETE, value must be null. For UPSERT, value must be a concise plain text string.
             Each patch object must contain exactly operation, section, key, value. No extra keys.
+
+            Valid response with one patch:
+            {"schemaVersion":1,"patches":[{"operation":"UPSERT","section":"回答偏好","key":"语言","value":"回答使用中文"}]}
+            Valid response when nothing is worth remembering:
+            {"schemaVersion":1,"patches":[]}
+            Invalid: markdown code fences, prose before or after the JSON, extra fields such as reason or confidence.
             """;
     }
 

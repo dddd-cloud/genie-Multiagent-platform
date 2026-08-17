@@ -14,6 +14,7 @@ import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
+import com.jd.genie.platform.phase2contract.dto.MasterPersona;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationSubTaskView;
 import com.jd.genie.platform.phase2contract.enums.StepMode;
@@ -32,7 +33,6 @@ public final class Phase2OrchestrationRuntime {
     private final OrchestrationPlanValidator planValidator;
     private final SerialOrchestrationService serialService;
     private final OrchestrationEventMapper eventMapper;
-    private final DirectFallbackExecutor directFallbackExecutor;
 
     public Phase2OrchestrationRuntime(
             OrchestrationModelPort modelPort,
@@ -40,21 +40,10 @@ public final class Phase2OrchestrationRuntime {
             SerialOrchestrationService serialService,
             OrchestrationEventMapper eventMapper
     ) {
-        this(modelPort, planValidator, serialService, eventMapper, null);
-    }
-
-    public Phase2OrchestrationRuntime(
-            OrchestrationModelPort modelPort,
-            OrchestrationPlanValidator planValidator,
-            SerialOrchestrationService serialService,
-            OrchestrationEventMapper eventMapper,
-            DirectFallbackExecutor directFallbackExecutor
-    ) {
         this.modelPort = modelPort;
         this.planValidator = planValidator;
         this.serialService = serialService;
         this.eventMapper = eventMapper;
-        this.directFallbackExecutor = directFallbackExecutor;
     }
 
     public RouteDecision selectRoute(
@@ -73,7 +62,18 @@ public final class Phase2OrchestrationRuntime {
             String conversationHistory,
             List<AgentCapabilitySummary> candidates
     ) {
-        return selectRouteDecision(mode, query, conversationSummary, conversationHistory, candidates);
+        return selectRoute(mode, query, conversationSummary, conversationHistory, candidates, MasterPersona.none());
+    }
+
+    public RouteDecision selectRoute(
+            String mode,
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            MasterPersona masterPersona
+    ) {
+        return selectRouteDecision(mode, query, conversationSummary, conversationHistory, candidates, masterPersona);
     }
 
     /**
@@ -119,13 +119,35 @@ public final class Phase2OrchestrationRuntime {
             RouteDecision route,
             ConversationStreamObserver observer
     ) {
+        execute(user, requestId, runId, query, conversationSummary, longTermMemory, conversationHistory,
+                candidates, route, observer, MasterPersona.none(), null);
+    }
+
+    public void execute(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            RouteDecision route,
+            ConversationStreamObserver observer,
+            MasterPersona masterPersona,
+            String teamId
+    ) {
+        MasterPersona persona = masterPersona == null ? MasterPersona.none() : masterPersona;
         Map<String, String> failures = new LinkedHashMap<>();
         AtomicLong sequence = new AtomicLong();
-        OrchestrationTraceChannel traces = new OrchestrationTraceChannel(observer, requestId, runId, sequence);
+        OrchestrationTraceChannel traces = new OrchestrationTraceChannel(
+                observer, requestId, runId, sequence, persona.displayName());
         try {
-            emit(observer, requestId, runId, sequence, "ROUTE_SELECTED", Map.of(
-                    "route", route.route().name(), "reasonCode", route.reasonCode()
-            ), List.of());
+            Map<String, Object> routeDetails = new LinkedHashMap<>();
+            routeDetails.put("route", route.route().name());
+            routeDetails.put("reasonCode", route.reasonCode());
+            putTeamContext(routeDetails, persona, teamId);
+            emit(observer, requestId, runId, sequence, "ROUTE_SELECTED", routeDetails, List.of());
             traces.emitMain(OrchestrationTraceChannel.KIND_STATUS,
                     "路由决策：" + route.route().name() + "（" + route.reasonCode() + "）", false);
             if (route.route() != RouteDecision.Route.ORCHESTRATED) {
@@ -143,7 +165,8 @@ public final class Phase2OrchestrationRuntime {
                                     candidates,
                                     1,
                                     Map.of(),
-                                    Map.of()
+                                    Map.of(),
+                                    persona
                             ),
                             candidates
                     ),
@@ -152,10 +175,15 @@ public final class Phase2OrchestrationRuntime {
             List<OrchestrationPlanStepView> steps = plan.steps().stream()
                     .map(step -> stepView(step, candidates))
                     .toList();
-            emit(observer, requestId, runId, sequence, "PLAN_CREATED", Map.of("attemptNo", 1), steps);
+            Map<String, Object> planDetails = new LinkedHashMap<>();
+            planDetails.put("attemptNo", 1);
+            putTeamContext(planDetails, persona, teamId);
+            emit(observer, requestId, runId, sequence, "PLAN_CREATED", planDetails, steps);
             traces.emitMain(1, OrchestrationTraceChannel.KIND_OUTPUT, formatPlanTrace(steps), false);
             java.util.concurrent.atomic.AtomicBoolean degraded = new java.util.concurrent.atomic.AtomicBoolean(false);
-            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles = new java.util.ArrayList<>();
+            // acceptDeliverables is invoked from PARALLEL_AGENTS worker threads.
+            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles =
+                    java.util.Collections.synchronizedList(new java.util.ArrayList<>());
             Map<String, AgentTaskResult> results = serialService.execute(
                     user, query, conversationHistory, UntrustedLocalContext.body(longTermMemory, conversationSummary), plan.steps(),
                     new OrchestrationEventSink() {
@@ -200,7 +228,8 @@ public final class Phase2OrchestrationRuntime {
                     failures.isEmpty() && !hadDegraded ? "SUCCESS" : "PARTIAL",
                     1,
                     traces,
-                    deliverableFiles
+                    deliverableFiles,
+                    persona
             );
         } catch (RuntimeException error) {
             log.warn("Orchestration failed: {}", error.getMessage(), error);
@@ -222,15 +251,27 @@ public final class Phase2OrchestrationRuntime {
             String query,
             String conversationSummary,
             String conversationHistory,
-            List<AgentCapabilitySummary> candidates
+            List<AgentCapabilitySummary> candidates,
+            MasterPersona masterPersona
     ) {
         if ("ORCHESTRATED".equals(mode)) {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST");
         }
         try {
-            return modelPort.selectRoute(query, conversationSummary, conversationHistory, candidates);
-        } catch (RuntimeException ignored) {
+            return modelPort.selectRoute(query, conversationSummary, conversationHistory, candidates, masterPersona);
+        } catch (RuntimeException error) {
+            log.warn("Router call failed, falling back to DIRECT: {}", error.getMessage(), error);
             return new RouteDecision(RouteDecision.Route.DIRECT, "ROUTER_FALLBACK");
+        }
+    }
+
+    private void putTeamContext(Map<String, Object> details, MasterPersona persona, String teamId) {
+        if (teamId != null && !teamId.isBlank()) {
+            details.put("teamId", teamId);
+        }
+        if (persona != null && persona.present()) {
+            details.put("masterAgentId", persona.agentId());
+            details.put("masterAgentName", persona.displayName());
         }
     }
 
@@ -293,7 +334,8 @@ public final class Phase2OrchestrationRuntime {
             String completionStatus,
             int attemptNo,
             OrchestrationTraceChannel traces,
-            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles
+            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles,
+            MasterPersona masterPersona
     ) {
         emit(observer, requestId, runId, sequence, "SUMMARY_STARTED", Map.of("attemptNo", attemptNo), List.of());
         traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "正在根据用户问题汇总各专家结论…", false);
@@ -302,11 +344,13 @@ public final class Phase2OrchestrationRuntime {
         String answer;
         try {
             String overview = modelPort.summarize(
-                    query, conversationHistory, longTermMemory, conversationSummary, evidence);
+                    query, conversationHistory, longTermMemory, conversationSummary, evidence, masterPersona);
             answer = overview == null || overview.isBlank() ? fallback : overview.trim();
             emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
             traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总完成", false);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            // The steps themselves succeeded, so the run keeps its status; only the wording degrades.
+            log.warn("Summarization failed, emitting collected evidence instead: {}", error.getMessage(), error);
             answer = fallback;
             emit(observer, requestId, runId, sequence, "SUMMARY_FALLBACK", Map.of(
                     "attemptNo", attemptNo, "reasonCode", "SUMMARY_FAILED"

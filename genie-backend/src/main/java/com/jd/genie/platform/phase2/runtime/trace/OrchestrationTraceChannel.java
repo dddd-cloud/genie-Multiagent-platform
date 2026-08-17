@@ -6,6 +6,7 @@ import com.jd.genie.platform.agentbridge.ConversationStreamObserver;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -25,11 +26,15 @@ public final class OrchestrationTraceChannel {
     public static final String KIND_OUTPUT = "OUTPUT";
     public static final String KIND_ERROR = "ERROR";
 
+    private static final String DEFAULT_MAIN_NAME = "主 Agent";
+
     private final ConversationStreamObserver observer;
     private final String requestId;
     private final String runId;
     private final AtomicLong sequence;
-    private final Map<String, Integer> stepEmittedChars = new LinkedHashMap<>();
+    private final String mainDisplayName;
+    // PARALLEL_AGENTS subtasks share one channel across worker threads.
+    private final Map<String, Integer> stepEmittedChars = new ConcurrentHashMap<>();
 
     public OrchestrationTraceChannel(
             ConversationStreamObserver observer,
@@ -37,18 +42,31 @@ public final class OrchestrationTraceChannel {
             String runId,
             AtomicLong sequence
     ) {
+        this(observer, requestId, runId, sequence, DEFAULT_MAIN_NAME);
+    }
+
+    public OrchestrationTraceChannel(
+            ConversationStreamObserver observer,
+            String requestId,
+            String runId,
+            AtomicLong sequence,
+            String mainDisplayName
+    ) {
         this.observer = Objects.requireNonNull(observer, "observer");
         this.requestId = Objects.requireNonNull(requestId, "requestId");
         this.runId = Objects.requireNonNull(runId, "runId");
         this.sequence = Objects.requireNonNull(sequence, "sequence");
+        this.mainDisplayName = mainDisplayName == null || mainDisplayName.isBlank()
+                ? DEFAULT_MAIN_NAME
+                : mainDisplayName;
     }
 
     public void emitMain(String kind, String text, boolean append) {
-        emit(SCOPE_MAIN, null, null, null, null, null, "主 Agent", kind, text, append);
+        emit(SCOPE_MAIN, null, null, null, null, null, mainDisplayName, kind, text, append);
     }
 
     public void emitMain(Integer attemptNo, String kind, String text, boolean append) {
-        emit(SCOPE_MAIN, attemptNo, null, null, null, null, "主 Agent", kind, text, append);
+        emit(SCOPE_MAIN, attemptNo, null, null, null, null, mainDisplayName, kind, text, append);
     }
 
     public void emitStep(

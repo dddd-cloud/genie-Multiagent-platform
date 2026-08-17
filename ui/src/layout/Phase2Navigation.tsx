@@ -6,6 +6,7 @@ import {
   CommentOutlined,
   DatabaseOutlined,
   RobotOutlined,
+  TeamOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
 import classNames from 'classnames';
@@ -28,6 +29,12 @@ const LINKS: Array<{
     label: 'Agent',
     match: 'prefix',
     icon: <RobotOutlined />,
+  },
+  {
+    to: '/app/teams',
+    label: '团队',
+    match: 'prefix',
+    icon: <TeamOutlined />,
   },
   {
     to: '/app/skills',

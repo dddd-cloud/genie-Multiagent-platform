@@ -46,6 +46,8 @@ public final class Phase2ErrorHttpStatus {
         map.put(MvpErrorCode.ORCHESTRATION_PLAN_INVALID, 400);
         map.put(MvpErrorCode.AGENT_INVALID_RESULT, 400);
         map.put(MvpErrorCode.SNAPSHOT_INVALID, 400);
+        map.put(MvpErrorCode.TEAM_MASTER_INVALID, 400);
+        map.put(MvpErrorCode.TEAM_MEMBERS_INVALID, 400);
 
         // 401
         map.put(MvpErrorCode.AUTH_REQUIRED, 401);

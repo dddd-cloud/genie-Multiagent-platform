@@ -8,9 +8,12 @@ import com.jd.genie.platform.contract.MvpErrorCode;
 
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class Phase2GptQueryRequestValidator {
     private static final Set<String> EXECUTION_MODES = Set.of("AUTO", "DIRECT", "ORCHESTRATED");
+    private static final Pattern TEAM_ID_PATTERN =
+            Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
     private static final int MAX_ALLOWED_AGENT_IDS = 20;
     private static final int MAX_LONG_TERM_MEMORY_CODE_POINTS = 12_000;
     private static final int MAX_CONVERSATION_SUMMARY_CODE_POINTS = 20_000;
@@ -36,6 +39,7 @@ public final class Phase2GptQueryRequestValidator {
         String executionMode = normalizedExecutionMode(request.getExecutionMode());
         LocalContextSnapshot localContext = normalizedLocalContext(request.getLocalContext());
         List<String> allowedAgentIds = normalizedAllowedAgentIds(request.getAllowedAgentIds(), executionMode);
+        String teamId = normalizedTeamId(request.getTeamId(), executionMode, allowedAgentIds);
         GptQueryReq trustedRequest = requestFactory.trustedRequest(
                 GptQueryReq.builder()
                         .sessionId(request.getSessionId())
@@ -46,7 +50,7 @@ public final class Phase2GptQueryRequestValidator {
                         .build(),
                 currentUser
         );
-        return new ValidatedPhase2Request(trustedRequest, executionMode, allowedAgentIds, localContext);
+        return new ValidatedPhase2Request(trustedRequest, executionMode, allowedAgentIds, teamId, localContext);
     }
 
     private String normalizedExecutionMode(String value) {
@@ -94,6 +98,23 @@ public final class Phase2GptQueryRequestValidator {
         return List.copyOf(normalized);
     }
 
+    private String normalizedTeamId(String value, String executionMode, List<String> allowedAgentIds) {
+        String teamId = trim(value);
+        if (teamId == null || teamId.isEmpty()) {
+            return null;
+        }
+        if (!TEAM_ID_PATTERN.matcher(teamId).matches()) {
+            throw validationError("teamId must be a UUID");
+        }
+        if ("DIRECT".equals(executionMode)) {
+            throw validationError("DIRECT requests must not specify teamId");
+        }
+        if (!allowedAgentIds.isEmpty()) {
+            throw validationError("teamId and allowedAgentIds are mutually exclusive");
+        }
+        return teamId;
+    }
+
     private AgentBridgeException validationError(String message) {
         return new AgentBridgeException(MvpErrorCode.VALIDATION_ERROR, message);
     }
@@ -114,8 +135,17 @@ public final class Phase2GptQueryRequestValidator {
             GptQueryReq trustedRequest,
             String executionMode,
             List<String> allowedAgentIds,
+            String teamId,
             LocalContextSnapshot localContext
     ) {
+        public ValidatedPhase2Request(
+                GptQueryReq trustedRequest,
+                String executionMode,
+                List<String> allowedAgentIds,
+                LocalContextSnapshot localContext
+        ) {
+            this(trustedRequest, executionMode, allowedAgentIds, null, localContext);
+        }
     }
 
     public record LocalContextSnapshot(String longTermMemory, String conversationSummary) {

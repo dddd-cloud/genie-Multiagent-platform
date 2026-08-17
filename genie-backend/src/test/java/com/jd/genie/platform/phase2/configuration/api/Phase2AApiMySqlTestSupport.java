@@ -15,6 +15,9 @@ import com.jd.genie.platform.phase2.configuration.skill.api.Phase2SkillControlle
 import com.jd.genie.platform.phase2.configuration.skill.api.SkillApiExceptionHandler;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
 import com.jd.genie.platform.phase2.configuration.support.Phase2AMySqlTestSupport;
+import com.jd.genie.platform.phase2.configuration.team.api.Phase2TeamController;
+import com.jd.genie.platform.phase2.configuration.team.api.TeamApiExceptionHandler;
+import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -26,6 +29,7 @@ abstract class Phase2AApiMySqlTestSupport extends Phase2AMySqlTestSupport {
 
     @Autowired protected AgentDefinitionService agentService;
     @Autowired protected SkillDefinitionService skillService;
+    @Autowired protected AgentTeamService teamService;
     @Autowired protected ModelCatalogService modelCatalogService;
     @Autowired protected PromptPreviewService promptPreviewService;
 
@@ -38,6 +42,12 @@ abstract class Phase2AApiMySqlTestSupport extends Phase2AMySqlTestSupport {
     protected MockMvc skillMvc() {
         return MockMvcBuilders.standaloneSetup(new Phase2SkillController(skillService, currentUserProvider))
             .setControllerAdvice(new SkillApiExceptionHandler())
+            .build();
+    }
+
+    protected MockMvc teamMvc() {
+        return MockMvcBuilders.standaloneSetup(new Phase2TeamController(teamService, currentUserProvider))
+            .setControllerAdvice(new TeamApiExceptionHandler())
             .build();
     }
 

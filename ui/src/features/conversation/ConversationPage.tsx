@@ -11,7 +11,7 @@ import {
   useNavigate,
   useParams,
 } from 'react-router-dom';
-import { Spin, message } from 'antd';
+import { Button, Result, Spin, message } from 'antd';
 import type {
   ConversationMessageResponse,
   ConversationResponse,
@@ -23,7 +23,7 @@ import ChatView from '@/components/ChatView';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import { useLocalMemoryOptional } from '@/features/phase2/localMemory/useLocalMemory';
 import { MvpApiError } from '@/services/apiError';
-import { getConversation, getMessages } from './api';
+import { getConversation, getMessages, updateConversationPrivacy } from './api';
 import { hydrateConversation } from './hydrateConversation';
 import { useConversationLayout } from './ConversationLayout';
 import type { ConversationDraft, PersistedChatItem } from './types';
@@ -72,12 +72,16 @@ const ConversationPage: GenieType.FC = memo(() => {
   );
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('AUTO');
   const [allowedAgentIds, setAllowedAgentIds] = useState<string[]>([]);
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const consumedDraftIdsRef = useRef<Set<string>>(new Set());
 
   // Send-mode selection is not persisted across refresh.
   useEffect(() => {
     setExecutionMode('AUTO');
     setAllowedAgentIds([]);
+    setTeamId(null);
   }, [conversationId]);
 
   const detachedRunning = useMemo(
@@ -185,6 +189,41 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
   }, [conversationId]);
 
+  const togglePrivacyMode = useCallback(async () => {
+    if (!conversationId || !conversation) {
+      return;
+    }
+    const next = !conversation.privacyMode;
+    try {
+      const updated = await updateConversationPrivacy(conversationId, next);
+      if (!updated) {
+        message.error('更新隐私模式失败');
+        return;
+      }
+      setConversation(updated);
+      const ctx = layoutRef.current;
+      if (ctx) {
+        const existing = ctx.items.find((row) => row.id === updated.id);
+        ctx.upsert({
+          id: updated.id,
+          title: updated.title,
+          privacyMode: updated.privacyMode === true,
+          lastMessageAt: updated.lastMessageAt,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+          lastMessagePreview: existing?.lastMessagePreview ?? null,
+        });
+      }
+    } catch (err: unknown) {
+      if (isAuthRequired(err)) {
+        throw err;
+      }
+      message.error(
+        err instanceof MvpApiError ? err.message : '更新隐私模式失败',
+      );
+    }
+  }, [conversation, conversationId]);
+
   // Load conversation + messages. Draft is NOT consumed here.
   useEffect(() => {
     if (!conversationId) {
@@ -198,6 +237,7 @@ const ConversationPage: GenieType.FC = memo(() => {
 
     const load = async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const [conv, messages] = await Promise.all([
           getConversation(conversationId),
@@ -249,9 +289,10 @@ const ConversationPage: GenieType.FC = memo(() => {
           navigate('/app');
           return;
         }
-        message.error(
-          err instanceof MvpApiError ? err.message : '加载会话失败',
-        );
+        const reason =
+          err instanceof MvpApiError ? err.message : '加载会话失败';
+        setLoadError(reason);
+        message.error(reason);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -263,7 +304,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     return () => {
       cancelled = true;
     };
-  }, [applyMessages, conversationId, navigate]);
+  }, [applyMessages, conversationId, navigate, reloadNonce]);
 
   /**
    * Plan §9.3 / §9.4:
@@ -305,6 +346,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     if (isPhase2Enabled()) {
       setExecutionMode(state.executionMode ?? 'AUTO');
       setAllowedAgentIds(state.allowedAgentIds ?? []);
+      setTeamId(state.teamId ?? null);
     }
     setPendingDraft(state);
     navigate(location.pathname, {
@@ -331,6 +373,30 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
   }, [chats, pendingDraft]);
 
+  if (!loading && loadError && !conversation) {
+    return (
+      <div
+        className="h-full w-full flex items-center justify-center"
+        data-testid="conversation-load-error"
+      >
+        <Result
+          status="warning"
+          title="会话加载失败"
+          subTitle={loadError}
+          extra={
+            <Button
+              type="primary"
+              onClick={() => setReloadNonce((nonce) => nonce + 1)}
+              data-testid="conversation-load-retry"
+            >
+              重试
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
   if (loading || !conversationId || !conversation) {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -344,13 +410,6 @@ const ConversationPage: GenieType.FC = memo(() => {
 
   return (
     <>
-      {conversation.privacyMode ? (
-        <div className="px-24 pt-12">
-          <div className="rounded-lg bg-[#F5F5F7] px-14 py-10 text-[13px] text-text-secondary">
-            隐私模式：此对话不会写入记忆。
-          </div>
-        </div>
-      ) : null}
       <ChatView
         key={conversationId}
         conversationId={conversationId}
@@ -359,8 +418,12 @@ const ConversationPage: GenieType.FC = memo(() => {
         mode={derivedMode}
         executionMode={executionMode}
         allowedAgentIds={allowedAgentIds}
+        teamId={teamId}
         onExecutionModeChange={setExecutionMode}
         onAllowedAgentIdsChange={setAllowedAgentIds}
+        onTeamIdChange={setTeamId}
+        privacyMode={conversation.privacyMode === true}
+        onPrivacyModeChange={() => void togglePrivacyMode()}
         initialDraft={
           pendingDraft
             ? {

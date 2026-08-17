@@ -25,8 +25,11 @@ import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationConversat
 import com.jd.genie.platform.phase2.runtime.orchestration.Phase2OrchestrationRuntime;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
+import com.jd.genie.platform.phase2contract.dto.MasterPersona;
+import com.jd.genie.platform.phase2contract.dto.TeamRuntimeSelection;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
+import com.jd.genie.platform.phase2contract.port.TeamRuntimeCatalogPort;
 import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.service.IGptProcessService;
 import com.jd.genie.service.IMultiAgentService;
@@ -55,6 +58,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
     private final ObjectProvider<AgentRuntimeCatalogPort> agentRuntimeCatalogPortProvider;
     private final ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider;
     private final ObjectProvider<MemoryDocumentService> memoryDocumentServiceProvider;
+    private final ObjectProvider<TeamRuntimeCatalogPort> teamRuntimeCatalogPortProvider;
     private final Phase2GptQueryRequestValidator phase2RequestValidator;
     private final long sseTimeoutMillis;
     private final long maxSnapshotBytes;
@@ -133,6 +137,33 @@ public class GptProcessServiceImpl implements IGptProcessService {
         );
     }
 
+    public GptProcessServiceImpl(
+            IMultiAgentService multiAgentService,
+            CurrentUserProvider currentUserProvider,
+            ConversationExecutionPort executionPort,
+            ObjectProvider<AgentRuntimeCatalogPort> agentRuntimeCatalogPortProvider,
+            ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider,
+            ObjectProvider<MemoryDocumentService> memoryDocumentServiceProvider,
+            long sseTimeoutMillis,
+            long maxSnapshotBytes,
+            int historyMaxTurns,
+            int historyMaxCharacters
+    ) {
+        this(
+                multiAgentService,
+                currentUserProvider,
+                executionPort,
+                agentRuntimeCatalogPortProvider,
+                orchestrationRuntimeProvider,
+                memoryDocumentServiceProvider,
+                new StaticListableBeanFactory().getBeanProvider(TeamRuntimeCatalogPort.class),
+                sseTimeoutMillis,
+                maxSnapshotBytes,
+                historyMaxTurns,
+                historyMaxCharacters
+        );
+    }
+
     @Autowired
     public GptProcessServiceImpl(
             IMultiAgentService multiAgentService,
@@ -141,6 +172,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
             ObjectProvider<AgentRuntimeCatalogPort> agentRuntimeCatalogPortProvider,
             ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider,
             ObjectProvider<MemoryDocumentService> memoryDocumentServiceProvider,
+            ObjectProvider<TeamRuntimeCatalogPort> teamRuntimeCatalogPortProvider,
             @Value("${GENIE_SSE_TIMEOUT_MILLIS:3600000}") long sseTimeoutMillis,
             @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}") long maxSnapshotBytes,
             @Value("${GENIE_HISTORY_MAX_TURNS:6}") int historyMaxTurns,
@@ -154,6 +186,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
         this.agentRuntimeCatalogPortProvider = agentRuntimeCatalogPortProvider;
         this.orchestrationRuntimeProvider = orchestrationRuntimeProvider;
         this.memoryDocumentServiceProvider = memoryDocumentServiceProvider;
+        this.teamRuntimeCatalogPortProvider = teamRuntimeCatalogPortProvider;
         this.phase2RequestValidator = new Phase2GptQueryRequestValidator(requestFactory);
         this.sseTimeoutMillis = requirePositive(sseTimeoutMillis, "sseTimeoutMillis");
         this.maxSnapshotBytes = requirePositive(maxSnapshotBytes, "maxSnapshotBytes");
@@ -172,17 +205,17 @@ public class GptProcessServiceImpl implements IGptProcessService {
     public SseEmitter queryPhase2AgentStreamIncr(Phase2GptQueryRequest externalRequest) {
         CurrentUser currentUser = currentUserProvider.requireCurrentUser();
         ValidatedPhase2Request request = phase2RequestValidator.validate(externalRequest, currentUser);
-        List<AgentCapabilitySummary> candidates = loadCandidateSnapshot(currentUser, request);
+        OrchestrationTargets targets = loadOrchestrationTargets(currentUser, request);
         if ("DIRECT".equals(request.executionMode())) {
             return executeTrustedRequest(currentUser, withDirectRuntimeContext(currentUser, request));
         }
-        if ("AUTO".equals(request.executionMode()) && candidates.isEmpty()) {
+        if ("AUTO".equals(request.executionMode()) && targets.candidates().isEmpty()) {
             return executeTrustedRequest(currentUser, withDirectRuntimeContext(currentUser, request));
         }
-        if ("ORCHESTRATED".equals(request.executionMode()) && candidates.isEmpty()) {
+        if ("ORCHESTRATED".equals(request.executionMode()) && targets.candidates().isEmpty()) {
             throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
         }
-        return executeOrchestrationRequest(currentUser, request, candidates);
+        return executeOrchestrationRequest(currentUser, request, targets);
     }
 
     private SseEmitter executeTrustedRequest(CurrentUser currentUser, GptQueryReq request) {
@@ -200,8 +233,10 @@ public class GptProcessServiceImpl implements IGptProcessService {
     private SseEmitter executeOrchestrationRequest(
             CurrentUser currentUser,
             ValidatedPhase2Request request,
-            List<AgentCapabilitySummary> candidates
+            OrchestrationTargets targets
     ) {
+        List<AgentCapabilitySummary> candidates = targets.candidates();
+        MasterPersona masterPersona = targets.masterPersona();
         GptQueryReq trustedRequest = withDirectRuntimeContext(currentUser, request);
         return executePreparedRequest(currentUser, trustedRequest, (observer, cancellableCall) -> {
             Phase2OrchestrationRuntime runtime = orchestrationRuntimeProvider.getIfAvailable();
@@ -218,7 +253,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     trustedRequest.getQuery(),
                     localContext.conversationSummary(),
                     conversationHistory,
-                    candidates
+                    candidates,
+                    masterPersona
             );
             if (route.route() == RouteDecision.Route.DIRECT) {
                 startAgent(withDirectRuntimeContext(currentUser, request), observer, cancellableCall);
@@ -237,7 +273,9 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             conversationHistory,
                             candidates,
                             route,
-                            observer
+                            observer,
+                            masterPersona,
+                            request.teamId()
                     );
                 } catch (Throwable error) {
                     if (!observer.isTerminal()) {
@@ -300,13 +338,41 @@ public class GptProcessServiceImpl implements IGptProcessService {
         return hasText(existingPrompt) ? existingPrompt + "\n\n" + localContext : localContext;
     }
 
-    private List<AgentCapabilitySummary> loadCandidateSnapshot(
+    private OrchestrationTargets loadOrchestrationTargets(
             CurrentUser currentUser,
             ValidatedPhase2Request request
     ) {
         if ("DIRECT".equals(request.executionMode())) {
-            return List.of();
+            return new OrchestrationTargets(List.of(), MasterPersona.none());
         }
+        if (request.teamId() != null && !request.teamId().isBlank()) {
+            return loadTeamTargets(currentUser, request.teamId());
+        }
+        return new OrchestrationTargets(loadCandidateSnapshot(currentUser, request), MasterPersona.none());
+    }
+
+    private OrchestrationTargets loadTeamTargets(CurrentUser currentUser, String teamId) {
+        TeamRuntimeCatalogPort teamPort = teamRuntimeCatalogPortProvider.getIfAvailable();
+        if (teamPort == null) {
+            throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "Team runtime catalog is not available");
+        }
+        try {
+            TeamRuntimeSelection selection = teamPort.resolve(currentUser, teamId);
+            return new OrchestrationTargets(
+                    List.copyOf(selection.memberCandidates()),
+                    selection.masterPersona()
+            );
+        } catch (Phase2ContractException error) {
+            throw new AgentBridgeException(error.errorCode(), error.getMessage(), error);
+        } catch (RuntimeException error) {
+            throw AgentBridgeErrorMapper.asAgentBridgeException(error, MvpErrorCode.INTERNAL_ERROR);
+        }
+    }
+
+    private List<AgentCapabilitySummary> loadCandidateSnapshot(
+            CurrentUser currentUser,
+            ValidatedPhase2Request request
+    ) {
         AgentRuntimeCatalogPort catalogPort = agentRuntimeCatalogPortProvider.getIfAvailable();
         if (catalogPort == null) {
             throw new AgentBridgeException(
@@ -480,6 +546,13 @@ public class GptProcessServiceImpl implements IGptProcessService {
     @FunctionalInterface
     private interface PreparedExecutionStarter {
         void start(ConversationStreamObserver observer, CancellableAgentCall cancellableCall);
+    }
+
+    /** Executor candidates plus the master overlay that will drive planning and summarization. */
+    private record OrchestrationTargets(
+            List<AgentCapabilitySummary> candidates,
+            MasterPersona masterPersona
+    ) {
     }
 
     private void failPreparedExecution(

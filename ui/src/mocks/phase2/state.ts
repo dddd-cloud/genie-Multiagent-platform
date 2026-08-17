@@ -5,8 +5,10 @@ import type {
   Phase2McpToolResponse,
   Phase2ModelResponse,
   Phase2SkillResponse,
+  Phase2TeamResponse,
 } from '@/contracts/phase2';
 import agentsListFixture from './fixtures/agents-list.json';
+import teamsListFixture from './fixtures/teams-list.json';
 import skillsListFixture from './fixtures/skills-list.json';
 import mcpServersListFixture from './fixtures/mcp-servers-list.json';
 import mcpToolsFixture from './fixtures/mcp-tools.json';
@@ -21,6 +23,7 @@ export type Phase2SseScenario =
 
 export type Phase2MockState = {
   agents: Map<string, Phase2AgentResponse>;
+  teams: Map<string, Phase2TeamResponse>;
   skills: Map<string, Phase2SkillResponse>;
   mcpServers: Map<string, Phase2McpServerResponse>;
   mcpTools: Map<string, Phase2McpToolResponse[]>;
@@ -38,6 +41,18 @@ function seedAgents(): Map<string, Phase2AgentResponse> {
   const map = new Map<string, Phase2AgentResponse>();
   for (const agent of agentsListFixture.data as Phase2AgentResponse[]) {
     map.set(agent.id, structuredClone(agent));
+  }
+  return map;
+}
+
+/**
+ * Teams start empty so the Ensemble picker keeps its agent-selection behaviour by
+ * default; tests that need the team branch seed this map explicitly.
+ */
+export function seedTeamsFromFixture(): Map<string, Phase2TeamResponse> {
+  const map = new Map<string, Phase2TeamResponse>();
+  for (const team of teamsListFixture.data as Phase2TeamResponse[]) {
+    map.set(team.id, structuredClone(team));
   }
   return map;
 }
@@ -70,6 +85,7 @@ function seedMcpTools(): Map<string, Phase2McpToolResponse[]> {
 export function createInitialPhase2State(): Phase2MockState {
   return {
     agents: seedAgents(),
+    teams: new Map(),
     skills: seedSkills(),
     mcpServers: seedMcpServers(),
     mcpTools: seedMcpTools(),
@@ -97,6 +113,9 @@ export function resetPhase2State(partial?: Partial<Phase2MockState>): void {
   };
   if (partial?.agents) {
     phase2State.agents = partial.agents;
+  }
+  if (partial?.teams) {
+    phase2State.teams = partial.teams;
   }
   if (partial?.skills) {
     phase2State.skills = partial.skills;

@@ -1,9 +1,11 @@
 package com.jd.genie.agent.util;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 
 import java.util.concurrent.*;
 
+@Slf4j
 public class ThreadUtil {
     private static ThreadPoolExecutor executor = null;
 
@@ -13,7 +15,12 @@ public class ThreadUtil {
     public static synchronized void initPool(int poolSize) {
         if (executor == null) {
             ThreadFactory threadFactory = (new BasicThreadFactory.Builder()).namingPattern("exe-pool-%d").daemon(true).build();
-            RejectedExecutionHandler handler = (r, executor) -> {
+            // Silently dropping a task leaves the caller's SSE stream hanging forever with no error,
+            // so surface saturation to the submitting thread instead.
+            RejectedExecutionHandler handler = (r, pool) -> {
+                log.error("Agent thread pool saturated, rejecting task: active={} poolSize={} completed={}",
+                        pool.getActiveCount(), pool.getPoolSize(), pool.getCompletedTaskCount());
+                throw new RejectedExecutionException("Agent thread pool saturated");
             };
             int maxPoolSize = Math.max(poolSize, 1000);
             executor = new ThreadPoolExecutor(poolSize, maxPoolSize, 60000L, TimeUnit.MILLISECONDS, new SynchronousQueue(), threadFactory, handler);

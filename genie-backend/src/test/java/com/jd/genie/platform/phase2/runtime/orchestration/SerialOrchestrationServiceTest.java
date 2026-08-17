@@ -61,7 +61,7 @@ class SerialOrchestrationServiceTest {
         assertTrue(queries.get(0).contains("first"));
         assertTrue(queries.get(0).contains("请用可用 Agent 各用一句话描述春天，然后汇总成一段话。"));
         assertTrue(queries.get(0).contains("只用于限定主题"));
-        assertTrue(queries.get(0).contains("禁止整题作答"));
+        assertTrue(queries.get(0).contains("不要为用户原问题写整体结论或总括性回答"));
         assertTrue(queries.get(1).contains("second"));
         assertTrue(queries.get(1).contains("safe-result"));
         assertEquals(List.of("agent-a", "agent-b"), tools.getCalls().stream()

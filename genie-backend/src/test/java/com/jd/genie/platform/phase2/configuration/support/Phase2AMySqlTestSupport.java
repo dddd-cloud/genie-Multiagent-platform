@@ -11,6 +11,8 @@ import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptPreviewService;
 import com.jd.genie.platform.phase2.configuration.skill.binding.JdbcAgentSkillBindingPort;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
+import com.jd.genie.platform.phase2.configuration.team.runtime.TeamRuntimeResolver;
+import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
 import com.jd.genie.platform.phase2.skillruntime.LegacyCompatibleSkillRuntimeService;
 import com.jd.genie.platform.phase2contract.port.ToolBindingPort;
 import com.jd.genie.platform.phase2contract.support.FakeToolBindingPort;
@@ -65,6 +67,8 @@ public abstract class Phase2AMySqlTestSupport {
 
     @BeforeEach
     void clearPhase2ATables() {
+        jdbcTemplate.update("DELETE FROM agent_team_member");
+        jdbcTemplate.update("DELETE FROM agent_team");
         jdbcTemplate.update("DELETE FROM agent_skill_binding");
         jdbcTemplate.update("DELETE FROM agent_definition");
         jdbcTemplate.update("DELETE FROM skill_definition");
@@ -98,12 +102,15 @@ public abstract class Phase2AMySqlTestSupport {
         ModelCatalogService.class,
         PromptPreviewService.class,
         JdbcAgentSkillBindingPort.class,
-        LegacyCompatibleSkillRuntimeService.class
+        LegacyCompatibleSkillRuntimeService.class,
+        AgentTeamService.class,
+        TeamRuntimeResolver.class
     })
     @MapperScan({
         "com.jd.genie.platform.phase2.configuration.agent.mapper",
         "com.jd.genie.platform.phase2.configuration.skill.mapper",
-        "com.jd.genie.platform.phase2.configuration.skill.binding.mapper"
+        "com.jd.genie.platform.phase2.configuration.skill.binding.mapper",
+        "com.jd.genie.platform.phase2.configuration.team.mapper"
     })
     static class TestApplication {
         @Bean

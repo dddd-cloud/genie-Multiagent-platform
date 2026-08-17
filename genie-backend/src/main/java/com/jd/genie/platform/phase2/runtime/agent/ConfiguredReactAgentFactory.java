@@ -22,13 +22,9 @@ public final class ConfiguredReactAgentFactory {
             {"status":"FAILURE","output":null,"errorCode":"EXECUTION_ERROR","retryable":true}
             Inside output, escape every double-quote as \\" and every newline as \\n.
             Keep output under 20000 characters: compact facts and sources, not a full search dump.
-            When tools are available, you MUST call them for live/external facts (tickets, schedules, search, dates) instead of guessing or refusing.
-            Prefer answering without tools only when the tool list is empty or the question needs no external data.
-            For train/ticket tools: use trainFilterFlags=G for 高铁, set earliestStartTime/latestStartTime for the requested window, limitedNum=60 (never 0), sortFlag=startTime, format=text.
-            Call get-tickets at most once. Prefer city/station Chinese names; skip station-code lookup unless required.
-            After tools return a 票务查询摘要/schedule block: finish immediately with SUCCESS JSON.
-            If the user asked for count + every departure time, put uniqueTrainCount and the full schedule list into output (one train per line: 车次 出发时间).
-            Do NOT re-query for a fuller timetable. Do NOT invent times missing from schedule.
+            When tools are available, call them for facts you cannot know reliably (live data, search, current dates)
+            instead of guessing or refusing. Answer directly when the tool list is empty or the question needs no external data.
+            Follow each tool's own description for its arguments and usage limits.
             If the user message describes a single step objective for you as one sub-agent, answer ONLY that objective.
             Do not discuss which other agents are available, and do not rewrite the whole multi-agent plan.
             If the user or your step asks for an html, markdown, or downloadable file, you MUST call file_tool with command=upload, a filename ending in .html or .md, description, and the full file content BEFORE the SUCCESS JSON. Put the returned file link into output.
@@ -40,7 +36,7 @@ public final class ConfiguredReactAgentFactory {
             After the latest tool result: finish NOW with ONLY the SUCCESS/FAILURE JSON object. Do not call another tool.
             If the tool JSON has token or previewFile, output one short sentence with that token. Never paste html or file content into output.
             Put compact bullets and sources into output (under 20000 characters). Do not paste the full search report.
-            If a schedule block is present, answer from it (include all departures when asked). Do not call get-tickets again.
+            Answer from the data the tool already returned; do not repeat the same query for a fuller result.
             """;
     static final int MAX_OBSERVE_CHARS = 2_000;
 

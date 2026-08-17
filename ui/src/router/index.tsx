@@ -20,6 +20,12 @@ const AgentListPage = React.lazy(
 const AgentEditorPage = React.lazy(
   () => import('@/features/phase2/agents/AgentEditorPage'),
 );
+const TeamListPage = React.lazy(
+  () => import('@/features/phase2/teams/TeamListPage'),
+);
+const TeamEditorPage = React.lazy(
+  () => import('@/features/phase2/teams/TeamEditorPage'),
+);
 const SkillListPage = React.lazy(
   () => import('@/features/phase2/skills/SkillListPage'),
 );
@@ -104,6 +110,30 @@ const router = createBrowserRouter([
                 element: (
                   <Suspense fallback={<Loading loading className="h-full" />}>
                     <AgentEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'teams',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <TeamListPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'teams/new',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <TeamEditorPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: 'teams/:teamId',
+                element: (
+                  <Suspense fallback={<Loading loading className="h-full" />}>
+                    <TeamEditorPage />
                   </Suspense>
                 ),
               },

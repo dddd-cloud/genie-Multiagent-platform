@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal, message } from 'antd';
+import type { HookAPI } from 'antd/es/modal/useModal';
 import classNames from 'classnames';
 import { useMemoizedFn } from 'ahooks';
 import type { ExecutionMode, OutputStyle } from '@/contracts';
@@ -40,7 +41,7 @@ import {
 } from '@/features/phase2/skillRuntime/BrowserSkillExecutionRunner';
 import { extractBrowserSkillSignalFromResult } from '@/features/phase2/skillRuntime/signal';
 import { MvpApiError } from '@/services/apiError';
-import { getPhase2ErrorMessage } from '@/services/phase2/errorMessages';
+import { phase2ErrorMessage } from '@/features/phase2/phase2UiError';
 import { queryPhase2SSE } from '@/services/phase2/queryPhase2SSE';
 import {
   ActionViewItemEnum,
@@ -56,6 +57,7 @@ import Dialogue from '@/components/Dialogue';
 import GeneralInput from '@/components/GeneralInput';
 import ActionView from '@/components/ActionView';
 import Logo from '@/components/Logo';
+import PrivacyModeToggle from '@/features/conversation/PrivacyModeToggle';
 
 interface ChatViewProps {
   conversationId: string;
@@ -73,10 +75,14 @@ interface ChatViewProps {
   detachedRunning: boolean;
   onReloadMessages: () => Promise<void>;
   onConversationChanged: () => Promise<void>;
+  privacyMode?: boolean;
+  onPrivacyModeChange?: () => void;
   executionMode?: ExecutionMode;
   allowedAgentIds?: string[];
+  teamId?: string | null;
   onExecutionModeChange?: (mode: ExecutionMode) => void;
   onAllowedAgentIdsChange?: (agentIds: string[]) => void;
+  onTeamIdChange?: (teamId: string | null) => void;
 }
 
 const QUERY_MIN = 1;
@@ -158,21 +164,20 @@ function buildLoadingChat(
   };
 }
 
-type LocalContextChoice =
-  | { action: 'abort' }
-  | { action: 'continue'; longTermMemory: string; conversationSummary: string };
+type LocalContextChoice = { action: 'abort' } | { action: 'continue' };
 
-async function resolvePhase2LocalContext(
+/**
+ * Guards a send against corrupted local memory. Memory content itself is never
+ * uploaded from here — the backend reads the on-disk snapshot for the request.
+ */
+async function ensureLocalMemoryUsable(
   conversationId: string,
   localMemory: ReturnType<typeof useLocalMemoryOptional>,
   navigate: (path: string) => void,
+  modal: HookAPI,
 ): Promise<LocalContextChoice> {
   if (!localMemory?.repository) {
-    return {
-      action: 'continue',
-      longTermMemory: '',
-      conversationSummary: ''
-    };
+    return { action: 'continue' };
   }
 
   let corrupted = false;
@@ -207,7 +212,7 @@ async function resolvePhase2LocalContext(
         settled = true;
         resolve(value);
       };
-      Modal.confirm({
+      const instance = modal.confirm({
         title: '本地记忆文件已损坏',
         content:
           '检测到长期记忆或会话摘要无法解析。不会静默发送损坏内容。请选择下一步。',
@@ -220,7 +225,7 @@ async function resolvePhase2LocalContext(
             <Button
               onClick={() => {
                 settle('navigate');
-                Modal.destroyAll();
+                instance.destroy();
               }}
             >
               前往本地记忆页面
@@ -244,27 +249,14 @@ async function resolvePhase2LocalContext(
       navigate('/app/settings/memory');
       return { action: 'abort' };
     }
-    return {
-      action: 'continue',
-      longTermMemory: '',
-      conversationSummary: '',
-    };
+    return { action: 'continue' };
   }
 
   if (unavailable) {
     message.info('本地记忆暂不可用，将不带本地上下文继续');
-    return {
-      action: 'continue',
-      longTermMemory: '',
-      conversationSummary: '',
-    };
   }
 
-  return {
-    action: 'continue',
-    longTermMemory: '',
-    conversationSummary: '',
-  };
+  return { action: 'continue' };
 }
 
 function canConsumeWheel(
@@ -304,13 +296,18 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     detachedRunning,
     onReloadMessages,
     onConversationChanged,
+    privacyMode = false,
+    onPrivacyModeChange,
     executionMode = 'AUTO',
     allowedAgentIds = [],
+    teamId = null,
     onExecutionModeChange,
     onAllowedAgentIdsChange,
+    onTeamIdChange,
   } = props;
 
   const sessionId = conversationId;
+  const [modal, modalContextHolder] = Modal.useModal();
   const navigate = useNavigate();
   const layout = useConversationLayout();
   const localMemory = useLocalMemoryOptional();
@@ -377,6 +374,8 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   executionModeRef.current = executionMode;
   const allowedAgentIdsRef = useRef(allowedAgentIds);
   allowedAgentIdsRef.current = allowedAgentIds;
+  const teamIdRef = useRef(teamId);
+  teamIdRef.current = teamId;
 
   const product = useMemo(() => {
     if (!mode.productType) {
@@ -602,14 +601,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     const { code, message: msg } = result;
 
     if (code === 'LOCAL_CONTEXT_INVALID' || code === 'LOCAL_CONTEXT_TOO_LARGE') {
-      message.error(getPhase2ErrorMessage(code, msg));
+      message.error(phase2ErrorMessage(code, msg));
       await onReloadMessages();
       return;
     }
 
     if (code === 'NO_SUITABLE_AGENT') {
       // Do not auto-switch to DIRECT.
-      message.error(getPhase2ErrorMessage(code, msg));
+      message.error(phase2ErrorMessage(code, msg));
       await onReloadMessages();
       return;
     }
@@ -641,15 +640,18 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       let phase2Body: Record<string, unknown> | null = null;
 
       if (usePhase2) {
-        const localCtx = await resolvePhase2LocalContext(
+        const memoryCheck = await ensureLocalMemoryUsable(
           sessionId,
           localMemory,
           navigate,
+          modal,
         );
-        if (localCtx.action === 'abort') {
+        if (memoryCheck.action === 'abort') {
           return;
         }
 
+        // Memory text stays empty on purpose: the backend injects the on-disk
+        // snapshot for non-privacy conversations.
         const built = buildPhase2GptQueryRequest({
           sessionId,
           requestId,
@@ -658,8 +660,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           deepThink: deepThink ? 1 : 0,
           outputStyle,
           allowedAgentIds: allowedAgentIdsRef.current,
-          longTermMemory: localCtx.longTermMemory,
-          conversationSummary: localCtx.conversationSummary,
+          teamId: teamIdRef.current,
+          longTermMemory: '',
+          conversationSummary: '',
         });
 
         if (!built.ok) {
@@ -1079,13 +1082,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
   return (
     <div className="h-full w-full flex bg-surface" onWheel={relayWheelToChat}>
+      {modalContextHolder}
       <div
         className="flex h-full min-w-0 flex-1 flex-col"
         id="chat-view"
       >
         <div className="shrink-0 border-b border-border">
-          <div className="mx-auto flex w-full max-w-[960px] items-center justify-between px-24 py-16">
-            <div className="flex min-w-0 w-full items-center">
+          <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-12 px-24 py-16">
+            <div className="flex min-w-0 flex-1 items-center">
               <Logo />
               <div className="mr-8 overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-medium text-text-primary">
                 {conversationTitle}
@@ -1097,6 +1101,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 </div>
               ) : null}
             </div>
+            <PrivacyModeToggle
+              enabled={privacyMode}
+              onToggle={() => onPrivacyModeChange?.()}
+            />
           </div>
         </div>
 
@@ -1229,12 +1237,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 value={executionMode}
                 disabled={inputDisabled || taskRunning || detachedRunning}
                 allowedAgentIds={allowedAgentIds}
+                teamId={teamId}
                 onChange={(next) => {
                   onExecutionModeChange?.(next);
                 }}
                 onAllowedAgentIdsChange={(ids) =>
                   onAllowedAgentIdsChange?.(ids)
                 }
+                onTeamIdChange={(next) => onTeamIdChange?.(next)}
               />
             ) : null
           }

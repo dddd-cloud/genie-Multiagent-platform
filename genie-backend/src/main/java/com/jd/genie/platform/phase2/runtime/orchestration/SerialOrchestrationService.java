@@ -28,19 +28,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 @Slf4j
 public final class SerialOrchestrationService {
-    private static final int MAX_PARALLEL_WORKERS = 4;
-
     private final AgentRuntimeCatalogPort catalogPort;
     private final RuntimeToolCollectionPort toolCollectionPort;
     private final SkillRuntimePort skillRuntimePort;
@@ -406,10 +399,18 @@ public final class SerialOrchestrationService {
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer
     ) {
         if (directFallbackExecutor == null) {
-            return AgentTaskResult.failure(
-                    previousResult.errorCode() == null ? "EXECUTION_ERROR" : previousResult.errorCode(),
-                    false
-            );
+            // Production wiring has no main-seam fallback. Rather than hard-failing a step whose
+            // agent already produced usable output, keep the output and mark the run degraded.
+            if (previousResult.status() == AgentTaskResult.Status.SUCCESS) {
+                events.emit("STEP_DEGRADED", step, previousResult, Map.of("reasonCode", "REVIEW_UNCERTAIN"));
+                return previousResult;
+            }
+            AgentTaskResult failure = stepFailure(previousResult);
+            events.emit("STEP_FAILED", step, failure, Map.of(
+                    "errorCode", failure.errorCode(),
+                    "reasonCode", "FALLBACK_UNAVAILABLE"
+            ));
+            return failure;
         }
         events.emit("STEP_FALLBACK_STARTED", step, previousResult, Map.of("reasonCode", "RETRY_EXHAUSTED"));
         com.jd.genie.platform.agentbridge.CancellableAgentCall cancellableCall =
@@ -485,7 +486,7 @@ public final class SerialOrchestrationService {
         if (!runningStepId.compareAndSet(null, step.stepId())) {
             throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "More than one orchestration step is running");
         }
-        ExecutorService workers = Executors.newFixedThreadPool(Math.min(MAX_PARALLEL_WORKERS, step.subTasks().size()));
+        ExecutorService workers = ParallelStepExecutor.newWorkerPool(step.subTasks().size());
         try {
             events.emit("STEP_STARTED", step, null, Map.of("stepMode", "PARALLEL_AGENTS"));
             events.emit("PARALLEL_STARTED", step, null, Map.of(
@@ -495,7 +496,7 @@ public final class SerialOrchestrationService {
             Map<OrchestrationSubTask, AgentTaskResult> results = executeParallelSubTasks(
                     user, query, conversationHistory, longTermMemory, step, step.subTasks(), inputs, cancellationRequested, events, workers, traceChannel, attemptNo, observer, deliverableFiles
             );
-            AgentTaskResult aggregate = aggregateParallelResult(List.copyOf(results.values()));
+            AgentTaskResult aggregate = ParallelStepExecutor.aggregate(List.copyOf(results.values()));
             if (modelPort == null) {
                 events.emit(aggregate.status() == AgentTaskResult.Status.SUCCESS ? "STEP_COMPLETED" : "STEP_FAILED", step,
                         aggregate, aggregate.status() == AgentTaskResult.Status.SUCCESS ? Map.of() : Map.of("errorCode", aggregate.errorCode()));
@@ -512,7 +513,7 @@ public final class SerialOrchestrationService {
                     results.putAll(executeParallelSubTasks(
                             user, query, conversationHistory, longTermMemory, step, retryTargets, inputs, cancellationRequested, events, workers, traceChannel, attemptNo, observer, deliverableFiles
                     ));
-                    aggregate = aggregateParallelResult(List.copyOf(results.values()));
+                    aggregate = ParallelStepExecutor.aggregate(List.copyOf(results.values()));
                     decision = review(step, aggregate, 1, events);
                 }
             }
@@ -529,14 +530,7 @@ public final class SerialOrchestrationService {
                     aggregate, aggregate.status() == AgentTaskResult.Status.SUCCESS ? Map.of() : Map.of("errorCode", aggregate.errorCode()));
             return aggregate;
         } finally {
-            workers.shutdownNow();
-            try {
-                if (!workers.awaitTermination(1, TimeUnit.SECONDS)) {
-                    log.warn("Parallel orchestration workers did not terminate stepId={}", step.stepId());
-                }
-            } catch (InterruptedException error) {
-                Thread.currentThread().interrupt();
-            }
+            ParallelStepExecutor.shutdown(workers, step.stepId());
             runningStepId.set(null);
         }
     }
@@ -549,14 +543,9 @@ public final class SerialOrchestrationService {
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
             List<File> deliverableFiles
     ) {
-        List<CompletableFuture<AgentTaskResult>> futures = subTasks.stream().map(subTask -> CompletableFuture.supplyAsync(
-                () -> executeSubTask(user, query, conversationHistory, longTermMemory, step, subTask, inputs, cancellationRequested, events, traceChannel, attemptNo, observer, deliverableFiles), workers)).toList();
-        awaitParallelCompletion(futures, cancellationRequested);
-        Map<OrchestrationSubTask, AgentTaskResult> results = new LinkedHashMap<>();
-        for (int index = 0; index < subTasks.size(); index++) {
-            results.put(subTasks.get(index), futures.get(index).join());
-        }
-        return results;
+        return ParallelStepExecutor.runAll(subTasks, workers, cancellationRequested, subTask -> executeSubTask(
+                user, query, conversationHistory, longTermMemory, step, subTask, inputs,
+                cancellationRequested, events, traceChannel, attemptNo, observer, deliverableFiles));
     }
 
     private AgentTaskResult executeSubTask(
@@ -579,7 +568,7 @@ public final class SerialOrchestrationService {
         OrchestrationEventSink subTaskEvents = (eventType, parentStep, result, details) -> {
             Map<String, Object> subDetails = new LinkedHashMap<>(details);
             subDetails.put("subTaskId", subTask.subTaskId());
-            events.emit(subTaskEventType(eventType), parentStep, result, Map.copyOf(subDetails));
+            events.emit(ParallelStepExecutor.subTaskEventType(eventType), parentStep, result, Map.copyOf(subDetails));
         };
         try {
             if (cancellationRequested.getAsBoolean()) {
@@ -593,7 +582,7 @@ public final class SerialOrchestrationService {
                     step,
                     subTask.subTaskId(),
                     subTask.agentId(),
-                    combinedSubTaskObjective(step.objective(), subTask.objective()),
+                    ParallelStepExecutor.combinedSubTaskObjective(step.objective(), subTask.objective()),
                     inputs,
                     new LinkedHashMap<>(),
                     subTaskEvents,
@@ -608,73 +597,6 @@ public final class SerialOrchestrationService {
         } finally {
             requestRunningStep.remove();
         }
-    }
-
-    private String subTaskEventType(String executionEventType) {
-        return switch (executionEventType) {
-            case "STEP_STARTED" -> "SUBTASK_STARTED";
-            case "STEP_COMPLETED" -> "SUBTASK_COMPLETED";
-            case "STEP_FAILED" -> "SUBTASK_FAILED";
-            default -> executionEventType;
-        };
-    }
-
-    private void awaitParallelCompletion(
-            List<CompletableFuture<AgentTaskResult>> futures,
-            BooleanSupplier cancellationRequested
-    ) {
-        CompletableFuture<Void> all = CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
-        try {
-            while (true) {
-                if (cancellationRequested.getAsBoolean()) {
-                    cancelOutstanding(futures);
-                    throw new AgentBridgeException(MvpErrorCode.CLIENT_DISCONNECTED, "Orchestration cancelled during parallel step");
-                }
-                try {
-                    all.get(50, TimeUnit.MILLISECONDS);
-                    return;
-                } catch (TimeoutException ignored) {
-                    // Poll cancellation without converting the top-level sequence into a DAG.
-                }
-            }
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            cancelOutstanding(futures);
-            throw new AgentBridgeException(MvpErrorCode.CLIENT_DISCONNECTED, "Orchestration parallel step interrupted", error);
-        } catch (ExecutionException error) {
-            cancelOutstanding(futures);
-            Throwable cause = error.getCause();
-            if (cause instanceof AgentBridgeException bridgeException
-                    && bridgeException.getErrorCode() == MvpErrorCode.CLIENT_DISCONNECTED) {
-                throw bridgeException;
-            }
-            throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "Orchestration parallel step failed", cause);
-        }
-    }
-
-    private AgentTaskResult aggregateParallelResult(List<AgentTaskResult> results) {
-        List<String> outputs = new ArrayList<>();
-        AgentTaskResult failure = null;
-        for (AgentTaskResult result : results) {
-            if (result.status() == AgentTaskResult.Status.SUCCESS) {
-                outputs.add(result.output());
-            } else if (failure == null) {
-                failure = result;
-            }
-        }
-        if (failure != null) {
-            return AgentTaskResult.failure(failure.errorCode(), failure.retryable());
-        }
-        return AgentTaskResult.success(String.join("\n\n", outputs));
-    }
-
-    private String combinedSubTaskObjective(String stepObjective, String subTaskObjective) {
-        return "所属顶层步骤目标：\n" + (stepObjective == null ? "" : stepObjective.trim())
-                + "\n\n当前子任务目标：\n" + (subTaskObjective == null ? "" : subTaskObjective.trim());
-    }
-
-    private void cancelOutstanding(List<CompletableFuture<AgentTaskResult>> futures) {
-        futures.stream().filter(future -> !future.isDone()).forEach(future -> future.cancel(true));
     }
 
     private AgentTaskResult executeStep(
@@ -726,7 +648,7 @@ public final class SerialOrchestrationService {
             List<File> taskProductFiles = new ArrayList<>();
             String normalizedObjective = objective == null ? "" : objective.trim();
             // Keep the original user question as a topic bound only; the executable task is still the step objective.
-            String stepQuery = buildStepQuery(
+            String stepQuery = StepQueryBuilder.build(
                     agentName,
                     profile.description(),
                     query,
@@ -867,46 +789,6 @@ public final class SerialOrchestrationService {
 
     private String agentNameOf(String agentId) {
         return agentId == null ? "" : agentId;
-    }
-
-    private String buildStepQuery(
-            String agentName,
-            String agentDescription,
-            String userQuery,
-            String conversationHistory,
-            String objective,
-            String longTermMemory,
-            Map<String, String> inputs
-    ) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("你是子 Agent「").append(agentName == null ? "" : agentName).append("」。\n");
-        if (agentDescription != null && !agentDescription.isBlank()) {
-            sb.append("你的角色设定：").append(agentDescription.trim()).append('\n');
-        }
-        sb.append("用户原问题（只用于限定主题，禁止整题作答，禁止改成你角色默认的其他题目）：\n");
-        sb.append(userQuery == null ? "" : userQuery.trim()).append('\n');
-        if (conversationHistory != null && !conversationHistory.isBlank()) {
-            sb.append("\n近期对话（用于理解指代和上下文，不是新题目）：\n");
-            sb.append(conversationHistory.trim()).append('\n');
-            sb.append("当前问题是用户原问题；请结合近期对话理解指代（例如「那竞品呢」「基于刚才的…」），但只完成本步骤目标。\n");
-        }
-        sb.append("请只完成下面的步骤目标，不要回答编排总问题，也不要讨论还有哪些 Agent 可用。\n");
-        sb.append("你的输出只能包含本步骤的事实发现、证据、来源、过程结果和不确定性；不要生成整个用户问题的最终答案，不要替其他 Agent 汇总，不要写总括性结论。\n");
-        sb.append("最终面向用户的整体综合回答只能由指定的最终总结 Agent 生成；如果你负责汇总输入，也只能整理输入证据，不得越权完成最终回答。\n");
-        sb.append("请用你自己独特的视角和措辞作答；禁止与其他 Agent 输出相同或高度雷同的句子。\n");
-        sb.append("步骤目标：\n").append(objective == null ? "" : objective);
-        UntrustedLocalContext.appendBlock(sb, longTermMemory);
-        if (inputs != null && !inputs.isEmpty()) {
-            sb.append("\n\n可参考的前置步骤结果：\n");
-            for (Map.Entry<String, String> entry : inputs.entrySet()) {
-                sb.append("- ").append(entry.getKey()).append(": ")
-                        .append(entry.getValue() == null ? "" : entry.getValue())
-                        .append('\n');
-            }
-            sb.append("若本步骤是汇总，请综合上述结果写成新的段落，不要原样复述其中某一条。\n");
-        }
-        sb.append("\n直接给出该步骤的最终答案。");
-        return sb.toString();
     }
 
     private Map<String, String> referencedSuccessfulOutputs(

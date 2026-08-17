@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Configuration;
 @MapperScan(
     basePackages = {
         "com.jd.genie.platform.phase2.configuration.agent.mapper",
+        "com.jd.genie.platform.phase2.configuration.team.mapper",
         "com.jd.genie.platform.phase2.configuration.skill.mapper",
         "com.jd.genie.platform.phase2.configuration.skill.binding.mapper",
         "com.jd.genie.platform.phase2.tooling",

@@ -24,6 +24,7 @@ export interface BuildPhase2RequestInput {
   allowedAgentIds: readonly string[];
   longTermMemory: string;
   conversationSummary: string;
+  teamId?: string | null;
 }
 
 export type BuildPhase2RequestResult =
@@ -135,6 +136,28 @@ export function buildPhase2GptQueryRequest(
     );
   }
 
+  const teamId =
+    typeof input.teamId === 'string' && input.teamId.length > 0
+      ? input.teamId
+      : null;
+  if (teamId !== null) {
+    if (!isUuidString(teamId)) {
+      return validationError('INVALID_TEAM_ID', 'teamId must be a UUID');
+    }
+    if (input.executionMode === 'DIRECT') {
+      return validationError(
+        'DIRECT_TEAM_FORBIDDEN',
+        'DIRECT mode must not carry teamId',
+      );
+    }
+    if (allowedAgentIds.length > 0) {
+      return validationError(
+        'TEAM_AND_ALLOWED_AGENTS_EXCLUSIVE',
+        'teamId and allowedAgentIds are mutually exclusive',
+      );
+    }
+  }
+
   const request: Phase2GptQueryRequest = {
     sessionId: input.sessionId,
     requestId: input.requestId,
@@ -148,6 +171,7 @@ export function buildPhase2GptQueryRequest(
       longTermMemory,
       conversationSummary,
     },
+    ...(teamId === null ? {} : { teamId }),
   };
 
   return {

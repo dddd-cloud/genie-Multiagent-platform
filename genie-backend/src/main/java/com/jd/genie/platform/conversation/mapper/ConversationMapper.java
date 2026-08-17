@@ -71,6 +71,20 @@ public interface ConversationMapper extends BaseMapper<ConversationEntity> {
 
     @Update("""
         UPDATE conversation
+        SET privacy_mode = #{privacyMode}, updated_at = #{updatedAt}, version = version + 1
+        WHERE id = #{conversationId}
+          AND tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+        """)
+    int updatePrivacyModeOwned(@Param("tenantId") String tenantId,
+                               @Param("ownerId") String ownerId,
+                               @Param("conversationId") String conversationId,
+                               @Param("privacyMode") boolean privacyMode,
+                               @Param("updatedAt") Instant updatedAt);
+
+    @Update("""
+        UPDATE conversation
         SET deleted_at = #{deletedAt}, updated_at = #{deletedAt}, version = version + 1
         WHERE id = #{conversationId}
           AND tenant_id = #{tenantId}

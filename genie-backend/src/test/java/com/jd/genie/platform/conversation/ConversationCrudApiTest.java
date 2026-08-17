@@ -191,6 +191,28 @@ class ConversationCrudApiTest {
     }
 
     @Test
+    void patchConversationCanTogglePrivacyMode() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/conversations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+        String conversationId = objectMapper.readTree(response).get("data").get("id").asText();
+
+        mockMvc.perform(patch("/api/v1/conversations/" + conversationId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"privacyMode\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.privacyMode").value(true));
+
+        Number privacyMode = jdbcTemplate.queryForObject(
+            "SELECT privacy_mode FROM conversation WHERE id = ?", Number.class, conversationId);
+        assertEquals(1, privacyMode.intValue());
+    }
+
+    @Test
     void listConversationsUsesContractPagingOrderingBatchPreviewAndIsolation() throws Exception {
         insertConversation("conv-old", "tenant-a", "owner-a", "Old", Instant.parse("2026-01-01T00:00:00Z"), null);
         insertConversation("conv-recent", "tenant-a", "owner-a", "Recent", Instant.parse("2026-01-03T00:00:00Z"), null);

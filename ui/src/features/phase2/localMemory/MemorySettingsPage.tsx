@@ -56,6 +56,11 @@ type EntryEditorState = {
   value: string;
 };
 
+type PendingDelete =
+  | { kind: 'entry'; section: LongTermSectionName; index: number }
+  | { kind: 'note'; conversationId: string }
+  | { kind: 'all' };
+
 const MemorySettingsPage: GenieType.FC = memo(() => {
   const memory = useLocalMemory();
   const [doc, setDoc] = useState<LongTermMemoryDoc>(() => emptyLongTermMemoryDoc());
@@ -69,6 +74,8 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
   const [editor, setEditor] = useState<EntryEditorState | null>(null);
   const [savingEntry, setSavingEntry] = useState(false);
   const [openNote, setOpenNote] = useState<ConversationNote | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const unavailable = memory.opfsStatus === 'UNAVAILABLE';
   const failedCount = useMemo(
@@ -136,12 +143,12 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
 
   useEffect(() => {
     void reload();
-  }, [memory.userId]);
+  }, [memory.userId, memory.repository]);
 
   const persistDoc = async (next: LongTermMemoryDoc) => {
     const repo = memory.repository;
     if (!repo) {
-      return;
+      throw new Error('暂时无法保存记忆');
     }
     const stamped = {
       ...next,
@@ -192,64 +199,47 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
     }
   };
 
-  const deleteEntry = (section: LongTermSectionName, index: number) => {
-    Modal.confirm({
-      title: '删除这条记忆？',
-      content: '聊天记录不会丢。',
-      okText: '删除',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: async () => {
-        const list = doc.sections[section].filter((_, idx) => idx !== index);
+  const confirmPendingDelete = async () => {
+    if (!pendingDelete) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      if (pendingDelete.kind === 'entry') {
+        const list = doc.sections[pendingDelete.section].filter(
+          (_, idx) => idx !== pendingDelete.index,
+        );
         await persistDoc({
           ...doc,
           sections: {
             ...doc.sections,
-            [section]: list,
+            [pendingDelete.section]: list,
           },
         });
-      },
-    });
-  };
-
-  const confirmClearAll = () => {
-    Modal.confirm({
-      title: '清空全部记忆',
-      content: '将删除所有已保存的记忆，聊天记录不会丢。',
-      okText: '清空',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: async () => {
-        setBusy(true);
-        try {
-          await memory.clearLongTermMemory();
-          await Promise.all(
-            notes.map((note) => memory.clearConversationSummary(note.conversationId)),
-          );
-          message.success('已清空记忆');
-          await reload();
-        } finally {
-          setBusy(false);
-        }
-      },
-    });
-  };
-
-  const confirmDeleteNote = (note: ConversationNote) => {
-    Modal.confirm({
-      title: '删除这场对话笔记？',
-      content: '聊天记录不会丢。',
-      okText: '删除',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: async () => {
-        await memory.clearConversationSummary(note.conversationId);
-        if (openNote?.conversationId === note.conversationId) {
+        message.success('已删除');
+      } else if (pendingDelete.kind === 'note') {
+        await memory.clearConversationSummary(pendingDelete.conversationId);
+        if (openNote?.conversationId === pendingDelete.conversationId) {
           setOpenNote(null);
         }
+        message.success('已删除');
         await reload();
-      },
-    });
+      } else {
+        setBusy(true);
+        await memory.clearLongTermMemory();
+        await Promise.all(
+          notes.map((note) => memory.clearConversationSummary(note.conversationId)),
+        );
+        message.success('已清空记忆');
+        await reload();
+      }
+      setPendingDelete(null);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setDeleting(false);
+      setBusy(false);
+    }
   };
 
   const repairLongTerm = async () => {
@@ -283,7 +273,7 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
     );
   };
 
-  const editing = unavailable || corrupted || busy;
+  const editing = unavailable || corrupted || deleting;
 
   return (
     <div className="h-full overflow-auto bg-page">
@@ -373,7 +363,9 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
                     value: doc.sections[section][index].value,
                   })
                 }
-                onDelete={(index) => deleteEntry(section, index)}
+                onDelete={(index) =>
+                  setPendingDelete({ kind: 'entry', section, index })
+                }
               />
             ))}
           </section>
@@ -422,7 +414,7 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
             type="button"
             className="border-0 bg-transparent p-0 text-[13px] text-text-tertiary hover:text-danger"
             disabled={editing || (entryCount === 0 && notes.length === 0)}
-            onClick={confirmClearAll}
+            onClick={() => setPendingDelete({ kind: 'all' })}
           >
             清空全部记忆
           </button>
@@ -532,7 +524,16 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
               <Button size="small" onClick={() => exportNote(openNote)}>
                 导出
               </Button>
-              <Button size="small" danger onClick={() => confirmDeleteNote(openNote)}>
+              <Button
+                size="small"
+                danger
+                onClick={() =>
+                  setPendingDelete({
+                    kind: 'note',
+                    conversationId: openNote.conversationId,
+                  })
+                }
+              >
                 删除
               </Button>
             </div>
@@ -557,6 +558,33 @@ const MemorySettingsPage: GenieType.FC = memo(() => {
           </div>
         ) : null}
       </Drawer>
+
+      <Modal
+        title={
+          pendingDelete?.kind === 'all'
+            ? '清空全部记忆'
+            : pendingDelete?.kind === 'note'
+              ? '删除这场对话笔记？'
+              : '删除这条记忆？'
+        }
+        open={pendingDelete != null}
+        okText={pendingDelete?.kind === 'all' ? '清空' : '删除'}
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        confirmLoading={deleting}
+        maskClosable={!deleting}
+        closable={!deleting}
+        onOk={() => void confirmPendingDelete()}
+        onCancel={() => {
+          if (!deleting) {
+            setPendingDelete(null);
+          }
+        }}
+      >
+        {pendingDelete?.kind === 'all'
+          ? '将删除所有已保存的记忆，聊天记录不会丢。'
+          : '聊天记录不会丢。'}
+      </Modal>
     </div>
   );
 });
@@ -602,9 +630,13 @@ function MemoryGroup(props: {
               <button
                 type="button"
                 aria-label={`删除 ${entry.key}`}
-                className="mr-8 inline-flex size-28 items-center justify-center rounded-full border-0 bg-transparent text-text-tertiary opacity-0 hover:bg-danger-soft hover:text-danger group-hover:opacity-100"
+                data-testid="memory-entry-delete"
+                className="mr-8 inline-flex size-28 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-text-tertiary hover:bg-danger-soft hover:text-danger"
                 disabled={disabled}
-                onClick={() => onDelete(index)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(index);
+                }}
               >
                 <DeleteOutlined />
               </button>

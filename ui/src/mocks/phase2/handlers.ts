@@ -9,6 +9,7 @@ import type {
   Phase2McpServerResponse,
   Phase2McpToolResponse,
   Phase2SkillResponse,
+  Phase2TeamResponse,
 } from '@/contracts/phase2';
 import { mockState } from '../../../mocks/handlers';
 import agentVersionConflict from './fixtures/agent-version-conflict.json';
@@ -216,6 +217,48 @@ function extractSkillIds(body: Record<string, unknown>): string[] | null {
     return body.skillIds.map(String);
   }
   return null;
+}
+
+type TeamComposition =
+  | {
+      masterAgentId: string;
+      masterAgentName: string | null;
+      memberAgentIds: string[];
+    }
+  | { error: Response };
+
+/** Mirrors AgentTeamService validation: ONLINE master, 1..20 members, master excluded. */
+function readTeamComposition(body: Record<string, unknown>): TeamComposition {
+  const state = getPhase2State();
+  const masterAgentId = String(body.masterAgentId ?? '');
+  const master = state.agents.get(masterAgentId);
+  if (!master || master.status !== 'ONLINE') {
+    return {
+      error: HttpResponse.json(
+        errorBody('TEAM_MASTER_INVALID', 'Master agent must be an ONLINE agent'),
+        { status: 400 },
+      ),
+    };
+  }
+  const memberAgentIds = Array.isArray(body.memberAgentIds)
+    ? body.memberAgentIds.map(String)
+    : [];
+  const unique = new Set(memberAgentIds);
+  const invalidMembers =
+    memberAgentIds.length === 0 ||
+    memberAgentIds.length > 20 ||
+    unique.size !== memberAgentIds.length ||
+    unique.has(masterAgentId) ||
+    memberAgentIds.some((id) => !state.agents.has(id));
+  if (invalidMembers) {
+    return {
+      error: HttpResponse.json(
+        errorBody('TEAM_MEMBERS_INVALID', 'Invalid team members'),
+        { status: 400 },
+      ),
+    };
+  }
+  return { masterAgentId, masterAgentName: master.name, memberAgentIds };
 }
 
 function readVersionFromRequest(
@@ -635,6 +678,127 @@ export const phase2Handlers: HttpHandler[] = [
     const authError = requireAuth();
     if (authError) return authError;
     return HttpResponse.json(ok(deriveToolCapabilities()));
+  }),
+
+  http.get('/api/v2/teams', ({ request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get('page') ?? '1');
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '100');
+    return HttpResponse.json(
+      ok(pageOf(Array.from(getPhase2State().teams.values()), page, pageSize)),
+    );
+  }),
+
+  http.get('/api/v2/teams/:id', ({ params }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const team = getPhase2State().teams.get(String(params.id));
+    if (!team) {
+      return HttpResponse.json(
+        errorBody('RESOURCE_NOT_FOUND', 'Team not found'),
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json(ok(team));
+  }),
+
+  http.post('/api/v2/teams', async ({ request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const forbidden = assertNoForbiddenRequestFields(body);
+    if (forbidden) return forbiddenFieldsResponse(forbidden);
+
+    const composition = readTeamComposition(body);
+    if ('error' in composition) return composition.error;
+
+    const now = nowIso();
+    const team: Phase2TeamResponse = {
+      id: `team-${crypto.randomUUID()}`,
+      name: String(body.name ?? ''),
+      description: String(body.description ?? ''),
+      masterAgentId: composition.masterAgentId,
+      masterAgentName: composition.masterAgentName,
+      memberAgentIds: composition.memberAgentIds,
+      version: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    getPhase2State().teams.set(team.id, team);
+    return HttpResponse.json(ok(team));
+  }),
+
+  http.put('/api/v2/teams/:id', async ({ params, request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const forbidden = assertNoForbiddenRequestFields(body);
+    if (forbidden) return forbiddenFieldsResponse(forbidden);
+
+    const state = getPhase2State();
+    const id = String(params.id);
+    const existing = state.teams.get(id);
+    if (!existing) {
+      return HttpResponse.json(
+        errorBody('RESOURCE_NOT_FOUND', 'Team not found'),
+        { status: 404 },
+      );
+    }
+    const versionError = checkVersion(existing.version, body.version);
+    if (versionError) return versionError;
+
+    const composition = readTeamComposition(body);
+    if ('error' in composition) return composition.error;
+
+    const updated: Phase2TeamResponse = {
+      ...existing,
+      name: String(body.name ?? existing.name),
+      description: String(body.description ?? existing.description),
+      masterAgentId: composition.masterAgentId,
+      masterAgentName: composition.masterAgentName,
+      memberAgentIds: composition.memberAgentIds,
+      version: bumpVersion(existing.version),
+      updatedAt: nowIso(),
+    };
+    state.teams.set(id, updated);
+    return HttpResponse.json(ok(updated));
+  }),
+
+  http.delete('/api/v2/teams/:id', async ({ params, request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const forbidden = assertNoForbiddenRequestFields(body);
+    if (forbidden) return forbiddenFieldsResponse(forbidden);
+
+    const state = getPhase2State();
+    const id = String(params.id);
+    const existing = state.teams.get(id);
+    if (!existing) {
+      return HttpResponse.json(
+        errorBody('RESOURCE_NOT_FOUND', 'Team not found'),
+        { status: 404 },
+      );
+    }
+    const versionError = checkVersion(
+      existing.version,
+      readVersionFromRequest(request, body),
+    );
+    if (versionError) return versionError;
+
+    state.teams.delete(id);
+    return HttpResponse.json(ok(null));
   }),
 
   http.get('/api/v2/skills', ({ request }) => {

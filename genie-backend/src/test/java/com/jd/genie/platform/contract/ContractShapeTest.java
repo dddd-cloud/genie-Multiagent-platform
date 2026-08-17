@@ -171,8 +171,11 @@ class ContractShapeTest {
             "SKILL_PACKAGE_INVALID",
             "SKILL_RESOURCE_NOT_FOUND",
             "SKILL_ENTRYPOINT_NOT_FOUND",
+            "SKILL_ENTRYPOINT_NOT_AVAILABLE",
             "SKILL_EXECUTION_FAILED",
-            "SKILL_EXECUTION_TIMEOUT"
+            "SKILL_EXECUTION_TIMEOUT",
+            "TEAM_MASTER_INVALID",
+            "TEAM_MEMBERS_INVALID"
         }, enumNames(MvpErrorCode.class));
     }
 

@@ -100,7 +100,7 @@ public final class OrchestrationEventMapper {
             resultMap.put("fileList", List.copyOf(fileList));
         }
         return GptProcessResult.builder()
-                .status("success")
+                .status("PARTIAL".equals(completionStatus) ? "partial" : "success")
                 .response(response)
                 .responseAll(response)
                 .finished(true)

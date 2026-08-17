@@ -143,7 +143,7 @@ autobots:
       task_complete_desc: 当前task完成，请将当前task标记为 completed
       clear_tool_message: 1
     task:
-      pre_prompt: "先输出100字以内的文字内容确定下一步的行动（其中文字内容不要重复之前的思考内容，不能透露代码、链接等。严禁使用Markdown格式输出）。然后必须输出工具工具调用来完成当前任务。"
+      pre_prompt: "先输出100字以内的文字内容确定下一步的行动（其中文字内容不要重复之前的思考内容，不能透露代码、链接等。严禁使用Markdown格式输出）。然后：如果还需要外部数据或需要产出交付物，就输出工具调用；如果已有信息足以回答，直接输出 Finish[答案]，不要为了调用而调用工具。"
     tool_list: '{}'
     code_interpreter_url: "http://127.0.0.1:1601"
     deep_search_url: "http://127.0.0.1:1601"

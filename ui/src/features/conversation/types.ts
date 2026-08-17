@@ -25,4 +25,6 @@ export interface ConversationDraft {
   /** Default AUTO when Phase2 is enabled. */
   executionMode?: ExecutionMode;
   allowedAgentIds?: string[];
+  /** Selected team for ORCHESTRATED runs; null when picking agents directly. */
+  teamId?: string | null;
 }

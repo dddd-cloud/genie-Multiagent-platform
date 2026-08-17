@@ -44,6 +44,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
   const sendingRef = useRef(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('AUTO');
   const [allowedAgentIds, setAllowedAgentIds] = useState<string[]>([]);
+  const [teamId, setTeamId] = useState<string | null>(null);
 
   const showDetail = useCallback((modelInfo: CHAT.ModelInfo) => {
     setCurModel(modelInfo);
@@ -87,6 +88,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
             ? {
               executionMode,
               allowedAgentIds,
+              teamId,
             }
             : {}),
         };
@@ -107,7 +109,7 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
         setSending(false);
       }
     },
-    [layout, navigate, product.type, executionMode, allowedAgentIds],
+    [layout, navigate, product.type, executionMode, allowedAgentIds, teamId],
   );
 
   const onDemoChip = useCallback(
@@ -213,8 +215,10 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
                   value={executionMode}
                   disabled={sending}
                   allowedAgentIds={allowedAgentIds}
+                  teamId={teamId}
                   onChange={setExecutionMode}
                   onAllowedAgentIdsChange={setAllowedAgentIds}
+                  onTeamIdChange={setTeamId}
                 />
               ) : null
             }

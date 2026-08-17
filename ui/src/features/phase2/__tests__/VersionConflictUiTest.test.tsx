@@ -3,8 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { Button } from 'antd';
 import { useState } from 'react';
 import VersionConflictAlert from '../VersionConflictAlert';
-import { getPhase2ErrorMessage } from '@/services/phase2/errorMessages';
-import { isVersionConflict } from '../phase2UiError';
+import { isVersionConflict, phase2ErrorMessage } from '../phase2UiError';
 import { MvpApiError } from '@/services/apiError';
 
 function EditorConflictHarness() {
@@ -44,7 +43,7 @@ function EditorConflictHarness() {
 
 describe('VersionConflictUiTest', () => {
   it('maps VERSION_CONFLICT to shared Chinese message', () => {
-    expect(getPhase2ErrorMessage('VERSION_CONFLICT')).toBe(
+    expect(phase2ErrorMessage('VERSION_CONFLICT')).toBe(
       '数据已被他人更新，请刷新后重试',
     );
   });

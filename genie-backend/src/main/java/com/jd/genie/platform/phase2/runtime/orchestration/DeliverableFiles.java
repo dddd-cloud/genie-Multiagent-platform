@@ -11,23 +11,29 @@ final class DeliverableFiles {
     private DeliverableFiles() {
     }
 
+    /**
+     * Parallel subtasks call this concurrently on a shared sink, so the dedupe scan and the append
+     * must happen under one lock on the sink itself.
+     */
     static void collect(List<File> sink, List<File> produced) {
         if (sink == null || produced == null) {
             return;
         }
-        for (File file : produced) {
-            if (file == null || Boolean.TRUE.equals(file.getIsInternalFile())) {
-                continue;
+        synchronized (sink) {
+            for (File file : produced) {
+                if (file == null || Boolean.TRUE.equals(file.getIsInternalFile())) {
+                    continue;
+                }
+                String url = firstNonBlank(file.getOssUrl(), file.getDomainUrl());
+                String name = file.getFileName();
+                if (url == null || name == null || name.isBlank()) {
+                    continue;
+                }
+                if (alreadyCollected(sink, url)) {
+                    continue;
+                }
+                sink.add(file);
             }
-            String url = firstNonBlank(file.getOssUrl(), file.getDomainUrl());
-            String name = file.getFileName();
-            if (url == null || name == null || name.isBlank()) {
-                continue;
-            }
-            if (alreadyCollected(sink, url)) {
-                continue;
-            }
-            sink.add(file);
         }
     }
 
@@ -45,7 +51,11 @@ final class DeliverableFiles {
             return List.of();
         }
         List<Map<String, Object>> result = new ArrayList<>();
-        for (File file : files) {
+        List<File> snapshot;
+        synchronized (files) {
+            snapshot = new ArrayList<>(files);
+        }
+        for (File file : snapshot) {
             if (file == null) {
                 continue;
             }

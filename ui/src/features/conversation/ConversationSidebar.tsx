@@ -2,7 +2,6 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Input, Modal, Spin } from 'antd';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import classNames from 'classnames';
 import type { ConversationListState } from './conversationReducer';
 
@@ -102,18 +101,11 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
     [modal, onDelete],
   );
 
-  const formatTime = (value: string | null) => {
-    if (!value) {
-      return '';
-    }
-    return dayjs(value).format('MM-DD HH:mm');
-  };
-
   return (
     <aside className="h-full w-full flex flex-col bg-sidebar">
       {modalContextHolder}
       <div className="flex-1 overflow-auto px-10 pb-8 pt-4">
-        <div className="px-10 pt-4 pb-8 text-[14px] font-semibold text-text-primary leading-[22px]">
+        <div className="px-10 pt-4 pb-8 text-[14px] font-normal leading-[20px] text-text-secondary">
           最近
         </div>
 
@@ -146,7 +138,7 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
             <div
               key={item.id}
               className={classNames(
-                'group rounded-[8px] px-10 py-8 mb-1 cursor-pointer transition-colors duration-150',
+                'group rounded-[8px] px-10 py-5 mb-1 cursor-pointer transition-colors duration-150',
                 {
                   'bg-[#F0F0F2]': active,
                   'hover:bg-[#F5F5F7]': !active,
@@ -155,21 +147,14 @@ const ConversationSidebar: GenieType.FC<Props> = memo((props) => {
               onClick={() => onSelect(item.id)}
             >
               <div className="flex items-center justify-between gap-8">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-6 min-w-0">
-                    <div className="text-[14px] text-text-primary truncate leading-[22px]">
-                      {item.title}
-                    </div>
-                    {item.privacyMode ? (
-                      <span className="shrink-0 rounded-full bg-[#F0F0F2] px-6 py-1 text-[10px] text-text-tertiary">
-                        隐私
-                      </span>
-                    ) : null}
+                <div className="flex min-w-0 flex-1 items-center gap-6">
+                  <div className="truncate text-[14px] leading-[20px] text-text-primary">
+                    {item.title}
                   </div>
-                  {item.lastMessageAt ? (
-                    <div className="text-[11px] text-text-tertiary mt-2 leading-[16px]">
-                      {formatTime(item.lastMessageAt)}
-                    </div>
+                  {item.privacyMode ? (
+                    <span className="shrink-0 rounded-full bg-[#F0F0F2] px-6 py-1 text-[10px] text-text-tertiary">
+                      隐私
+                    </span>
                   ) : null}
                 </div>
                 <div

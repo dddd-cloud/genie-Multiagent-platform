@@ -18,6 +18,21 @@
       "capabilityKeys": ["builtin:deep_search", "builtin:file"],
       "createdAt": "2026-08-01T00:00:00Z",
       "updatedAt": "2026-08-02T00:00:00Z"
+    },
+    {
+      "id": "agent-writer-002",
+      "name": "Writer Agent",
+      "description": "Turns research notes into deliverables",
+      "promptMode": "RAW",
+      "promptConfig": null,
+      "systemPrompt": "You are a writing agent.",
+      "modelName": "gpt-4o-mini",
+      "status": "ONLINE",
+      "version": 1,
+      "skillIds": [],
+      "capabilityKeys": ["builtin:file"],
+      "createdAt": "2026-08-01T00:00:00Z",
+      "updatedAt": "2026-08-02T00:00:00Z"
     }
   ]
 }

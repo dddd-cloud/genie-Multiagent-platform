@@ -99,11 +99,30 @@ public class ConversationService {
 
     @Transactional
     public ConversationResponse renameConversation(CurrentUser user, String conversationId, ConversationUpdateRequest request) {
-        String title = normalizeRequiredTitle(request == null ? null : request.title());
+        boolean hasTitle = request != null && request.title() != null;
+        boolean hasPrivacy = request != null && request.privacyMode() != null;
+        if (!hasTitle && !hasPrivacy) {
+            throw validationError();
+        }
         Instant now = Instant.now(clock);
-        int updated = conversationMapper.updateTitleOwned(user.tenantId(), user.userId(), conversationId, title, now);
-        if (updated != 1) {
-            throw resourceNotFound();
+        if (hasTitle) {
+            String title = normalizeRequiredTitle(request.title());
+            int updated = conversationMapper.updateTitleOwned(
+                user.tenantId(), user.userId(), conversationId, title, now);
+            if (updated != 1) {
+                throw resourceNotFound();
+            }
+        }
+        if (hasPrivacy) {
+            int updated = conversationMapper.updatePrivacyModeOwned(
+                user.tenantId(),
+                user.userId(),
+                conversationId,
+                Boolean.TRUE.equals(request.privacyMode()),
+                now);
+            if (updated != 1) {
+                throw resourceNotFound();
+            }
         }
         return getConversation(user, conversationId);
     }
