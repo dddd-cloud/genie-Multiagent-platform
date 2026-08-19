@@ -22,6 +22,7 @@
       "systemPrompt": "你是一名严谨的数据分析师。先检查字段、缺失值和数据质量，再进行统计分析；所有结论都要说明依据。",
       "modelName": "default",
       "skills": [],
+      "marketplaceSkillIds": ["skill-csv-summary"],
       "capabilityKeys": ["builtin:data_analysis", "builtin:file", "builtin:report"]
     }
   },
@@ -48,6 +49,7 @@
       "systemPrompt": "你是一名研究分析师。把事实、来源、推断和不确定性分开表达，不要把未经验证的内容写成事实。",
       "modelName": "default",
       "skills": [],
+      "marketplaceSkillIds": ["skill-browser-python-report"],
       "capabilityKeys": ["builtin:deep_search", "builtin:file", "builtin:report"]
     }
   },
@@ -118,6 +120,11 @@
       "instruction": "读取明确分配的工作区文件，使用 Python 完成分析，输出结构化 JSON 和结果文件。不要访问 Cookie、Credential 或未分配路径。",
       "outputRequirement": "返回文件名、MIME 类型、大小和可下载结果。",
       "packageMode": "BROWSER_PYODIDE"
+    },
+    "delivery": {
+      "mode": "EMBEDDED_SKILL_PACKAGE",
+      "basePath": "marketplace/packages/browser-python-report",
+      "files": ["SKILL.md", "scripts/entrypoint.py"]
     }
   },
   {
@@ -141,6 +148,67 @@
       "instruction": "将每一步分析保持可复现，输出关键中间结果和最终文件，不访问未授权数据。",
       "outputRequirement": "返回 Notebook 或导出文件的元数据。",
       "packageMode": "BROWSER_PYODIDE"
+    },
+    "delivery": {
+      "mode": "EMBEDDED_SKILL_PACKAGE",
+      "basePath": "marketplace/packages/jupyterlite-notebook",
+      "files": ["SKILL.md", "scripts/entrypoint.py"]
+    }
+  },
+  {
+    "id": "skill-csv-summary",
+    "type": "SKILL",
+    "slug": "csv-summary",
+    "name": "CSV 数据摘要",
+    "tagline": "用浏览器 Python 输出字段、缺失值和数值汇总",
+    "description": "适合轻量 CSV 检查与统计摘要，使用标准库运行，不依赖浏览器外部服务。",
+    "category": "数据分析",
+    "tags": ["CSV", "Python", "Pyodide", "统计"],
+    "sourceType": "内置可执行模板",
+    "sourceUrl": "",
+    "license": "Internal Template",
+    "trustTier": "CURATED",
+    "capabilities": ["browser:pyodide", "file:read"],
+    "setup": ["为 Agent 绑定此 Skill", "向 Skill 明确提供 CSV 内容或工作区文件"],
+    "draft": {
+      "name": "CSV 数据摘要",
+      "description": "使用 Python 标准库生成 CSV 数据质量摘要",
+      "instruction": "读取明确授权的 CSV 内容，返回字段、行数、缺失值和数值列摘要。",
+      "outputRequirement": "返回结构化 JSON 摘要。",
+      "packageMode": "BROWSER_PYODIDE"
+    },
+    "delivery": {
+      "mode": "EMBEDDED_SKILL_PACKAGE",
+      "basePath": "marketplace/packages/csv-summary",
+      "files": ["SKILL.md", "scripts/entrypoint.py"]
+    }
+  },
+  {
+    "id": "skill-create-pdf-report",
+    "type": "SKILL",
+    "slug": "create-pdf-report",
+    "name": "创建 PDF 报告",
+    "tagline": "在浏览器 Python 中生成可下载的轻量 PDF 报告",
+    "description": "适合把明确提供的标题和文本内容生成基础 PDF 文件；不访问网络、Cookie 或浏览器私有数据。",
+    "category": "文档生成",
+    "tags": ["PDF", "Python", "Pyodide", "报告"],
+    "sourceType": "内置可执行模板",
+    "sourceUrl": "",
+    "license": "Internal Template",
+    "trustTier": "CURATED",
+    "capabilities": ["browser:pyodide", "file:write"],
+    "setup": ["为 Agent 绑定此 Skill", "在对话中明确报告标题和内容"],
+    "draft": {
+      "name": "创建 PDF 报告",
+      "description": "使用 Python 生成基础 PDF 报告文件",
+      "instruction": "根据明确提供的标题和段落生成 PDF，返回文件名、MIME 类型和 Base64 内容。",
+      "outputRequirement": "返回 application/pdf 文件结果。",
+      "packageMode": "BROWSER_PYODIDE"
+    },
+    "delivery": {
+      "mode": "EMBEDDED_SKILL_PACKAGE",
+      "basePath": "marketplace/packages/create-pdf-report",
+      "files": ["SKILL.md", "scripts/entrypoint.py"]
     }
   },
   {

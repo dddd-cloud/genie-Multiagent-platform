@@ -27,3 +27,15 @@ export interface MarketplaceDraftResponse {
   status: 'READY' | 'NEEDS_CONFIGURATION' | 'INVALID';
   missingFields: string[];
 }
+
+export interface MarketplaceInstallResponse {
+  marketplaceResourceId: string;
+  resourceType: MarketplaceResourceType;
+  primaryResourceId?: string;
+  createdAgentIds: string[];
+  createdSkillIds: string[];
+  createdTeamId?: string;
+  status: 'INSTALLED';
+  enabled: boolean;
+  warnings: string[];
+}

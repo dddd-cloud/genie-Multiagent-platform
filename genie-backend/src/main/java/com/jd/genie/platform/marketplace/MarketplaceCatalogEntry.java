@@ -19,7 +19,8 @@ public record MarketplaceCatalogEntry(
     String trustTier,
     List<String> capabilities,
     List<String> setup,
-    JsonNode draft
+    JsonNode draft,
+    JsonNode delivery
 ) {
     public MarketplaceCatalogEntry {
         tags = tags == null ? List.of() : List.copyOf(tags);

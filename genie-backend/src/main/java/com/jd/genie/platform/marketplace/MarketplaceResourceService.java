@@ -3,10 +3,22 @@ package com.jd.genie.platform.marketplace;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.CurrentUser;
+import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
+import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
+import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingRequest;
+import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
+import com.jd.genie.platform.phase2.configuration.skill.service.SkillPackageImportService;
+import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
+import com.jd.genie.platform.phase2.configuration.team.dto.TeamResponse;
+import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
+import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,23 +28,70 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.stream.IntStream;
 
 @Slf4j
 @Service
 public class MarketplaceResourceService {
     private final ObjectMapper objectMapper;
     private final List<MarketplaceCatalogEntry> catalog;
+    private final SkillPackageImportService skillPackageImportService;
+    private final AgentDefinitionService agentDefinitionService;
+    private final AgentTeamService agentTeamService;
+    private final MarketplacePackageArchiveService packageArchiveService;
 
     @Autowired
+    public MarketplaceResourceService(
+        ObjectMapper objectMapper,
+        SkillPackageImportService skillPackageImportService,
+        AgentDefinitionService agentDefinitionService,
+        AgentTeamService agentTeamService,
+        MarketplacePackageArchiveService packageArchiveService
+    ) {
+        this.objectMapper = objectMapper;
+        this.skillPackageImportService = skillPackageImportService;
+        this.agentDefinitionService = agentDefinitionService;
+        this.agentTeamService = agentTeamService;
+        this.packageArchiveService = packageArchiveService;
+        this.catalog = loadCatalog();
+    }
+
+    /** Public test seam for catalog-only behavior; no installation services are available. */
     public MarketplaceResourceService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        this.skillPackageImportService = null;
+        this.agentDefinitionService = null;
+        this.agentTeamService = null;
+        this.packageArchiveService = null;
         this.catalog = loadCatalog();
     }
 
     /** Test seam: parse a catalog document without touching the classpath file. */
     MarketplaceResourceService(ObjectMapper objectMapper, String catalogJson) {
         this.objectMapper = objectMapper;
+        this.skillPackageImportService = null;
+        this.agentDefinitionService = null;
+        this.agentTeamService = null;
+        this.packageArchiveService = null;
         this.catalog = parseCatalogDocument(catalogJson);
+    }
+
+    /**
+     * Installs a reviewed, bundled resource through existing Phase2 public services.
+     * It deliberately never writes Phase2 mapper/entity objects itself.
+     */
+    @Transactional
+    public MarketplaceInstallResponse install(CurrentUser user, String id) {
+        requireUser(user);
+        MarketplaceCatalogEntry entry = find(id).orElseThrow(() -> new MarketplaceNotFoundException(id));
+        return switch (entry.type()) {
+            case SKILL -> installSkill(user, entry);
+            case AGENT -> installAgent(user, entry);
+            case TEAM -> installTeam(user, entry);
+            case MCP -> throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR,
+                "MCP templates require user-owned endpoint and credential configuration");
+        };
     }
 
     public List<MarketplaceResourceView> search(
@@ -155,8 +214,98 @@ public class MarketplaceResourceService {
                 return "invalid Agent draft contract";
             }
         }
+        if (entry.type() == MarketplaceResourceType.SKILL && (entry.delivery() == null
+            || !"EMBEDDED_SKILL_PACKAGE".equals(entry.delivery().path("mode").asText()))) {
+            return "Skill entry must have an embedded reviewed package";
+        }
         return null;
     }
+
+    private MarketplaceInstallResponse installSkill(CurrentUser user, MarketplaceCatalogEntry entry) {
+        requireInstallServices();
+        SkillResponse skill = skillPackageImportService.importPackage(user, packageArchiveService.archive(entry.delivery()), null);
+        return new MarketplaceInstallResponse(entry.id(), entry.type(), skill.id(), List.of(), List.of(skill.id()),
+            null, "INSTALLED", "ENABLED".equals(skill.status()), List.of());
+    }
+
+    private MarketplaceInstallResponse installAgent(CurrentUser user, MarketplaceCatalogEntry entry) {
+        requireInstallServices();
+        InstalledAgent installed = createOnlineAgent(user, entry, entry.name());
+        return new MarketplaceInstallResponse(entry.id(), entry.type(), installed.agent().id(), List.of(installed.agent().id()),
+            installed.skillIds(), null, "INSTALLED", "ONLINE".equals(installed.agent().status()), List.of());
+    }
+
+    private MarketplaceInstallResponse installTeam(CurrentUser user, MarketplaceCatalogEntry entry) {
+        requireInstallServices();
+        List<String> templateIds = stringList(entry.draft().path("recommendedAgentTemplates"));
+        if (templateIds.isEmpty()) throw invalid("Team template has no Agent blueprints");
+        List<InstalledAgent> installed = new ArrayList<>();
+        for (int i = 0; i < templateIds.size(); i++) {
+            MarketplaceCatalogEntry blueprint = find(templateIds.get(i)).orElseThrow(() -> invalid("Team Agent blueprint is missing"));
+            if (blueprint.type() != MarketplaceResourceType.AGENT) throw invalid("Team blueprint must reference Agent templates");
+            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · " + blueprint.name()));
+        }
+        if (installed.size() == 1) {
+            MarketplaceCatalogEntry blueprint = find(templateIds.get(0)).orElseThrow(() -> invalid("Team Agent blueprint is missing"));
+            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · 结果复核"));
+        }
+        TeamResponse team = agentTeamService.createTeam(user, new TeamCreateRequest(entry.name(), entry.description(),
+            installed.get(0).agent().id(), installed.subList(1, installed.size()).stream().map(item -> item.agent().id()).toList()));
+        List<String> agents = installed.stream().map(item -> item.agent().id()).toList();
+        List<String> skills = installed.stream().flatMap(item -> item.skillIds().stream()).distinct().toList();
+        return new MarketplaceInstallResponse(entry.id(), entry.type(), team.id(), agents, skills, team.id(),
+            "INSTALLED", true, List.of());
+    }
+
+    private InstalledAgent createOnlineAgent(CurrentUser user, MarketplaceCatalogEntry entry, String name) {
+        List<String> installedSkills = installLinkedSkills(user, entry.draft());
+        List<AgentSkillBindingRequest> bindings = IntStream.range(0, installedSkills.size())
+            .mapToObj(index -> new AgentSkillBindingRequest(installedSkills.get(index), index + 1)).toList();
+        AgentResponse created = agentDefinitionService.createAgent(user, new AgentCreateRequest(
+            name,
+            entry.draft().path("description").asText(entry.description()),
+            entry.draft().path("promptMode").asText("RAW"),
+            entry.draft().path("promptConfig").isMissingNode() ? null : entry.draft().path("promptConfig").asText(null),
+            entry.draft().path("systemPrompt").asText(),
+            entry.draft().path("modelName").asText("default"),
+            bindings,
+            stringList(entry.draft().path("capabilityKeys"))
+        ));
+        return new InstalledAgent(agentDefinitionService.onlineAgent(user, created.id(), created.version()), installedSkills);
+    }
+
+    private List<String> installLinkedSkills(CurrentUser user, JsonNode draft) {
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        for (String linkedId : stringList(draft.path("marketplaceSkillIds"))) {
+            MarketplaceCatalogEntry skillEntry = find(linkedId).orElseThrow(() -> invalid("linked Skill template is missing"));
+            if (skillEntry.type() != MarketplaceResourceType.SKILL) throw invalid("linked resource is not a Skill");
+            ids.add(installSkill(user, skillEntry).primaryResourceId());
+        }
+        return List.copyOf(ids);
+    }
+
+    private List<String> stringList(JsonNode node) {
+        if (node == null || !node.isArray()) return List.of();
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) if (item.isTextual() && !item.asText().isBlank()) values.add(item.asText());
+        return List.copyOf(values);
+    }
+
+    private void requireInstallServices() {
+        if (skillPackageImportService == null || agentDefinitionService == null || agentTeamService == null || packageArchiveService == null) {
+            throw new IllegalStateException("Marketplace install services are unavailable in this test seam");
+        }
+    }
+
+    private void requireUser(CurrentUser user) {
+        if (user == null || user.tenantId() == null || user.userId() == null) throw invalid("current user is required");
+    }
+
+    private Phase2ContractException invalid(String message) {
+        return new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, message);
+    }
+
+    private record InstalledAgent(AgentResponse agent, List<String> skillIds) { }
 
     private List<String> missingFields(MarketplaceResourceType type, JsonNode draft) {
         List<String> missing = new ArrayList<>();

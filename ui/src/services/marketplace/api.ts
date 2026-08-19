@@ -1,5 +1,5 @@
 import { requestMvp } from '@/services/mvp';
-import type { MarketplaceDraftResponse, MarketplaceResource, MarketplaceResourceType } from './types';
+import type { MarketplaceDraftResponse, MarketplaceInstallResponse, MarketplaceResource, MarketplaceResourceType } from './types';
 
 export async function listMarketplaceResources(filters: {
   type?: MarketplaceResourceType;
@@ -35,5 +35,12 @@ export function createMarketplaceDraft(id: string) {
   return requestMvp<MarketplaceDraftResponse>({
     method: 'POST',
     url: `/api/v2/marketplace/resources/${id}/draft`,
+  });
+}
+
+export function installMarketplaceResource(id: string) {
+  return requestMvp<MarketplaceInstallResponse>({
+    method: 'POST',
+    url: `/api/v2/marketplace/resources/${id}/install`,
   });
 }

@@ -48,6 +48,11 @@ public class MarketplaceController {
         return success(resources.createDraft(currentUserProvider.requireCurrentUser(), id));
     }
 
+    @PostMapping("/resources/{id}/install")
+    public ApiResponse<MarketplaceInstallResponse> install(@PathVariable String id) {
+        return success(resources.install(currentUserProvider.requireCurrentUser(), id));
+    }
+
     @ExceptionHandler(MarketplaceResourceService.MarketplaceNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> notFound() {

@@ -14,11 +14,11 @@ class MarketplaceResourceServiceTest {
 
     @Test
     void catalogContainsAllFourResourceKindsWithoutCredentials() {
-        assertThat(service.entries()).hasSize(8);
+        assertThat(service.entries()).hasSize(10);
         assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
             .containsExactlyInAnyOrder(MarketplaceResourceType.AGENT, MarketplaceResourceType.AGENT,
                 MarketplaceResourceType.TEAM, MarketplaceResourceType.TEAM,
-                MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL,
+                MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL,
                 MarketplaceResourceType.MCP, MarketplaceResourceType.MCP);
         assertThat(service.entries()).allSatisfy(entry -> {
             assertThat(entry.draft().toString()).doesNotContainIgnoringCase("credential_envelope");
@@ -31,7 +31,8 @@ class MarketplaceResourceServiceTest {
     void searchFiltersByTypeAndQuery() {
         assertThat(service.search(MarketplaceResourceType.SKILL, null, "pyodide"))
             .extracting(MarketplaceResourceView::id)
-            .containsExactlyInAnyOrder("skill-browser-python-report", "skill-jupyterlite-notebook");
+            .containsExactlyInAnyOrder("skill-browser-python-report", "skill-jupyterlite-notebook",
+                "skill-csv-summary", "skill-create-pdf-report");
         assertThat(service.search(null, null, "github"))
             .extracting(MarketplaceResourceView::id)
             .containsExactly("mcp-github-public-tools");
