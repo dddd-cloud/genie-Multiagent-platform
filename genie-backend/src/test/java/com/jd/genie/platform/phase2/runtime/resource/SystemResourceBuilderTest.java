@@ -154,4 +154,53 @@ class SystemResourceBuilderTest {
         verify(agents).createAgent(eq(USER), create.capture());
         assertEquals("数据分析师 (2)", create.getValue().name());
     }
+
+    @Test
+    void reusesMatchingOnlineAgentsAndCreatesOnlyMissingRoles() {
+        SkillDefinitionService skills = mock(SkillDefinitionService.class);
+        McpServerService mcps = mock(McpServerService.class);
+        AgentDefinitionService agents = mock(AgentDefinitionService.class);
+        AgentTeamService teams = mock(AgentTeamService.class);
+        AgentResponse backend = new AgentResponse("backend-1", "后端工程师", "", "RAW", null, "", "system-default", "ONLINE", 1L, List.of(), List.of(), Instant.now(), Instant.now());
+        when(skills.listSkills(USER, 1, 100)).thenReturn(new PageResponse<>(List.of(), 1, 100, false));
+        when(mcps.capabilities(USER)).thenReturn(List.of());
+        when(agents.listAgents(USER, 1, 100)).thenReturn(new PageResponse<>(List.of(backend), 1, 100, false));
+        when(agents.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        AtomicInteger sequence = new AtomicInteger();
+        when(agents.createAgent(eq(USER), any(AgentCreateRequest.class))).thenAnswer(call -> {
+            int id = sequence.incrementAndGet(); AgentCreateRequest request = call.getArgument(1);
+            return new AgentResponse("new-" + id, request.name(), request.description(), "RAW", null, request.systemPrompt(), "system-default", "DRAFT", 0L, List.of(), List.of(), Instant.now(), Instant.now());
+        });
+        when(agents.onlineAgent(eq(USER), any(), any())).thenAnswer(call -> new AgentResponse(call.getArgument(1), "new", "", "RAW", null, "", "system-default", "ONLINE", 1L, List.of(), List.of(), Instant.now(), Instant.now()));
+        when(teams.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        when(teams.createTeam(eq(USER), any())).thenReturn(new TeamResponse("team-1", "软件开发团队", "", "new-1", "", List.of(), 0L, Instant.now(), Instant.now()));
+
+        String result = new SystemResourceBuilder(skills, mcps, agents, teams).create(USER, "创建一个软件开发团队");
+
+        verify(agents, times(3)).createAgent(eq(USER), any(AgentCreateRequest.class));
+        assertTrue(result.contains("复用 1 个既有 Agent，新建 3 个"));
+    }
+
+    @Test
+    void honorsRequestedTeamSizeBetweenTwoAndTwenty() {
+        SkillDefinitionService skills = mock(SkillDefinitionService.class);
+        McpServerService mcps = mock(McpServerService.class);
+        AgentDefinitionService agents = mock(AgentDefinitionService.class);
+        AgentTeamService teams = mock(AgentTeamService.class);
+        when(skills.listSkills(USER, 1, 100)).thenReturn(new PageResponse<>(List.of(), 1, 100, false));
+        when(mcps.capabilities(USER)).thenReturn(List.of());
+        when(agents.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        AtomicInteger sequence = new AtomicInteger();
+        when(agents.createAgent(eq(USER), any(AgentCreateRequest.class))).thenAnswer(call -> {
+            int id = sequence.incrementAndGet(); AgentCreateRequest request = call.getArgument(1);
+            return new AgentResponse("agent-" + id, request.name(), request.description(), "RAW", null, request.systemPrompt(), "system-default", "DRAFT", 0L, List.of(), List.of(), Instant.now(), Instant.now());
+        });
+        when(agents.onlineAgent(eq(USER), any(), any())).thenAnswer(call -> new AgentResponse(call.getArgument(1), "online", "", "RAW", null, "", "system-default", "ONLINE", 1L, List.of(), List.of(), Instant.now(), Instant.now()));
+        when(teams.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        when(teams.createTeam(eq(USER), any())).thenReturn(new TeamResponse("team-10", "软件开发团队", "", "agent-1", "", List.of(), 0L, Instant.now(), Instant.now()));
+
+        new SystemResourceBuilder(skills, mcps, agents, teams).create(USER, "创建一个由 10 个 Agent 组成的软件开发团队");
+
+        verify(agents, times(10)).createAgent(eq(USER), any(AgentCreateRequest.class));
+    }
 }

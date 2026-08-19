@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A non-persisted orchestration-only Agent.  It is deliberately never exposed by
@@ -76,15 +79,25 @@ public class SystemResourceBuilder {
         if (request.team()) {
             return createTeam(user, request, available);
         }
-        AgentResponse agent = createOnlineAgent(user, request.roles().get(0), available, query);
-        return "资源已创建：Agent「" + agent.name() + "」（id=" + agent.id() + "），已绑定 "
+        Optional<AgentResponse> reusable = findReusable(available.agents(), request.roles().get(0), new LinkedHashSet<>());
+        AgentResponse agent = reusable.orElseGet(() -> createOnlineAgent(user, request.roles().get(0), available, query));
+        return "资源已" + (reusable.isPresent() ? "复用" : "创建") + "：Agent「" + agent.name() + "」（id=" + agent.id() + "），已绑定 "
                 + agent.skillIds().size() + " 个 Skill 和 " + agent.capabilityKeys().size() + " 个 MCP 工具。当前对话不会自动切换 Agent。";
     }
 
     private String createTeam(CurrentUser user, Request request, Available available) {
         List<AgentResponse> agents = new ArrayList<>();
+        int reused = 0;
+        LinkedHashSet<String> claimedAgentIds = new LinkedHashSet<>();
         for (RoleSpec role : request.roles()) {
-            agents.add(createOnlineAgent(user, role, available, request.rawQuery()));
+            Optional<AgentResponse> existing = findReusable(available.agents(), role, claimedAgentIds);
+            if (existing.isPresent()) {
+                agents.add(existing.get());
+                claimedAgentIds.add(existing.get().id());
+                reused++;
+            } else {
+                agents.add(createOnlineAgent(user, role, available, request.rawQuery()));
+            }
         }
         TeamResponse team = teamService.createTeam(user, new TeamCreateRequest(
                 teamService.nextAvailableName(user, request.name()), request.description(), agents.get(0).id(),
@@ -94,7 +107,8 @@ public class SystemResourceBuilder {
         int mcp = agents.stream().mapToInt(agent -> agent.capabilityKeys().size()).sum();
         return "资源已创建：Team「" + team.name() + "」（id=" + team.id() + "），主 Agent 为「"
                 + agents.get(0).name() + "」，共 " + agents.size() + " 个 Agent；按最小权限共绑定 "
-                + skills + " 个 Skill 和 " + mcp + " 个 MCP 工具。当前对话仍使用原 Team；如需使用新 Team，请在后续会话手动切换。";
+                + skills + " 个 Skill 和 " + mcp + " 个 MCP 工具；复用 " + reused + " 个既有 Agent，新建 "
+                + (agents.size() - reused) + " 个。当前对话仍使用原 Team；如需使用新 Team，请在后续会话手动切换。";
     }
 
     private AgentResponse createOnlineAgent(
@@ -118,7 +132,19 @@ public class SystemResourceBuilder {
         List<SkillResponse> skills = page.items().stream()
                 .filter(skill -> "ENABLED".equals(skill.status()))
                 .toList();
-        return new Available(skills, mcpServerService.capabilities(user));
+        PageResponse<AgentResponse> agents = agentService.listAgents(user, 1, 100);
+        List<AgentResponse> onlineAgents = agents == null || agents.items() == null ? List.of() : agents.items().stream()
+                .filter(agent -> "ONLINE".equals(agent.status()))
+                .toList();
+        return new Available(skills, mcpServerService.capabilities(user), onlineAgents);
+    }
+
+    private Optional<AgentResponse> findReusable(List<AgentResponse> candidates, RoleSpec role, LinkedHashSet<String> claimedAgentIds) {
+        if (candidates == null) return Optional.empty();
+        return candidates.stream()
+                .filter(agent -> agent.id() != null && !claimedAgentIds.contains(agent.id()))
+                .filter(agent -> role.matchesExisting(agent))
+                .findFirst();
     }
 
     private List<SkillResponse> selectSkills(List<SkillResponse> candidates, String skillHint, String query) {
@@ -159,24 +185,85 @@ public class SystemResourceBuilder {
 
     private static String nullToEmpty(String value) { return value == null ? "" : value; }
 
-    private record Available(List<SkillResponse> skills, List<McpToolResponse> mcpTools) { }
+    private record Available(List<SkillResponse> skills, List<McpToolResponse> mcpTools, List<AgentResponse> agents) { }
 
-    private record RoleSpec(String name, String description, String systemPrompt, String skillHint) { }
+    private record RoleSpec(String name, String description, String systemPrompt, String skillHint, List<String> reuseHints) {
+        RoleSpec(String name, String description, String systemPrompt, String skillHint) {
+            this(name, description, systemPrompt, skillHint, List.of(name));
+        }
+
+        boolean matchesExisting(AgentResponse agent) {
+            String text = normalize(agent.name() + " " + agent.description() + " " + agent.systemPrompt());
+            return effectiveReuseHints().stream().map(SystemResourceBuilder::normalize)
+                    .anyMatch(hint -> !hint.isBlank() && text.contains(hint));
+        }
+
+        private List<String> effectiveReuseHints() {
+            return switch (name) {
+                case "技术负责人" -> List.of("技术负责人", "tech lead", "架构师", "技术主管");
+                case "后端开发" -> List.of("后端开发", "后端工程师", "backend", "服务端");
+                case "前端开发" -> List.of("前端开发", "前端工程师", "frontend", "ui 开发");
+                case "测试工程师" -> List.of("测试工程师", "测试开发", "qa", "quality assurance");
+                case "数据分析师" -> List.of("数据分析师", "数据分析", "data analyst");
+                case "分析负责人" -> List.of("分析负责人", "数据负责人", "分析师");
+                case "结果复核" -> List.of("结果复核", "审校", "reviewer", "质量复核");
+                default -> reuseHints;
+            };
+        }
+    }
 
     private record Request(boolean team, String name, String description, List<RoleSpec> roles, String rawQuery) {
+        private static final Pattern ARABIC_COUNT = Pattern.compile("(?<!\\d)([2-9]|1\\d|20)\\s*(?:个|名|位|人)?(?:agent|智能体|代理|成员|人)?", Pattern.CASE_INSENSITIVE);
+
         static Request from(String query) {
             String text = normalize(query);
             boolean team = containsAny(text, "团队", "小组", " team", "team ");
             if (containsAny(text, "软件", "开发", "code", "代码", "web", "前端", "后端")) {
-                return software(team, query);
+                return withRequestedCount(software(team, query), requestedCount(text));
             }
             if (containsAny(text, "数据", "csv", "excel", "分析", "报表")) {
-                return data(team, query);
+                return withRequestedCount(data(team, query), requestedCount(text));
             }
             if (containsAny(text, "研究", "调研", "竞品", "财报")) {
-                return research(team, query);
+                return withRequestedCount(research(team, query), requestedCount(text));
             }
-            return general(team, query);
+            return withRequestedCount(general(team, query), requestedCount(text));
+        }
+
+        private static Request withRequestedCount(Request request, Integer requestedCount) {
+            if (!request.team() || requestedCount == null) return request;
+            List<RoleSpec> roles = new ArrayList<>(request.roles());
+            if (requestedCount < roles.size()) {
+                roles = new ArrayList<>(roles.subList(0, requestedCount));
+            }
+            for (int position = roles.size() + 1; position <= requestedCount; position++) {
+                roles.add(new RoleSpec(
+                        request.name().replace("团队", "") + "专员 " + position,
+                        "协助完成「" + request.name() + "」中的具体工作。",
+                        "你是团队中的执行专员。依据团队目标完成分配任务，明确说明依据、风险和未完成项；只使用当前已绑定的 Skill 和工具。",
+                        "file web api"
+                ));
+            }
+            return new Request(true, request.name(), request.description(), List.copyOf(roles), request.rawQuery());
+        }
+
+        private static Integer requestedCount(String text) {
+            Matcher matcher = ARABIC_COUNT.matcher(text);
+            while (matcher.find()) {
+                int value = Integer.parseInt(matcher.group(1));
+                if (value >= 2 && value <= 20) return value;
+            }
+            for (String word : List.of("二十", "十九", "十八", "十七", "十六", "十五", "十四", "十三", "十二", "十一", "十", "九", "八", "七", "六", "五", "四", "三", "两", "二")) {
+                if (text.contains(word + "个") || text.contains(word + "名") || text.contains(word + "位") || text.contains(word + "人")) {
+                    return switch (word) {
+                        case "二十" -> 20; case "十九" -> 19; case "十八" -> 18; case "十七" -> 17; case "十六" -> 16;
+                        case "十五" -> 15; case "十四" -> 14; case "十三" -> 13; case "十二" -> 12; case "十一" -> 11;
+                        case "十" -> 10; case "九" -> 9; case "八" -> 8; case "七" -> 7; case "六" -> 6;
+                        case "五" -> 5; case "四" -> 4; case "三" -> 3; default -> 2;
+                    };
+                }
+            }
+            return null;
         }
 
         private static Request data(boolean team, String query) {
