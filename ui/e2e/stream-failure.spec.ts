@@ -23,7 +23,7 @@ test.describe('stream-failure', () => {
     await expect(page).toHaveURL(/\/app/);
 
     await createConversationFromSidebar(page);
-    await expect(page).toHaveURL(/\/app\/chat\//);
+    await expect(page.getByTestId('new-conversation')).toBeVisible();
 
     const composer = page.getByPlaceholder(/Genie|希望|输入|消息|ask|message/i).or(
       page.getByRole('textbox').last(),
@@ -31,6 +31,7 @@ test.describe('stream-failure', () => {
     // Query text is ordinary; failure comes from Fake Agent mode, not magic strings.
     await composer.fill(`E2E stream probe under ${fakeMode}`);
     await clickSend(page);
+    await expect(page).toHaveURL(/\/app\/chat\//, { timeout: 30_000 });
 
     await expect(
       page

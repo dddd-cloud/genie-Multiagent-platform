@@ -1,1 +1,1 @@
-export { default } from '@/features/conversation/ConversationHome';
+export { default } from '@/features/conversation/NewConversationPage';

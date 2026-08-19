@@ -3,10 +3,11 @@ import {
   clickSend,
   createConversationFromSidebar,
   loginAs,
+  startPersistedConversation,
 } from '../../helpers/auth';
 
 /** Real stack uses acceptance passwords — never mock `password`. */
-export { clickSend, createConversationFromSidebar, loginAs };
+export { clickSend, createConversationFromSidebar, loginAs, startPersistedConversation };
 
 export const SSE_TIMEOUT_MS = 60_000;
 
@@ -37,8 +38,8 @@ export async function expectPhase2Nav(page: Page): Promise<void> {
 
 export async function fillComposer(page: Page, text: string): Promise<void> {
   const box = page
-    .getByPlaceholder(/Genie|希望|输入|消息|ask|message/i)
-    .or(page.locator('textarea').last());
+    .getByLabel('消息')
+    .or(page.locator('#chat-view textarea').last());
   await box.fill(text);
 }
 

@@ -55,13 +55,14 @@ test.describe('service-restart', () => {
     await expect(page.getByText(/当前用户|user-a/i).first()).toBeVisible();
 
     await createConversationFromSidebar(page);
-    await expect(page).toHaveURL(/\/app\/chat\//);
+    await expect(page.getByTestId('new-conversation')).toBeVisible();
 
     const composer = page.getByPlaceholder(/Genie|希望|输入|消息|ask|message/i).or(
       page.getByRole('textbox').last(),
     );
     await composer.fill('E2E slow stream during restart');
     await clickSend(page);
+    await expect(page).toHaveURL(/\/app\/chat\//, { timeout: 30_000 });
 
     // Enter loading / streaming UI before killing the JVM.
     await expect(

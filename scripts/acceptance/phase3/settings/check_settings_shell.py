@@ -41,6 +41,7 @@ def main() -> int:
 
     assert "data-testid=\"phase2-navigation\"" in phase2
     assert "label: '团队'" in phase2
+    assert "label: '会话'" not in phase2
     assert "label: 'Agent'" not in phase2
     return 0
 

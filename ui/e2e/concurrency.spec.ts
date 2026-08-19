@@ -1,8 +1,8 @@
 import { expect, test, type APIRequestContext, type Browser } from '@playwright/test';
 import {
   clickSend,
-  createConversationFromSidebar,
   loginAs,
+  startPersistedConversation,
 } from './helpers/auth';
 
 /**
@@ -280,7 +280,7 @@ test.describe('concurrency', () => {
   }) => {
     test.setTimeout(180_000);
     await loginAs(page, 'user-a');
-    await createConversationFromSidebar(page);
+    await startPersistedConversation(page);
     await expect(page).toHaveURL(/\/app\/chat\//);
     const conversationId = page.url().match(/\/app\/chat\/([^/?#]+)/)?.[1];
     expect(conversationId).toBeTruthy();

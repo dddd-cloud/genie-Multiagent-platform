@@ -1,15 +1,8 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import React, { useEffect, useRef, useState, type ReactNode } from "react";
 import { Input, Button, Tooltip } from "antd";
 import classNames from "classnames";
 import { TextAreaRef } from "antd/es/input/TextArea";
 import { useUserSettings } from "@/features/userSettings/useUserSettings";
-import { getOS } from "@/utils";
 
 const { TextArea } = Input;
 
@@ -68,31 +61,39 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     setDeepThink(!deepThink);
   };
 
-  const pressEnter: React.KeyboardEventHandler<HTMLTextAreaElement> = () => {
+  const insertNewline = () => {
+    const textareaDom = textareaRef.current?.resizableTextArea?.textArea;
+    if (!textareaDom) {
+      return;
+    }
+    const { selectionStart, selectionEnd } = textareaDom;
+    const start = selectionStart ?? question.length;
+    const end = selectionEnd ?? question.length;
+    const newValue =
+      question.substring(0, start) + "\n" + question.substring(end);
+    setQuestion(newValue);
+    setTimeout(() => {
+      textareaDom.selectionStart = start + 1;
+      textareaDom.selectionEnd = start + 1;
+      textareaDom.focus();
+    }, 20);
+  };
+
+  const pressEnter: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
     if (tempData.current.compositing) {
       return;
     }
-    // 按住command 回车换行逻辑
-    if (tempData.current.cmdPress) {
-      const textareaDom = textareaRef.current?.resizableTextArea?.textArea;
-      if (!textareaDom) {
-        return;
-      }
-      const { selectionStart, selectionEnd } = textareaDom || {};
-      const newValue =
-        question.substring(0, selectionStart) +
-        "\n" + // 插入换行符
-        question.substring(selectionEnd!);
-
-      setQuestion(newValue);
-      setTimeout(() => {
-        textareaDom.selectionStart = selectionStart! + 1;
-        textareaDom.selectionEnd = selectionStart! + 1;
-        textareaDom.focus();
-      }, 20);
+    if (event.shiftKey) {
+      event.preventDefault();
+      insertNewline();
       return;
     }
-    // 屏蔽状态，不发
+    if (event.metaKey || event.ctrlKey || tempData.current.cmdPress) {
+      event.preventDefault();
+      insertNewline();
+      return;
+    }
+    event.preventDefault();
     if (!question || disabled || running) {
       return;
     }
@@ -116,10 +117,6 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     setQuestion("");
   };
 
-  const enterTip = useMemo(() => {
-    return `⏎发送，${getOS() === "Mac" ? "⌘" : "^"} + ⏎ 换行`;
-  }, []);
-
   const canSend = Boolean(question) && !disabled;
 
   return (
@@ -134,9 +131,10 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
         <TextArea
           ref={textareaRef}
           value={question}
-          placeholder={placeholder}
+          aria-label={placeholder.trim() ? placeholder : '消息'}
+          autoSize={{ minRows: 1, maxRows: 20 }}
           className={classNames(
-            "h-62 no-border-textarea border-0 resize-none p-[0px] focus:border-0 bg-transparent text-text-primary text-[15px]",
+            "chat-input-textarea no-border-textarea border-0 p-[0px] focus:border-0 bg-transparent text-text-primary text-[15px] leading-[22px]",
             showBtn && product ? "indent-86" : "",
           )}
           onChange={questionChange}
@@ -192,9 +190,6 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
           ) : null}
         </div>
         <div className="flex items-center shrink-0">
-          <span className="text-[12px] text-text-tertiary mr-8 flex items-center">
-            {enterTip}
-          </span>
           {running ? (
             <Tooltip title="停止生成">
               <button

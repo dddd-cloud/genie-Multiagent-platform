@@ -42,12 +42,28 @@ export async function login(
 }
 
 export async function createConversationFromSidebar(page: Page): Promise<void> {
-  // Sidebar label is「新会话」(ConversationSidebar) — match real UI, not wishful aliases.
+  // Opens the unsaved composer at /app. A conversation is created only after send.
   await page.getByRole('button', { name: /新会话|新建|新对话|new/i }).click();
-  await page.waitForURL(/\/app\/chat\//);
+  await page.waitForURL((url) => {
+    const pathname = new URL(url).pathname;
+    return pathname === '/app' || pathname === '/app/';
+  });
 }
 
 /** Click the composer send control (accessible button aria-label=发送). */
 export async function clickSend(page: Page): Promise<void> {
   await page.getByRole('button', { name: /发送|send/i }).click();
+}
+
+export async function startPersistedConversation(
+  page: Page,
+  text = 'E2E persist conversation',
+): Promise<void> {
+  await createConversationFromSidebar(page);
+  const composer = page
+    .getByLabel('消息')
+    .or(page.locator('#chat-view textarea').last());
+  await composer.fill(text);
+  await clickSend(page);
+  await page.waitForURL(/\/app\/chat\//);
 }

@@ -19,13 +19,14 @@ test.describe('react-history-refresh', () => {
     await expect(page).toHaveURL(/\/app/);
 
     await createConversationFromSidebar(page);
-    await expect(page).toHaveURL(/\/app\/chat\//);
+    await expect(page.getByTestId('new-conversation')).toBeVisible();
 
     const composer = page.getByPlaceholder(/Genie|希望|输入|消息|ask|message/i).or(
       page.getByRole('textbox').last(),
     );
     await composer.fill('E2E ReAct history probe');
     await clickSend(page);
+    await expect(page).toHaveURL(/\/app\/chat\//, { timeout: 30_000 });
     await expect(page.getByText('E2E ReAct history probe').first()).toBeVisible({timeout: 30_000,});
     await expect(page.locator('#chat-view').getByText(/加载中|loading/i)).toHaveCount(
       0,

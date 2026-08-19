@@ -30,7 +30,10 @@ export async function logoutMock(page: Page): Promise<void> {
 
 export async function createConversationFromSidebar(page: Page): Promise<void> {
   await page.getByRole('button', { name: /新会话|新建|新对话|new/i }).click();
-  await page.waitForURL(/\/app\/chat\//);
+  await page.waitForURL((url) => {
+    const pathname = new URL(url).pathname;
+    return pathname === '/app' || pathname === '/app/';
+  });
 }
 
 export async function clickSend(page: Page): Promise<void> {
@@ -40,6 +43,16 @@ export async function clickSend(page: Page): Promise<void> {
 export async function fillComposer(page: Page, text: string): Promise<void> {
   const box = page.locator('textarea').last();
   await box.fill(text);
+}
+
+export async function startPersistedConversation(
+  page: Page,
+  text = 'E2E persist conversation',
+): Promise<void> {
+  await createConversationFromSidebar(page);
+  await fillComposer(page, text);
+  await clickSend(page);
+  await page.waitForURL(/\/app\/chat\//);
 }
 
 export async function setPhase2SseScenario(

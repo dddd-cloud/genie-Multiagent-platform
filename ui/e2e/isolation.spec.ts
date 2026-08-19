@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createConversationFromSidebar, loginAs } from './helpers/auth';
+import { startPersistedConversation, loginAs } from './helpers/auth';
 
 /**
  * Real E2E against Fake acceptance stack.
@@ -19,7 +19,7 @@ test.describe('isolation', () => {
 
     await loginAs(pageA, 'user-a');
     await expect(pageA).toHaveURL(/\/app/);
-    await createConversationFromSidebar(pageA);
+    await startPersistedConversation(pageA);
     await expect(pageA).toHaveURL(/\/app\/chat\//);
     const ownerConversationUrl = pageA.url();
     const conversationId = ownerConversationUrl.match(/\/app\/chat\/([^/?#]+)/)?.[1];

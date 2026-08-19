@@ -22,6 +22,8 @@ import {
 import ExecutionModeSelector from '@/features/phase2/executionMode/ExecutionModeSelector';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import { buildPhase2GptQueryRequest } from '@/features/phase2/executionMode/phase2RequestBuilder';
+import { ALLOWED_AGENTS_MAX } from '@/features/phase2/executionMode/requestValidation';
+import { listAgents } from '@/services/phase2/agents';
 import { useLocalMemoryOptional } from '@/features/phase2/localMemory/useLocalMemory';
 import OrchestrationTimeline from '@/features/phase2/orchestration/OrchestrationTimeline';
 import {
@@ -65,7 +67,7 @@ import StreamStatusBar from './StreamStatusBar';
 import { useStreamingText } from './useStreamingText';
 
 interface ChatViewProps {
-  conversationId: string;
+  conversationId?: string;
   conversationTitle: string;
   initialChats: PersistedChatItem[];
   mode: {
@@ -88,6 +90,8 @@ interface ChatViewProps {
   onExecutionModeChange?: (mode: ExecutionMode) => void;
   onAllowedAgentIdsChange?: (agentIds: string[]) => void;
   onTeamIdChange?: (teamId: string | null) => void;
+  /** Create a conversation on first send and return its id. ChatView then sends in place. */
+  onEnsureConversation?: () => Promise<string | null>;
 }
 
 const QUERY_MIN = 1;
@@ -309,15 +313,22 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     onExecutionModeChange,
     onAllowedAgentIdsChange,
     onTeamIdChange,
+    onEnsureConversation,
   } = props;
 
-  const sessionId = conversationId;
+  const sessionId = conversationId ?? '';
+  const sessionIdRef = useRef(sessionId);
+  if (conversationId) {
+    sessionIdRef.current = conversationId;
+  }
   const [modal, modalContextHolder] = Modal.useModal();
   const navigate = useNavigate();
   const layout = useConversationLayout();
   const localMemory = useLocalMemoryOptional();
   const phase2 = isPhase2Enabled();
-  const liveOnMount = peekLiveChatRun(sessionId);
+  const liveOnMount = conversationId
+    ? peekLiveChatRun(conversationId)
+    : undefined;
 
   const [chatList, setChatList] = useState<PersistedChatItem[]>(
     liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
@@ -407,9 +418,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
   const inputDisabled = reconciling;
   const taskRunning = sendInFlight;
+  const isComposer =
+    !conversationId &&
+    chatList.length === 0 &&
+    !sendInFlight &&
+    !detachedRunning;
 
   const streaming = useStreamingText({
-    sessionId,
+    sessionIdRef,
     mountedRef,
     chatListRef,
     setChatList,
@@ -418,10 +434,13 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const flushStreamingView = useMemoizedFn(streaming.flushStreamingView);
 
   const stopGeneration = useMemoizedFn(() => {
-    stopLiveChatRun(sessionId);
+    stopLiveChatRun(sessionIdRef.current || sessionId);
   });
 
   useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
     const existing = peekLiveChatRun(sessionId);
     if (existing?.sendInFlight) {
       setChatList(existing.chatList);
@@ -441,9 +460,18 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     if (peekLiveChatRun(sessionId)?.sendInFlight || sendInFlightRef.current) {
       return;
     }
+    // Keep local turns if an in-flight thread hydrates empty; the composer
+    // must actually clear when the user opens a new conversation.
+    if (
+      conversationId &&
+      initialChats.length === 0 &&
+      chatListRef.current.length > 0
+    ) {
+      return;
+    }
     setChatList(initialChats);
     chatListRef.current = initialChats;
-  }, [initialChats, sessionId]);
+  }, [conversationId, initialChats, sessionId]);
 
   const temporaryChangeTask = useMemoizedFn((tasks: MESSAGE.Task[]) => {
     const task = tasks[tasks.length - 1] as CHAT.Task;
@@ -635,6 +663,29 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       const deepThink = !!inputInfo.deepThink;
       const outputStyle = resolveOutputStyle(inputInfo.outputStyle);
+
+      let sessionId = conversationId ?? '';
+      if (!sessionId) {
+        if (!onEnsureConversation) {
+          return;
+        }
+        try {
+          sessionId = (await onEnsureConversation()) ?? '';
+        } catch (err: unknown) {
+          if (err instanceof MvpApiError && err.code === 'AUTH_REQUIRED') {
+            throw err;
+          }
+          message.error(
+            err instanceof MvpApiError ? err.message : '创建会话失败',
+          );
+          return;
+        }
+        if (!sessionId) {
+          return;
+        }
+      }
+      sessionIdRef.current = sessionId;
+
       const requestId = requestIdArg ?? crypto.randomUUID();
       if (!isUuid(requestId)) {
         message.error('requestId 必须是 36 位 UUID');
@@ -655,6 +706,20 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           return;
         }
 
+        let allowedAgentIdsForRequest = [...allowedAgentIdsRef.current];
+        if (
+          executionModeRef.current === 'ORCHESTRATED' &&
+          !teamIdRef.current &&
+          allowedAgentIdsForRequest.length === 0
+        ) {
+          // Selector shows "All" when nothing is ticked; empty must mean all online.
+          const listed = await listAgents();
+          allowedAgentIdsForRequest = (listed ?? [])
+            .filter((agent) => agent.status === 'ONLINE')
+            .map((agent) => agent.id)
+            .slice(0, ALLOWED_AGENTS_MAX);
+        }
+
         // Memory text stays empty on purpose: the backend injects the on-disk
         // snapshot for non-privacy conversations.
         const built = buildPhase2GptQueryRequest({
@@ -664,7 +729,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           executionMode: executionModeRef.current,
           deepThink: deepThink ? 1 : 0,
           outputStyle,
-          allowedAgentIds: allowedAgentIdsRef.current,
+          allowedAgentIds: allowedAgentIdsForRequest,
           teamId: teamIdRef.current,
           longTermMemory: '',
           conversationSummary: '',
@@ -952,6 +1017,9 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         });
       sseHandleRef.current = handle;
       patchLiveChatRun(sessionId, { handle });
+      if (!conversationId) {
+        navigate(`/app/chat/${sessionId}`, { replace: true });
+      }
 
       const result = await handle.done;
       const stoppedByUser = peekLiveChatRun(sessionId)?.userStopped === true;
@@ -971,6 +1039,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
             ? {
               persistedStatus: 'FAILED',
               errorMessage: result.errorMsg ?? '执行失败',
+              tip: result.errorMsg ?? '执行失败',
             }
             : { persistedStatus: 'COMPLETED' },
         );
@@ -989,7 +1058,11 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         // Stop local loading only — do not invent FAILED; reload (except AUTH)
         // clears optimistic turns the backend never accepted.
         // Do NOT auto-resend as V1 after Phase2 POST open failure.
-        stopLoadingForRequest(requestId, { tip: '' });
+        stopLoadingForRequest(requestId, {
+          tip: usePhase2
+            ? phase2ErrorMessage(result.code, result.message)
+            : (result.message || `请求失败 (${result.httpStatus})`),
+        });
         sendInFlightRef.current = false;
         setSendInFlight(false);
         finishLiveChatRun(sessionId, requestId);
@@ -1050,7 +1123,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
   // Consume initialDraft once (module Set survives Strict Mode remount)
   useEffect(() => {
-    if (!initialDraft) {
+    if (!conversationId || !initialDraft) {
       return;
     }
     if (consumedDraftRequestIds.has(initialDraft.requestId)) {
@@ -1058,10 +1131,13 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     }
     consumedDraftRequestIds.add(initialDraft.requestId);
     void sendMessage(initialDraft.inputInfo, initialDraft.requestId);
-  }, [initialDraft, sendMessage]);
+  }, [conversationId, initialDraft, sendMessage]);
 
   // Detached PENDING/STREAMING on load without local SSE
   useEffect(() => {
+    if (!conversationId) {
+      return;
+    }
     if (reconcileStartedRef.current) {
       return;
     }
@@ -1076,7 +1152,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     }
     reconcileStartedRef.current = true;
     void runLimitedReconcile(false);
-  }, [detachedRunning, initialDraft, runLimitedReconcile, sessionId]);
+  }, [conversationId, detachedRunning, initialDraft, runLimitedReconcile, sessionId]);
 
   // Keep the SSE alive across Agent/Skill/other-conversation navigation.
   // Only the stop button (and logout via abortAllActiveSse) may abort.
@@ -1096,19 +1172,28 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         className="flex h-full min-w-0 flex-1 flex-col"
         id="chat-view"
       >
-        <div className="shrink-0 border-b border-border">
-          <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-12 px-24 py-16">
+        <div className={classNames('shrink-0', isComposer ? '' : 'border-b border-border')}>
+          <div
+            className={classNames(
+              'mx-auto flex w-full items-center justify-between gap-12 px-24 py-16',
+              isComposer ? 'max-w-[768px]' : 'max-w-[960px]',
+            )}
+          >
             <div className="flex min-w-0 flex-1 items-center">
-              <Logo />
-              <div className="mr-8 overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-medium text-text-primary">
-                {conversationTitle}
-              </div>
-              {sendMode.deepThink ? (
-                <div className="flex shrink-0 items-center rounded-sm border border-border bg-surface-subtle px-8 py-2 text-[12px] text-text-secondary">
-                  <i className="font_family icon-shendusikao mr-6 text-[12px]"></i>
-                  <span className="ml-[-4px]">深度研究</span>
-                </div>
-              ) : null}
+              <Logo hideSplit={isComposer} />
+              {isComposer ? null : (
+                <>
+                  <div className="mr-8 overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-medium text-text-primary">
+                    {conversationTitle}
+                  </div>
+                  {sendMode.deepThink ? (
+                    <div className="flex shrink-0 items-center rounded-sm border border-border bg-surface-subtle px-8 py-2 text-[12px] text-text-secondary">
+                      <i className="font_family icon-shendusikao mr-6 text-[12px]"></i>
+                      <span className="ml-[-4px]">深度研究</span>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-8">
               <PrivacyModeToggle
@@ -1127,6 +1212,46 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           </div>
         </div>
 
+        {isComposer ? (
+          <div
+            className="flex min-h-0 flex-1 flex-col items-center justify-center px-24 pb-[12vh]"
+            data-testid="composer-landing"
+          >
+            <div className="w-full max-w-[640px]">
+              <h1 className="mb-28 text-center text-[28px] font-medium leading-[36px] tracking-[-0.02em] text-text-primary">
+                有什么可以帮你的？
+              </h1>
+              <GeneralInput
+                placeholder=""
+                showBtn={false}
+                size="medium"
+                disabled={inputDisabled || (detachedRunning && !taskRunning)}
+                running={taskRunning}
+                onStop={stopGeneration}
+                product={product}
+                leftExtra={
+                  phase2 ? (
+                    <ExecutionModeSelector
+                      value={executionMode}
+                      disabled={inputDisabled || taskRunning || detachedRunning}
+                      allowedAgentIds={allowedAgentIds}
+                      teamId={teamId}
+                      onChange={(next) => {
+                        onExecutionModeChange?.(next);
+                      }}
+                      onAllowedAgentIdsChange={(ids) =>
+                        onAllowedAgentIdsChange?.(ids)
+                      }
+                      onTeamIdChange={(next) => onTeamIdChange?.(next)}
+                    />
+                  ) : null
+                }
+                send={(info) => void sendMessage(info)}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
         {reconcileHint ? (
           <div className="mx-auto w-full max-w-[960px] px-24 pt-12">
             <div className="flex items-center gap-12 rounded-md border border-border bg-surface-subtle px-12 py-8 text-[13px] text-text-secondary">
@@ -1230,47 +1355,53 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
         <div className="shrink-0 bg-surface">
           <div className="mx-auto w-full max-w-[960px] px-24 pb-20 pt-8">
-        <GeneralInput
-          placeholder={
-            taskRunning
-              ? '正在生成…'
-              : inputDisabled
-                ? '任务进行中'
-                : '希望 Genie 为你做哪些任务呢？'
-          }
-          showBtn={false}
-          size="medium"
-          disabled={inputDisabled || (detachedRunning && !taskRunning)}
-          running={taskRunning}
-          onStop={stopGeneration}
-          product={product}
-          leftExtra={
-            phase2 ? (
-              <ExecutionModeSelector
-                value={executionMode}
-                disabled={inputDisabled || taskRunning || detachedRunning}
-                allowedAgentIds={allowedAgentIds}
-                teamId={teamId}
-                onChange={(next) => {
-                  onExecutionModeChange?.(next);
-                }}
-                onAllowedAgentIdsChange={(ids) =>
-                  onAllowedAgentIdsChange?.(ids)
+              <GeneralInput
+                placeholder={
+                  taskRunning
+                    ? '正在生成…'
+                    : inputDisabled
+                      ? '任务进行中'
+                      : '发消息'
                 }
-                onTeamIdChange={(next) => onTeamIdChange?.(next)}
+                showBtn={false}
+                size="medium"
+                disabled={inputDisabled || (detachedRunning && !taskRunning)}
+                running={taskRunning}
+                onStop={stopGeneration}
+                product={product}
+                leftExtra={
+                  phase2 ? (
+                    <ExecutionModeSelector
+                      value={executionMode}
+                      disabled={inputDisabled || taskRunning || detachedRunning}
+                      allowedAgentIds={allowedAgentIds}
+                      teamId={teamId}
+                      onChange={(next) => {
+                        onExecutionModeChange?.(next);
+                      }}
+                      onAllowedAgentIdsChange={(ids) =>
+                        onAllowedAgentIdsChange?.(ids)
+                      }
+                      onTeamIdChange={(next) => onTeamIdChange?.(next)}
+                    />
+                  ) : null
+                }
+                send={(info) =>
+                  void sendMessage(
+                    conversationId
+                      ? {
+                          ...info,
+                          deepThink: sendMode.deepThink,
+                          outputStyle: sendMode.outputStyle,
+                        }
+                      : info,
+                  )
+                }
               />
-            ) : null
-          }
-          send={(info) =>
-            void sendMessage({
-              ...info,
-              deepThink: sendMode.deepThink,
-              outputStyle: sendMode.outputStyle,
-            })
-          }
-        />
           </div>
         </div>
+          </>
+        )}
       </div>
       <div
         className={classNames(

@@ -10,12 +10,12 @@ import type { PersistedChatItem } from '@/features/conversation/types';
  * Only the React mirror (`setChatList`) is rAF-batched; terminal events must flush.
  */
 export function useStreamingText(options: {
-  sessionId: string;
+  sessionIdRef: React.MutableRefObject<string>;
   mountedRef: React.MutableRefObject<boolean>;
   chatListRef: React.MutableRefObject<PersistedChatItem[]>;
   setChatList: (next: PersistedChatItem[]) => void;
 }) {
-  const { sessionId, mountedRef, chatListRef, setChatList } = options;
+  const { sessionIdRef, mountedRef, chatListRef, setChatList } = options;
   const rafRef = useRef<number | null>(null);
 
   const flushStreamingView = () => {
@@ -31,6 +31,7 @@ export function useStreamingText(options: {
   const publishChatList = (
     updater: (prev: PersistedChatItem[]) => PersistedChatItem[],
   ) => {
+    const sessionId = sessionIdRef.current;
     const prev = peekLiveChatRun(sessionId)?.chatList ?? chatListRef.current;
     const next = updater(prev);
     chatListRef.current = next;

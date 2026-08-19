@@ -21,13 +21,14 @@ test.describe('Phase2 real execution', () => {
       await expectPhase2Nav(page);
 
       await createConversationFromSidebar(page);
-      await expect(page).toHaveURL(/\/app\/chat\//);
+      await expect(page.getByTestId('new-conversation')).toBeVisible();
 
       await selectExecutionMode(page, mode);
 
       const probe = `Phase2 real E2E ${mode} probe ${Date.now()}`;
       await fillComposer(page, probe);
       await clickSend(page);
+      await expect(page).toHaveURL(/\/app\/chat\//, { timeout: 30_000 });
 
       await expect(page.getByText(probe).first()).toBeVisible({ timeout: 30_000 });
 

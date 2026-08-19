@@ -22,10 +22,21 @@ import { OUTPUT_STYLES } from '@/contracts';
 import ChatView from '@/components/ChatView';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import { useLocalMemoryOptional } from '@/features/phase2/localMemory/useLocalMemory';
+import { useUserSettings } from '@/features/userSettings/useUserSettings';
 import { MvpApiError } from '@/services/apiError';
-import { getConversation, getMessages, updateConversationPrivacy } from './api';
+import {
+  createConversation,
+  getConversation,
+  getMessages,
+  updateConversationPrivacy,
+} from './api';
 import { hydrateConversation } from './hydrateConversation';
+import { peekLiveChatRun } from './liveChatRuns';
 import { useConversationLayout } from './ConversationLayout';
+import {
+  clearConversationDraft,
+  peekConversationDraft,
+} from './pendingConversationDraft';
 import type { ConversationDraft, PersistedChatItem } from './types';
 
 function isConversationDraft(value: unknown): value is ConversationDraft {
@@ -52,11 +63,12 @@ function isAuthRequired(err: unknown): err is MvpApiError {
 }
 
 const ConversationPage: GenieType.FC = memo(() => {
-  const { conversationId } = useParams<{ conversationId: string }>();
+  const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const layout = useConversationLayout();
   const localMemory = useLocalMemoryOptional();
+  const { preferences, status: preferencesStatus } = useUserSettings();
 
   const [conversation, setConversation] = useState<ConversationResponse | null>(
     null,
@@ -65,24 +77,70 @@ const ConversationPage: GenieType.FC = memo(() => {
     [],
   );
   const [chats, setChats] = useState<PersistedChatItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [historyReady, setHistoryReady] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(conversationId));
+  const [historyReady, setHistoryReady] = useState(() => !conversationId);
   const [pendingDraft, setPendingDraft] = useState<ConversationDraft | null>(
     null,
   );
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('AUTO');
   const [allowedAgentIds, setAllowedAgentIds] = useState<string[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
+  const [composerPrivacy, setComposerPrivacy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const consumedDraftIdsRef = useRef<Set<string>>(new Set());
+  const ensuringRef = useRef(false);
 
-  // Send-mode selection is not persisted across refresh.
+  const executionSeededForIdRef = useRef<string | null>(null);
+  const prevConversationIdRef = useRef<string | undefined>(conversationId);
+  const chatViewInstanceRef = useRef(0);
+  if (prevConversationIdRef.current !== conversationId) {
+    const liveHandoff =
+      !prevConversationIdRef.current &&
+      Boolean(conversationId) &&
+      peekLiveChatRun(conversationId as string)?.sendInFlight === true;
+    if (!liveHandoff) {
+      chatViewInstanceRef.current += 1;
+    }
+    prevConversationIdRef.current = conversationId;
+  }
+
+  // Send-mode selection is not persisted across refresh; empty chats pick up saved defaults.
   useEffect(() => {
+    if (
+      conversationId &&
+      peekLiveChatRun(conversationId)?.sendInFlight === true
+    ) {
+      return;
+    }
     setExecutionMode('AUTO');
     setAllowedAgentIds([]);
     setTeamId(null);
+    executionSeededForIdRef.current = null;
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!historyReady || preferencesStatus !== 'ready') {
+      return;
+    }
+    const seedKey = conversationId ?? 'composer';
+    if (executionSeededForIdRef.current === seedKey) {
+      return;
+    }
+    if (conversationId && (chats.length > 0 || pendingDraft)) {
+      executionSeededForIdRef.current = seedKey;
+      return;
+    }
+    executionSeededForIdRef.current = seedKey;
+    setExecutionMode(preferences.defaultExecutionMode);
+  }, [
+    chats.length,
+    conversationId,
+    historyReady,
+    pendingDraft,
+    preferences.defaultExecutionMode,
+    preferencesStatus,
+  ]);
 
   const detachedRunning = useMemo(
     () =>
@@ -95,7 +153,7 @@ const ConversationPage: GenieType.FC = memo(() => {
   );
 
   const derivedMode = useMemo(() => {
-    if (chats.length > 0) {
+    if (conversationId && chats.length > 0) {
       const latest = chats[chats.length - 1];
       return {
         deepThink: latest.deepThink,
@@ -103,7 +161,7 @@ const ConversationPage: GenieType.FC = memo(() => {
         productType: pendingDraft?.productType,
       };
     }
-    if (pendingDraft) {
+    if (conversationId && pendingDraft) {
       return {
         deepThink: !!pendingDraft.inputInfo.deepThink,
         outputStyle: resolveOutputStyle(pendingDraft.inputInfo.outputStyle),
@@ -111,15 +169,33 @@ const ConversationPage: GenieType.FC = memo(() => {
       };
     }
     return {
-      deepThink: false,
-      outputStyle: 'docs' as OutputStyle,
+      deepThink:
+        preferencesStatus === 'ready' ? preferences.defaultDeepThink : false,
+      outputStyle: resolveOutputStyle(
+        preferencesStatus === 'ready'
+          ? preferences.defaultOutputStyle
+          : undefined,
+      ),
+      productType:
+        preferencesStatus === 'ready' && preferences.defaultOutputStyle
+          ? preferences.defaultOutputStyle
+          : undefined,
     };
-  }, [chats, pendingDraft]);
+  }, [
+    chats,
+    conversationId,
+    pendingDraft,
+    preferences.defaultDeepThink,
+    preferences.defaultOutputStyle,
+    preferencesStatus,
+  ]);
 
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const localMemoryRef = useRef(localMemory);
   localMemoryRef.current = localMemory;
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
 
   const applyMessages = useCallback(
     async (list: ConversationMessageResponse[], id: string) => {
@@ -143,6 +219,12 @@ const ConversationPage: GenieType.FC = memo(() => {
     try {
       const messages = await getMessages(conversationId);
       const list = messages ?? [];
+      if (
+        list.length === 0 &&
+        peekLiveChatRun(conversationId)?.sendInFlight
+      ) {
+        return;
+      }
       await applyMessages(list, conversationId);
     } catch (err: unknown) {
       if (isAuthRequired(err)) {
@@ -152,6 +234,9 @@ const ConversationPage: GenieType.FC = memo(() => {
         err instanceof MvpApiError &&
         (err.httpStatus === 404 || err.code === 'RESOURCE_NOT_FOUND')
       ) {
+        if (peekLiveChatRun(conversationId)?.sendInFlight) {
+          return;
+        }
         layoutRef.current?.remove(conversationId);
         navigate('/app');
         return;
@@ -189,8 +274,47 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
   }, [conversationId]);
 
+  const ensureConversation = useCallback(async () => {
+    if (ensuringRef.current) {
+      return null;
+    }
+    ensuringRef.current = true;
+    try {
+      await layout?.discardUnusedDrafts?.();
+      const created = await createConversation(null, composerPrivacy);
+      if (!created) {
+        message.error('创建会话失败');
+        return null;
+      }
+      layout?.upsert({
+        ...created,
+        lastMessageAt: null,
+        lastMessagePreview: null,
+      });
+      return created.id;
+    } catch (err: unknown) {
+      if (isAuthRequired(err)) {
+        throw err;
+      }
+      if (err instanceof MvpApiError && err.code === 'ACCESS_DENIED') {
+        message.error('无权限创建会话');
+        return null;
+      }
+      message.error(
+        err instanceof MvpApiError ? err.message : '创建会话失败',
+      );
+      return null;
+    } finally {
+      ensuringRef.current = false;
+    }
+  }, [composerPrivacy, layout]);
+
   const togglePrivacyMode = useCallback(async () => {
-    if (!conversationId || !conversation) {
+    if (!conversationId) {
+      setComposerPrivacy((prev) => !prev);
+      return;
+    }
+    if (!conversation) {
       return;
     }
     const next = !conversation.privacyMode;
@@ -224,20 +348,39 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
   }, [conversation, conversationId]);
 
-  // Load conversation + messages. Draft is NOT consumed here.
+  // Load conversation + messages. Keep any first-send draft across remounts.
   useEffect(() => {
     if (!conversationId) {
-      navigate('/app');
+      setConversation(null);
+      setRawMessages([]);
+      setChats([]);
+      setPendingDraft(null);
+      setLoadError(null);
+      setLoading(false);
+      setHistoryReady(true);
       return;
     }
 
     let cancelled = false;
     setHistoryReady(false);
-    setPendingDraft(null);
+    const handedOff =
+      peekConversationDraft(conversationId) ??
+      (isConversationDraft(location.state) ? location.state : null);
+    if (handedOff) {
+      setPendingDraft(handedOff);
+      if (isPhase2Enabled()) {
+        setExecutionMode(handedOff.executionMode ?? 'AUTO');
+        setAllowedAgentIds(handedOff.allowedAgentIds ?? []);
+        setTeamId(handedOff.teamId ?? null);
+      }
+    }
 
     const load = async () => {
-      setLoading(true);
       setLoadError(null);
+      const current = conversationRef.current;
+      if (!current || current.id !== conversationId) {
+        setLoading(true);
+      }
       try {
         const [conv, messages] = await Promise.all([
           getConversation(conversationId),
@@ -247,22 +390,31 @@ const ConversationPage: GenieType.FC = memo(() => {
           return;
         }
         if (!conv) {
+          if (peekLiveChatRun(conversationId)?.sendInFlight) {
+            return;
+          }
           layoutRef.current?.remove(conversationId);
           navigate('/app');
           return;
         }
         setConversation(conv);
         const list = messages ?? [];
-        await applyMessages(list, conversationId);
+        const keepLocalTurns =
+          Boolean(peekLiveChatRun(conversationId)?.sendInFlight) ||
+          (list.length === 0 && Boolean(peekConversationDraft(conversationId)));
+        if (keepLocalTurns) {
+          setRawMessages(list);
+        } else {
+          await applyMessages(list, conversationId);
+        }
         const ctx = layoutRef.current;
         if (ctx) {
           const existing = ctx.items.find((row) => row.id === conv.id);
-          // Keep existing preview; ConversationResponse has no preview field.
           ctx.upsert({
             id: conv.id,
             title: conv.title,
             privacyMode: conv.privacyMode === true,
-            lastMessageAt: conv.lastMessageAt,
+            lastMessageAt: conv.lastMessageAt ?? existing?.lastMessageAt ?? null,
             createdAt: conv.createdAt,
             updatedAt: conv.updatedAt,
             lastMessagePreview: existing?.lastMessagePreview ?? null,
@@ -280,6 +432,9 @@ const ConversationPage: GenieType.FC = memo(() => {
           err instanceof MvpApiError &&
           (err.httpStatus === 404 || err.code === 'RESOURCE_NOT_FOUND')
         ) {
+          if (peekLiveChatRun(conversationId)?.sendInFlight) {
+            return;
+          }
           layoutRef.current?.remove(conversationId);
           navigate('/app');
           return;
@@ -318,11 +473,13 @@ const ConversationPage: GenieType.FC = memo(() => {
     if (!historyReady || !conversationId || loading) {
       return;
     }
-    const state = location.state;
-    if (!isConversationDraft(state)) {
+    const handedOff =
+      peekConversationDraft(conversationId) ??
+      (isConversationDraft(location.state) ? location.state : null);
+    if (!handedOff) {
       return;
     }
-    if (consumedDraftIdsRef.current.has(state.requestId)) {
+    if (consumedDraftIdsRef.current.has(handedOff.requestId)) {
       if (location.state != null) {
         navigate(location.pathname, {
           replace: true,
@@ -332,10 +489,10 @@ const ConversationPage: GenieType.FC = memo(() => {
       return;
     }
 
-    consumedDraftIdsRef.current.add(state.requestId);
+    consumedDraftIdsRef.current.add(handedOff.requestId);
 
-    // Already persisted for this requestId → do not resend; only clear state.
-    if (chats.some((chat) => chat.requestId === state.requestId)) {
+    if (chats.some((chat) => chat.requestId === handedOff.requestId)) {
+      clearConversationDraft(conversationId);
       navigate(location.pathname, {
         replace: true,
         state: null
@@ -344,15 +501,17 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
 
     if (isPhase2Enabled()) {
-      setExecutionMode(state.executionMode ?? 'AUTO');
-      setAllowedAgentIds(state.allowedAgentIds ?? []);
-      setTeamId(state.teamId ?? null);
+      setExecutionMode(handedOff.executionMode ?? 'AUTO');
+      setAllowedAgentIds(handedOff.allowedAgentIds ?? []);
+      setTeamId(handedOff.teamId ?? null);
     }
-    setPendingDraft(state);
-    navigate(location.pathname, {
-      replace: true,
-      state: null
-    });
+    setPendingDraft(handedOff);
+    if (location.state != null) {
+      navigate(location.pathname, {
+        replace: true,
+        state: null
+      });
+    }
   }, [
     historyReady,
     loading,
@@ -363,17 +522,27 @@ const ConversationPage: GenieType.FC = memo(() => {
     chats,
   ]);
 
-  // Clear draft handoff only after the turn appears in hydrated/local chats.
   useEffect(() => {
-    if (!pendingDraft) {
+    if (!pendingDraft || !conversationId) {
       return;
     }
     if (chats.some((chat) => chat.requestId === pendingDraft.requestId)) {
+      clearConversationDraft(conversationId);
       setPendingDraft(null);
     }
-  }, [chats, pendingDraft]);
+  }, [chats, conversationId, pendingDraft]);
 
-  if (!loading && loadError && !conversation) {
+  const liveHandoff =
+    Boolean(conversationId) &&
+    peekLiveChatRun(conversationId)?.sendInFlight === true;
+  const showBootSpinner =
+    Boolean(conversationId) &&
+    loading &&
+    !conversation &&
+    !pendingDraft &&
+    !liveHandoff;
+
+  if (!loading && loadError && !conversation && !liveHandoff) {
     return (
       <div
         className="h-full w-full flex items-center justify-center"
@@ -397,7 +566,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     );
   }
 
-  if (loading || !conversationId || !conversation) {
+  if (showBootSpinner) {
     return (
       <div className="h-full w-full flex items-center justify-center">
         <Spin />
@@ -409,32 +578,40 @@ const ConversationPage: GenieType.FC = memo(() => {
   void rawMessages;
 
   return (
-    <ChatView
-      key={conversationId}
-      conversationId={conversationId}
-      conversationTitle={conversation.title}
-      initialChats={chats}
-      mode={derivedMode}
-      executionMode={executionMode}
-      allowedAgentIds={allowedAgentIds}
-      teamId={teamId}
-      onExecutionModeChange={setExecutionMode}
-      onAllowedAgentIdsChange={setAllowedAgentIds}
-      onTeamIdChange={setTeamId}
-      privacyMode={conversation.privacyMode === true}
-      onPrivacyModeChange={() => void togglePrivacyMode()}
-      initialDraft={
-        pendingDraft
-          ? {
-            requestId: pendingDraft.requestId,
-            inputInfo: pendingDraft.inputInfo,
-          }
-          : undefined
-      }
-      detachedRunning={detachedRunning}
-      onReloadMessages={onReloadMessages}
-      onConversationChanged={refreshConversationMeta}
-    />
+    <div
+      className="h-full w-full"
+      data-testid={conversationId ? undefined : 'new-conversation'}
+    >
+      <ChatView
+        key={`${chatViewInstanceRef.current}-${conversationId ?? `new-${layout?.composerEpoch ?? 0}`}`}
+        conversationId={conversationId}
+        conversationTitle={conversation?.title ?? '新会话'}
+        initialChats={conversationId ? chats : []}
+        mode={derivedMode}
+        executionMode={executionMode}
+        allowedAgentIds={allowedAgentIds}
+        teamId={teamId}
+        onExecutionModeChange={setExecutionMode}
+        onAllowedAgentIdsChange={setAllowedAgentIds}
+        onTeamIdChange={setTeamId}
+        privacyMode={
+          conversation ? conversation.privacyMode === true : composerPrivacy
+        }
+        onPrivacyModeChange={() => void togglePrivacyMode()}
+        initialDraft={
+          conversationId && pendingDraft
+            ? {
+              requestId: pendingDraft.requestId,
+              inputInfo: pendingDraft.inputInfo,
+            }
+            : undefined
+        }
+        detachedRunning={Boolean(conversationId) && detachedRunning}
+        onReloadMessages={onReloadMessages}
+        onConversationChanged={refreshConversationMeta}
+        onEnsureConversation={conversationId ? undefined : ensureConversation}
+      />
+    </div>
   );
 });
 

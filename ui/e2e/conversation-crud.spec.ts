@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createConversationFromSidebar, loginAs } from './helpers/auth';
+import { startPersistedConversation, loginAs } from './helpers/auth';
 
 /**
  * Real E2E against Fake acceptance stack.
@@ -14,7 +14,7 @@ test.describe('conversation-crud', () => {
     await loginAs(page, 'user-a');
     await expect(page).toHaveURL(/\/app/);
 
-    await createConversationFromSidebar(page);
+    await startPersistedConversation(page);
     await expect(page).toHaveURL(/\/app\/chat\//);
     const conversationUrl = page.url();
 
@@ -33,7 +33,7 @@ test.describe('conversation-crud', () => {
       .hover();
     await page.getByRole('button', { name: /删除|delete/i }).first().click();
     await page.getByRole('button', { name: /删除|delete|确定|ok/i }).last().click();
-    // Plan §8.5: delete current conversation → /app (not auto-jump to another chat).
+    // Deleting the open chat returns to the unsaved composer at /app.
     await expect(page).toHaveURL(/\/app$/);
     await expect(page).not.toHaveURL(conversationUrl);
     await expect(page.getByText('E2E renamed title')).toHaveCount(0);

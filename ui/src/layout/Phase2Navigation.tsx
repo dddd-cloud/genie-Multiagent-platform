@@ -1,25 +1,16 @@
 import type { ReactNode } from 'react';
 import { memo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import {
-  CommentOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
+import { TeamOutlined } from '@ant-design/icons';
 import classNames from 'classnames';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 
 const LINKS: Array<{
   to: string;
   label: string;
-  match: 'session' | 'prefix' | 'exact';
+  match: 'prefix' | 'exact';
   icon: ReactNode;
 }> = [
-  {
-    to: '/app',
-    label: '会话',
-    match: 'session',
-    icon: <CommentOutlined />,
-  },
   {
     to: '/app/teams',
     label: '团队',
@@ -32,9 +23,6 @@ function isLinkActive(
   pathname: string,
   link: (typeof LINKS)[number],
 ): boolean {
-  if (link.match === 'session') {
-    return pathname === '/app' || pathname.startsWith('/app/chat');
-  }
   if (link.match === 'exact') {
     return pathname === link.to;
   }

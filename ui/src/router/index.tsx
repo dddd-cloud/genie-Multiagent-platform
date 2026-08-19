@@ -4,16 +4,13 @@ import Layout from '@/layout/index';
 import { Loading } from '@/components';
 import AuthProvider from '@/features/auth/AuthProvider';
 import RequireAuth from '@/features/auth/RequireAuth';
+import { ChatSurfaceSlot } from '@/features/conversation/newConversationPath';
 import UserSettingsProvider from '@/features/userSettings/UserSettingsProvider';
 
-const Home = React.lazy(() => import('@/pages/Home'));
 const LoginPage = React.lazy(() => import('@/pages/Login'));
 const NotFound = React.lazy(() => import('@/components/NotFound'));
 const ConversationLayout = React.lazy(
   () => import('@/features/conversation/ConversationLayout'),
-);
-const ConversationPage = React.lazy(
-  () => import('@/features/conversation/ConversationPage'),
 );
 const AgentListPage = React.lazy(
   () => import('@/features/phase2/agents/AgentListPage'),
@@ -111,11 +108,11 @@ const router = createBrowserRouter([
             children: [
               {
                 index: true,
-                element: Page(<Home />),
+                element: <ChatSurfaceSlot />,
               },
               {
                 path: 'chat/:conversationId',
-                element: Page(<ConversationPage />),
+                element: <ChatSurfaceSlot />,
               },
               {
                 path: 'workspace',

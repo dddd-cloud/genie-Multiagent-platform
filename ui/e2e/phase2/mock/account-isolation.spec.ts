@@ -1,14 +1,14 @@
 import { expect, test } from '@playwright/test';
 import {
-  createConversationFromSidebar,
   loginAsMock,
   logoutMock,
+  startPersistedConversation,
 } from '../helpers';
 
 test.describe('Phase2 account isolation (mock)', () => {
   test('switching user-a → user-b scopes memory and hides prior session', async ({page}) => {
     await loginAsMock(page, 'user-a');
-    await createConversationFromSidebar(page);
+    await startPersistedConversation(page);
     const convUrl = page.url();
     expect(convUrl).toMatch(/\/app\/chat\//);
 
@@ -36,7 +36,7 @@ test.describe('Phase2 account isolation (mock)', () => {
       /当前 userId 作用域：user-b-id/,
     );
 
-    // Prior conversation is not owned by user-b → 404 → redirect home.
+    // Prior conversation is not owned by user-b → 404 → unsaved composer.
     await page.goto(convUrl);
     await expect(page).toHaveURL(/\/app\/?$/, {timeout: 15_000});
   });

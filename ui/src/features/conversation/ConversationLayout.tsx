@@ -1,6 +1,8 @@
 import {
   createContext,
+  lazy,
   memo,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -9,8 +11,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Outlet, useNavigate, useParams } from 'react-router-dom';
-import { Tooltip, message } from 'antd';
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Tooltip, Spin, message } from 'antd';
 import {
   FormOutlined,
   MenuFoldOutlined,
@@ -25,7 +27,6 @@ import UserProfilePanel from '@/features/userSettings/UserProfilePanel';
 import AppNavigation from '@/layout/AppNavigation';
 import { MvpApiError } from '@/services/apiError';
 import {
-  createConversation,
   deleteConversation,
   listConversations,
   updateConversation,
@@ -36,10 +37,16 @@ import {
   initialConversationListState,
 } from './conversationReducer';
 import {
+  isChatSurfacePath,
+  isNewConversationPath,
+} from './newConversationPath';
+import { peekConversationDraft } from './pendingConversationDraft';
+import {
   isUnusedConversation,
-  resolveNewConversationAction,
   unusedConversationIds,
 } from './unusedConversation';
+
+const ConversationPage = lazy(() => import('./ConversationPage'));
 
 const PAGE_SIZE = 20;
 
@@ -55,6 +62,8 @@ export interface ConversationLayoutContextValue {
   discardUnusedDrafts: (exceptId?: string | null) => Promise<void>;
   touch: (id: string) => void;
   privacyMode: boolean;
+  /** Bumped when the user clicks 新会话 so the composer remounts even if already on /app. */
+  composerEpoch: number;
 }
 
 const ConversationLayoutContext =
@@ -88,13 +97,14 @@ const ConversationLayout: GenieType.FC = memo(() => {
   const { user } = useAuth();
   const { preferences, status: preferencesStatus } = useUserSettings();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [composerEpoch, setComposerEpoch] = useState(0);
   const collapseTouchedRef = useRef(false);
   const itemsRef = useRef(state.items);
   itemsRef.current = state.items;
   const conversationIdRef = useRef(conversationId);
-  const creatingRef = useRef(false);
   const privacyMode = false;
 
   const loadPage = useCallback(async (page: number, more = false) => {
@@ -180,7 +190,9 @@ const ConversationLayout: GenieType.FC = memo(() => {
   }, []);
 
   const discardUnusedDrafts = useCallback(async (exceptId?: string | null) => {
-    const ids = unusedConversationIds(itemsRef.current, exceptId);
+    const ids = unusedConversationIds(itemsRef.current, exceptId).filter(
+      (id) => !peekConversationDraft(id),
+    );
     ids.forEach((id) => {
       dispatch({
         type: 'REMOVE',
@@ -212,55 +224,14 @@ const ConversationLayout: GenieType.FC = memo(() => {
     }
   }, [conversationId, discardUnusedDrafts]);
 
-  const handleNew = useCallback(async () => {
-    if (creatingRef.current) {
+  const handleNew = useCallback(() => {
+    setComposerEpoch((epoch) => epoch + 1);
+    if (isNewConversationPath(pathname)) {
       return;
     }
-    creatingRef.current = true;
-    try {
-      const action = resolveNewConversationAction(
-        itemsRef.current,
-        conversationId,
-        privacyMode,
-      );
-      if (action.type === 'noop') {
-        return;
-      }
-      if (action.type === 'reuse') {
-        await discardUnusedDrafts(action.id);
-        navigate(`/app/chat/${action.id}`);
-        return;
-      }
-      await discardUnusedDrafts();
-      const created = await createConversation(null, privacyMode);
-      if (!created) {
-        message.error('创建会话失败');
-        return;
-      }
-      const listItem = toListItem({
-        ...created,
-        lastMessagePreview: null,
-      });
-      dispatch({
-        type: 'UPSERT',
-        item: listItem
-      });
-      navigate(`/app/chat/${created.id}`);
-    } catch (err: unknown) {
-      if (isAuthRequired(err)) {
-        throw err;
-      }
-      if (err instanceof MvpApiError && err.code === 'ACCESS_DENIED') {
-        message.error('无权限创建会话');
-        return;
-      }
-      message.error(
-        err instanceof MvpApiError ? err.message : '创建会话失败',
-      );
-    } finally {
-      creatingRef.current = false;
-    }
-  }, [conversationId, discardUnusedDrafts, navigate, privacyMode]);
+    void discardUnusedDrafts();
+    navigate('/app');
+  }, [discardUnusedDrafts, navigate, pathname]);
 
   const handleRename = useCallback(
     async (id: string, title: string) => {
@@ -392,8 +363,18 @@ const ConversationLayout: GenieType.FC = memo(() => {
       discardUnusedDrafts,
       touch,
       privacyMode,
+      composerEpoch,
     }),
-    [discardUnusedDrafts, reload, remove, state.items, touch, upsert, privacyMode],
+    [
+      composerEpoch,
+      discardUnusedDrafts,
+      reload,
+      remove,
+      state.items,
+      touch,
+      upsert,
+      privacyMode,
+    ],
   );
 
   const layout = (
@@ -469,7 +450,19 @@ const ConversationLayout: GenieType.FC = memo(() => {
           </div>
         )}
         <div className="flex-1 min-w-0 h-full overflow-hidden bg-surface">
-          <Outlet />
+          {isChatSurfacePath(pathname) ? (
+            <Suspense
+              fallback={
+                <div className="h-full w-full flex items-center justify-center">
+                  <Spin />
+                </div>
+              }
+            >
+              <ConversationPage />
+            </Suspense>
+          ) : (
+            <Outlet />
+          )}
         </div>
       </div>
     </ConversationLayoutContext.Provider>

@@ -31,7 +31,7 @@ const AdminGuard: GenieType.FC = memo(() => {
             to="/app"
             className="text-[14px] text-brand hover:text-brand-hover"
           >
-            返回会话
+            返回工作台
           </Link>
         </div>
       </div>

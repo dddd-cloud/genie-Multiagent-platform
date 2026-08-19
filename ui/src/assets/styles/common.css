@@ -2,3 +2,12 @@
   border: none;
   box-shadow: none;
 }
+
+/* Textarea height h=62px: rest at 0.5h, grow to 1.5h, then scroll. */
+.chat-input-textarea.ant-input,
+textarea.chat-input-textarea {
+  min-height: 31px !important;
+  max-height: 93px !important;
+  overflow-y: auto !important;
+  resize: none;
+}
