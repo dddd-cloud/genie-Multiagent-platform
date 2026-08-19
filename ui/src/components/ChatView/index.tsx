@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Modal, message } from 'antd';
+import { Button, Drawer, Modal, message } from 'antd';
+import { FolderOpenOutlined } from '@ant-design/icons';
 import type { HookAPI } from 'antd/es/modal/useModal';
 import classNames from 'classnames';
 import { useMemoizedFn } from 'ahooks';
@@ -58,6 +59,10 @@ import GeneralInput from '@/components/GeneralInput';
 import ActionView from '@/components/ActionView';
 import Logo from '@/components/Logo';
 import PrivacyModeToggle from '@/features/conversation/PrivacyModeToggle';
+import { WorkspacePanel } from '@/features/workspace';
+import WorkspaceMount from '@/layout/mounts/WorkspaceMount';
+import StreamStatusBar from './StreamStatusBar';
+import { useStreamingText } from './useStreamingText';
 
 interface ChatViewProps {
   conversationId: string;
@@ -325,11 +330,13 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const [reconcileHint, setReconcileHint] = useState<string | null>(null);
   const [needManualRefresh, setNeedManualRefresh] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const actionViewRef = ActionView.useActionView();
-  const chatListRef = useRef<PersistedChatItem[]>(initialChats);
-  chatListRef.current = chatList;
+  const chatListRef = useRef<PersistedChatItem[]>(
+    liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
+  );
 
   const relayWheelToChat = useMemoizedFn((event: WheelEvent<HTMLElement>) => {
     const chat = chatRef.current;
@@ -401,18 +408,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const inputDisabled = reconciling;
   const taskRunning = sendInFlight;
 
-  const publishChatList = useMemoizedFn(
-    (updater: (prev: PersistedChatItem[]) => PersistedChatItem[]) => {
-      const prev = peekLiveChatRun(sessionId)?.chatList ?? chatListRef.current;
-      const next = updater(prev);
-      chatListRef.current = next;
-      patchLiveChatRun(sessionId, { chatList: next });
-      if (mountedRef.current) {
-        setChatList(next);
-      }
-      return next;
-    },
-  );
+  const streaming = useStreamingText({
+    sessionId,
+    mountedRef,
+    chatListRef,
+    setChatList,
+  });
+  const publishChatList = useMemoizedFn(streaming.publishChatList);
+  const flushStreamingView = useMemoizedFn(streaming.flushStreamingView);
 
   const stopGeneration = useMemoizedFn(() => {
     stopLiveChatRun(sessionId);
@@ -439,6 +442,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       return;
     }
     setChatList(initialChats);
+    chatListRef.current = initialChats;
   }, [initialChats, sessionId]);
 
   const temporaryChangeTask = useMemoizedFn((tasks: MESSAGE.Task[]) => {
@@ -535,6 +539,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         await sleep(RECONCILE_FLUSH_MS);
         const latest = initialChatsRef.current;
         setChatList(latest);
+        chatListRef.current = latest;
         if (!stillDetachedRunning(latest)) {
           setReconcileHint(null);
           setNeedManualRefresh(false);
@@ -738,7 +743,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           return;
         }
         const { finished, resultMap } = data;
-        // Plan §11.4: apply in receive order, sync — no rAF before settle/reload.
+        // Plan §1.11: reduction stays in receive order; React mirroring is rAF-batched.
         const working = cloneWorkingChat(currentChat);
 
         if (
@@ -959,6 +964,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       }
 
       if (result.kind === 'COMPLETED' || result.kind === 'FAILED') {
+        flushStreamingView();
         stopLoadingForRequest(
           requestId,
           result.kind === 'FAILED'
@@ -979,6 +985,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       }
 
       if (result.kind === 'HTTP_ERROR') {
+        flushStreamingView();
         // Stop local loading only — do not invent FAILED; reload (except AUTH)
         // clears optimistic turns the backend never accepted.
         // Do NOT auto-resend as V1 after Phase2 POST open failure.
@@ -996,6 +1003,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       // INTERRUPTED — plan §11.9/§11.10: never invent DB INTERRUPTED locally;
       // show disconnect hint and reconcile from backend.
+      flushStreamingView();
       const malformed = isMalformedStreamMessage(result.message);
       if (!stoppedByUser) {
         stopLoadingForRequest(requestId, { tip: '' });
@@ -1081,6 +1089,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   }, []);
 
   return (
+    <WorkspaceMount conversationId={conversationId}>
     <div className="h-full w-full flex bg-surface" onWheel={relayWheelToChat}>
       {modalContextHolder}
       <div
@@ -1101,10 +1110,20 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 </div>
               ) : null}
             </div>
-            <PrivacyModeToggle
-              enabled={privacyMode}
-              onToggle={() => onPrivacyModeChange?.()}
-            />
+            <div className="flex shrink-0 items-center gap-8">
+              <PrivacyModeToggle
+                enabled={privacyMode}
+                onToggle={() => onPrivacyModeChange?.()}
+              />
+              <Button
+                size="small"
+                icon={<FolderOpenOutlined />}
+                onClick={() => setWorkspaceOpen(true)}
+                data-testid="workspace-drawer-open"
+              >
+                工作区
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -1193,21 +1212,15 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                   </div>
                 ) : null}
                 {showErrorCard ? (
-                  <div className="mt-8 mb-16 px-12 py-10 rounded-md bg-danger-soft text-danger text-[13px] border border-[rgba(217,45,32,0.12)]">
-                    <div className="font-medium">
-                      {chat.persistedStatus === 'INTERRUPTED'
-                        ? '本次执行已中断，可重新发送'
-                        : '执行失败'}
-                    </div>
-                    {chat.errorMessage ? (
-                      <div className="mt-4">{chat.errorMessage}</div>
-                    ) : null}
-                    {chat.errorCode ? (
-                      <div className="mt-4 text-[12px] opacity-80">
-                        {chat.errorCode}
-                      </div>
-                    ) : null}
-                  </div>
+                  <StreamStatusBar
+                    status={
+                      chat.persistedStatus === 'INTERRUPTED'
+                        ? 'interrupted'
+                        : 'failed'
+                    }
+                    errorMessage={chat.errorMessage ?? undefined}
+                    errorCode={chat.errorCode ?? undefined}
+                  />
                 ) : null}
               </div>
             );
@@ -1275,7 +1288,18 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           onClose={() => changeActionStatus(false)}
         />
       </div>
+      <Drawer
+        title="工作区"
+        placement="right"
+        width={420}
+        open={workspaceOpen}
+        onClose={() => setWorkspaceOpen(false)}
+        destroyOnClose={false}
+      >
+        <WorkspacePanel />
+      </Drawer>
     </div>
+    </WorkspaceMount>
   );
 };
 

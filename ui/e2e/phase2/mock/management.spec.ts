@@ -7,7 +7,8 @@ test.describe('Phase2 management pages (mock)', () => {
   });
 
   test('navigate agents / skills / mcp and create agent', async ({ page }) => {
-    await page.getByTestId('phase2-navigation').getByRole('link', { name: 'Agent' }).click();
+    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'Agent' }).click();
     await expect(page.getByTestId('agent-list-page')).toBeVisible();
     await expect(page.getByText('Research Agent')).toBeVisible();
 
@@ -16,13 +17,13 @@ test.describe('Phase2 management pages (mock)', () => {
     await page.getByTestId('agent-name').fill('E2E Agent');
     await page.getByTestId('agent-description').fill('created by mock e2e');
     await page.getByTestId('agent-save').click();
-    await expect(page).toHaveURL(/\/app\/agents\/agent-/);
+    await expect(page).toHaveURL(/\/app\/(?:settings\/)?agents\/agent-/);
     await expect(page.getByTestId('agent-name')).toHaveValue('E2E Agent');
 
-    await page.getByTestId('phase2-navigation').getByRole('link', { name: 'Skill' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'Skill' }).click();
     await expect(page.getByTestId('skill-list-page')).toBeVisible();
 
-    await page.getByTestId('phase2-navigation').getByRole('link', { name: 'MCP' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'MCP' }).click();
     await expect(page.getByTestId('mcp-list-page')).toBeVisible();
     await expect(page.getByText('Docs MCP')).toBeVisible();
   });

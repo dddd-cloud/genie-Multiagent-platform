@@ -14,19 +14,19 @@ test.describe('Phase2 real E2E smoke', () => {
   test('login → Phase2 nav visible when enabled', async ({ page }) => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
+    await expect(page.getByTestId('phase2-navigation')).toBeVisible();
+    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
     await expect(
-      page.getByTestId('phase2-navigation').getByRole('link', { name: 'Agent' }),
+      page.getByTestId('settings-nav').getByRole('link', { name: 'Agent' }),
     ).toBeVisible();
     await expect(
-      page.getByTestId('phase2-navigation').getByRole('link', { name: 'Skill' }),
+      page.getByTestId('settings-nav').getByRole('link', { name: 'Skill' }),
     ).toBeVisible();
     await expect(
-      page.getByTestId('phase2-navigation').getByRole('link', { name: 'MCP' }),
+      page.getByTestId('settings-nav').getByRole('link', { name: 'MCP' }),
     ).toBeVisible();
     await expect(
-      page
-        .getByTestId('phase2-navigation')
-        .getByRole('link', { name: '本地记忆' }),
+      page.getByTestId('settings-nav').getByRole('link', { name: '本地记忆' }),
     ).toBeVisible();
   });
 });

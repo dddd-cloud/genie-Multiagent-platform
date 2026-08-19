@@ -27,8 +27,16 @@ public class AdminUserController {
     }
     @GetMapping
     public ApiResponse<PageResponse<AdminUserResponse>> list(@RequestParam(defaultValue = "1") int page,
-                                                               @RequestParam(defaultValue = "20") int pageSize) {
-        return new ApiResponse<>("OK", "success", adminUserService.list(currentUserProvider.requireCurrentUser().tenantId(), page, pageSize));
+                                                               @RequestParam(defaultValue = "20") int pageSize,
+                                                               @RequestParam(required = false) String keyword,
+                                                               @RequestParam(required = false) String role,
+                                                               @RequestParam(required = false) String status) {
+        return new ApiResponse<>("OK", "success", adminUserService.list(
+            currentUserProvider.requireCurrentUser().tenantId(), page, pageSize, keyword, role, status));
+    }
+    @GetMapping("/{userId}")
+    public ApiResponse<AdminUserResponse> get(@PathVariable String userId) {
+        return new ApiResponse<>("OK", "success", adminUserService.get(currentUserProvider.requireCurrentUser().tenantId(), userId));
     }
     @PostMapping
     public ApiResponse<AdminUserResponse> create(@RequestBody CreateAdminUserRequest request) {

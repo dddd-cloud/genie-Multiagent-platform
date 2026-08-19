@@ -409,34 +409,32 @@ const ConversationPage: GenieType.FC = memo(() => {
   void rawMessages;
 
   return (
-    <>
-      <ChatView
-        key={conversationId}
-        conversationId={conversationId}
-        conversationTitle={conversation.title}
-        initialChats={chats}
-        mode={derivedMode}
-        executionMode={executionMode}
-        allowedAgentIds={allowedAgentIds}
-        teamId={teamId}
-        onExecutionModeChange={setExecutionMode}
-        onAllowedAgentIdsChange={setAllowedAgentIds}
-        onTeamIdChange={setTeamId}
-        privacyMode={conversation.privacyMode === true}
-        onPrivacyModeChange={() => void togglePrivacyMode()}
-        initialDraft={
-          pendingDraft
-            ? {
-              requestId: pendingDraft.requestId,
-              inputInfo: pendingDraft.inputInfo,
-            }
-            : undefined
-        }
-        detachedRunning={detachedRunning}
-        onReloadMessages={onReloadMessages}
-        onConversationChanged={refreshConversationMeta}
-      />
-    </>
+    <ChatView
+      key={conversationId}
+      conversationId={conversationId}
+      conversationTitle={conversation.title}
+      initialChats={chats}
+      mode={derivedMode}
+      executionMode={executionMode}
+      allowedAgentIds={allowedAgentIds}
+      teamId={teamId}
+      onExecutionModeChange={setExecutionMode}
+      onAllowedAgentIdsChange={setAllowedAgentIds}
+      onTeamIdChange={setTeamId}
+      privacyMode={conversation.privacyMode === true}
+      onPrivacyModeChange={() => void togglePrivacyMode()}
+      initialDraft={
+        pendingDraft
+          ? {
+            requestId: pendingDraft.requestId,
+            inputInfo: pendingDraft.inputInfo,
+          }
+          : undefined
+      }
+      detachedRunning={detachedRunning}
+      onReloadMessages={onReloadMessages}
+      onConversationChanged={refreshConversationMeta}
+    />
   );
 });
 

@@ -1,7 +1,12 @@
+import {
+  assertFileBytes,
+  normalizeFileName,
+} from '@/platform/workspace/types';
 import type {
   MainToWorkerMessage,
   PyodideRuntimeState,
   WorkerToMainMessage,
+  WorkspaceExecutionInputFile,
 } from './types';
 
 export type WorkerFactory = () => Worker;
@@ -18,6 +23,29 @@ interface PendingExecute {
   resolve: (msg: WorkerToMainMessage) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+}
+
+function validatedWorkspaceFiles(
+  files: readonly WorkspaceExecutionInputFile[] | undefined,
+): readonly WorkspaceExecutionInputFile[] {
+  if (!files || files.length === 0) return [];
+  if (files.length > 32) throw new Error('too many workspace input files');
+  let totalBytes = 0;
+  const names = new Set<string>();
+  return files.map((file) => {
+    if (!file || typeof file !== 'object' || typeof file.name !== 'string' || typeof file.mimeType !== 'string') {
+      throw new Error('invalid workspace input file');
+    }
+    const name = normalizeFileName(file.name);
+    if (names.has(name)) throw new Error('duplicate workspace input file name');
+    names.add(name);
+    assertFileBytes(file.bytes);
+    totalBytes += file.bytes.byteLength;
+    if (totalBytes > 50 * 1024 * 1024) {
+      throw new Error('workspace input files exceed execution limit');
+    }
+    return { name, mimeType: file.mimeType.trim() || 'application/octet-stream', bytes: file.bytes.slice(0) };
+  });
 }
 
 /**
@@ -128,7 +156,9 @@ export class PyodideRuntimeManager {
     zipBytes: ArrayBuffer,
     timeoutMs: number,
     abortSignal?: AbortSignal,
+    workspaceFiles?: readonly WorkspaceExecutionInputFile[],
   ): Promise<WorkerToMainMessage> {
+    const safeWorkspaceFiles = validatedWorkspaceFiles(workspaceFiles);
     await this.ensureReady();
 
     return new Promise<WorkerToMainMessage>((resolve, reject) => {
@@ -204,6 +234,7 @@ export class PyodideRuntimeManager {
           executionId,
           entrypointName,
           zipBytes: zipBytes.slice(0),
+          workspaceFiles: safeWorkspaceFiles,
           timeoutMs,
         });
       };
@@ -297,7 +328,15 @@ export class PyodideRuntimeManager {
   };
 
   private post(msg: MainToWorkerMessage): void {
-    this.worker?.postMessage(msg, msg.type === 'execute' ? [msg.zipBytes] : []);
+    if (msg.type !== 'execute') {
+      this.worker?.postMessage(msg);
+      return;
+    }
+    const transfers = [
+      msg.zipBytes,
+      ...(msg.workspaceFiles?.map((file) => file.bytes) ?? []),
+    ];
+    this.worker?.postMessage(msg, transfers);
   }
 }
 

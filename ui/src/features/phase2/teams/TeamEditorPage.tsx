@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Modal, Space, Spin, Typography, message } from 'antd';
 import type { Phase2AgentResponse } from '@/contracts/phase2';
 import { listAgents } from '@/services/phase2/agents';
@@ -27,6 +27,8 @@ const TeamEditorPage: GenieType.FC = memo(() => {
   const { teamId } = useParams<{ teamId?: string }>();
   const isNew = !teamId || teamId === 'new';
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationDraft = (location.state as { draft?: TeamFormState } | null)?.draft;
 
   const [form, setForm] = useState<TeamFormState>(emptyTeamFormState());
   const [agents, setAgents] = useState<Phase2AgentResponse[]>([]);
@@ -39,7 +41,7 @@ const TeamEditorPage: GenieType.FC = memo(() => {
   const loadTeam = useCallback(
     async (signal?: AbortSignal) => {
       if (isNew || !teamId) {
-        setForm(emptyTeamFormState());
+        setForm(locationDraft ?? emptyTeamFormState());
         setVersionConflict(false);
         return;
       }
@@ -59,7 +61,7 @@ const TeamEditorPage: GenieType.FC = memo(() => {
         setLoading(false);
       }
     },
-    [isNew, teamId],
+    [isNew, teamId, locationDraft],
   );
 
   useEffect(() => {

@@ -6,7 +6,8 @@ test.describe('Phase2 MCP credential security (mock)', () => {
     const secret = `e2e-secret-${Date.now()}`;
     await loginAsMock(page, 'user-a');
 
-    await page.getByTestId('phase2-navigation').getByRole('link', { name: 'MCP' }).click();
+    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'MCP' }).click();
     await page.getByRole('button', { name: /新建 MCP/i }).click();
     await expect(page.getByTestId('mcp-editor-page')).toBeVisible();
 
@@ -16,7 +17,7 @@ test.describe('Phase2 MCP credential security (mock)', () => {
     await page.getByTestId('mcp-credential').fill(secret);
     await page.getByTestId('mcp-save').click();
 
-    await expect(page).toHaveURL(/\/app\/mcp\/mcp-/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/app\/(?:settings\/)?mcp\/mcp-/, { timeout: 15_000 });
     expect(page.url()).not.toContain(secret);
 
     const storageBlob = await page.evaluate(() => {

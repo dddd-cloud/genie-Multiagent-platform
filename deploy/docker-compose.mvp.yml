@@ -128,6 +128,7 @@ services:
       - mvp
     environment:
       UV_LINK_MODE: copy
+      GENIE_INTERNAL_AGENT_TOKEN: ${GENIE_INTERNAL_AGENT_TOKEN:?required}
     depends_on:
       genie-backend:
         condition: service_started

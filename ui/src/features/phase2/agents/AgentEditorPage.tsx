@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Modal, Space, Spin, Typography, message } from 'antd';
 import type {
   Phase2ModelResponse,
@@ -33,12 +33,18 @@ import {
   type AgentFormState,
 } from './agentFormModel';
 
+function isAgentDraft(value: unknown): value is AgentFormState {
+  return Boolean(value && typeof value === 'object' && 'skillIds' in (value as object));
+}
+
 const { Title, Text } = Typography;
 
 const AgentEditorPage: GenieType.FC = memo(() => {
   const { agentId } = useParams<{ agentId?: string }>();
   const isNew = !agentId || agentId === 'new';
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationDraft = (location.state as { draft?: unknown } | null)?.draft;
 
   const [form, setForm] = useState<AgentFormState>(emptyAgentFormState());
   const [models, setModels] = useState<Phase2ModelResponse[]>([]);
@@ -68,7 +74,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
   const loadAgent = useCallback(
     async (signal?: AbortSignal) => {
       if (isNew || !agentId) {
-        setForm(emptyAgentFormState());
+        setForm(isAgentDraft(locationDraft) ? locationDraft : emptyAgentFormState());
         setVersionConflict(false);
         return;
       }
@@ -88,7 +94,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
         setLoading(false);
       }
     },
-    [agentId, isNew],
+    [agentId, isNew, locationDraft],
   );
 
   useEffect(() => {

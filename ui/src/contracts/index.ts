@@ -37,4 +37,24 @@ export type {
 } from './snapshot';
 export type { MvpErrorCode } from './errors';
 export { MVP_ERROR_CODES } from './errors';
+export type {
+  ExecutionModePreference,
+  StreamRenderMode,
+  UiLocale,
+  UserPreferences,
+  UserPreferencesPatch,
+  UserSettingsResponse,
+} from './settings';
+export {
+  EXECUTION_MODE_PREFERENCES,
+  STREAM_RENDER_MODES,
+  UI_LOCALES,
+} from './settings';
+export type {
+  UsageTotals,
+  UsageDailyPoint,
+  UsageSummaryResponse,
+  UsageUserRow,
+  UsageRangeQuery,
+} from './usage';
 export * from './phase2';

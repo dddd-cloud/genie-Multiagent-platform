@@ -4,7 +4,8 @@ import { loginAsMock, setPhase2TestFlags } from '../helpers';
 test.describe('Phase2 version conflict UI (mock)', () => {
   test('forceVersionConflict shows reload alert on agent save', async ({page}) => {
     await loginAsMock(page, 'user-a');
-    await page.getByTestId('phase2-navigation').getByRole('link', { name: 'Agent' }).click();
+    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'Agent' }).click();
     await page.getByRole('button', { name: '编辑' }).first().click();
     await expect(page.getByTestId('agent-editor-page')).toBeVisible();
 

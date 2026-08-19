@@ -6,6 +6,7 @@
 # Date:   2025/7/7
 # =====================
 import hashlib
+import json
 
 
 from typing import Dict, Optional, Literal, List
@@ -51,7 +52,24 @@ class FileRequest(BaseModel):
 
 
 def get_file_id(request_id: str, file_name: str) -> str:
-    return hashlib.md5((request_id + file_name).encode("utf-8")).hexdigest()
+    payload = json.dumps(
+        [request_id, file_name],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def get_file_id_legacy(request_id: str, file_name: str) -> str:
+    return hashlib.md5(f"{request_id}{file_name}".encode("utf-8")).hexdigest()
+
+
+def file_ids_for_lookup(request_id: str, file_name: str) -> List[str]:
+    newest = get_file_id(request_id, file_name)
+    legacy = get_file_id_legacy(request_id, file_name)
+    if newest == legacy:
+        return [newest]
+    return [newest, legacy]
 
 
 class FileListRequest(BaseModel):

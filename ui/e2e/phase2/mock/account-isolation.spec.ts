@@ -13,9 +13,10 @@ test.describe('Phase2 account isolation (mock)', () => {
     expect(convUrl).toMatch(/\/app\/chat\//);
 
     await page
-      .getByTestId('phase2-navigation')
-      .getByRole('link', { name: '本地记忆' })
+      .getByTestId('app-navigation')
+      .getByRole('link', { name: '设置中心' })
       .click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: '本地记忆' }).click();
     await page.getByTestId('memory-advanced-toggle').click();
     await expect(page.getByTestId('memory-account-scope')).toHaveText(
       /当前 userId 作用域：user-a-id/,
@@ -26,9 +27,10 @@ test.describe('Phase2 account isolation (mock)', () => {
     await expect(page.getByText(/User B|user-b/i).first()).toBeVisible();
 
     await page
-      .getByTestId('phase2-navigation')
-      .getByRole('link', { name: '本地记忆' })
+      .getByTestId('app-navigation')
+      .getByRole('link', { name: '设置中心' })
       .click();
+    await page.getByTestId('settings-nav').getByRole('link', { name: '本地记忆' }).click();
     await page.getByTestId('memory-advanced-toggle').click();
     await expect(page.getByTestId('memory-account-scope')).toHaveText(
       /当前 userId 作用域：user-b-id/,

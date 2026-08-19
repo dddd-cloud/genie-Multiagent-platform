@@ -125,10 +125,10 @@ public class FileTool implements BaseTool {
             return null;
         }
         RequestBody body = RequestBody.create(JSON.toJSONString(fileRequest), mediaType);
-        Request request = new Request.Builder()
+        Request request = withInternalFileToken(new Request.Builder()
                 .url(url)
                 .post(body)
-                .addHeader("Content-Type", "application/json")
+                .addHeader("Content-Type", "application/json"), applicationContext)
                 .build();
         try {
             log.info("{} file tool upload request {}", agentContext.getRequestId(), JSON.toJSONString(fileRequest));
@@ -211,10 +211,10 @@ public class FileTool implements BaseTool {
         // 适配多轮对话
         getFileRequest.setRequestId(agentContext.getSessionId());
         RequestBody body = RequestBody.create(JSON.toJSONString(getFileRequest), mediaType);
-        Request request = new Request.Builder()
+        Request request = withInternalFileToken(new Request.Builder()
                 .url(url)
                 .post(body)
-                .addHeader("Content-Type", "application/json")
+                .addHeader("Content-Type", "application/json"), applicationContext)
                 .build();
         try {
             log.info("{} file tool get request {}", agentContext.getRequestId(), JSON.toJSONString(getFileRequest));
@@ -259,6 +259,17 @@ public class FileTool implements BaseTool {
             log.error("{} get file error", agentContext.getRequestId(), e);
         }
         return null;
+    }
+
+    private Request.Builder withInternalFileToken(Request.Builder builder, ApplicationContext applicationContext) {
+        String token = applicationContext.getEnvironment().getProperty("GENIE_INTERNAL_FILE_TOKEN");
+        if (token == null || token.isBlank()) {
+            token = applicationContext.getEnvironment().getProperty("GENIE_INTERNAL_AGENT_TOKEN");
+        }
+        if (token != null && !token.isBlank()) {
+            builder.addHeader("X-Genie-Internal-File-Token", token.trim());
+        }
+        return builder;
     }
 
     private String getUrlContent(String url) {

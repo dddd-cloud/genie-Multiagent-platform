@@ -92,6 +92,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/v1/auth/logout",
                     "/api/v1/users/me",
+                    "/api/v1/me/**",
                     "/api/v1/conversations/**",
                     "/data/**",
                     "/web/api/v1/gpt/**",

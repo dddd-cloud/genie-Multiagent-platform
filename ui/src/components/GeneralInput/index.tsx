@@ -1,7 +1,14 @@
-import React, { useMemo, useRef, useState, type ReactNode } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Input, Button, Tooltip } from "antd";
 import classNames from "classnames";
 import { TextAreaRef } from "antd/es/input/TextArea";
+import { useUserSettings } from "@/features/userSettings/useUserSettings";
 import { getOS } from "@/utils";
 
 const { TextArea } = Input;
@@ -32,8 +39,10 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     running,
     onStop,
   } = props;
+  const { preferences, status: preferencesStatus } = useUserSettings();
   const [question, setQuestion] = useState<string>("");
   const [deepThink, setDeepThink] = useState<boolean>(false);
+  const deepThinkTouchedRef = useRef(false);
   const textareaRef = useRef<TextAreaRef>(null);
   const tempData = useRef<{
     cmdPress?: boolean;
@@ -44,7 +53,18 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     setQuestion(e.target.value);
   };
 
+  /**
+   * The saved default is applied only once preferences are known to be loaded, and never after the
+   * user has flipped the toggle — a late response must not undo their choice.
+   */
+  useEffect(() => {
+    if (preferencesStatus === 'ready' && !deepThinkTouchedRef.current) {
+      setDeepThink(preferences.defaultDeepThink);
+    }
+  }, [preferences.defaultDeepThink, preferencesStatus]);
+
   const changeThinkStatus = () => {
+    deepThinkTouchedRef.current = true;
     setDeepThink(!deepThink);
   };
 

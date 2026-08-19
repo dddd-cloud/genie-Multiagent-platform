@@ -2,12 +2,8 @@ import type { ReactNode } from 'react';
 import { memo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  ApiOutlined,
   CommentOutlined,
-  DatabaseOutlined,
-  RobotOutlined,
   TeamOutlined,
-  ToolOutlined,
 } from '@ant-design/icons';
 import classNames from 'classnames';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
@@ -25,34 +21,10 @@ const LINKS: Array<{
     icon: <CommentOutlined />,
   },
   {
-    to: '/app/agents',
-    label: 'Agent',
-    match: 'prefix',
-    icon: <RobotOutlined />,
-  },
-  {
     to: '/app/teams',
     label: '团队',
     match: 'prefix',
     icon: <TeamOutlined />,
-  },
-  {
-    to: '/app/skills',
-    label: 'Skill',
-    match: 'prefix',
-    icon: <ToolOutlined />,
-  },
-  {
-    to: '/app/mcp',
-    label: 'MCP',
-    match: 'prefix',
-    icon: <ApiOutlined />,
-  },
-  {
-    to: '/app/settings/memory',
-    label: '本地记忆',
-    match: 'exact',
-    icon: <DatabaseOutlined />,
   },
 ];
 

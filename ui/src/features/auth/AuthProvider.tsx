@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { UserResponse } from '@/contracts';
+import { resetUserScopedState } from '@/features/userSettings/userScopedReset';
+import { clearWorkspaceForUser } from '@/platform/workspace';
 import { MvpApiError } from '@/services/apiError';
 import { showMessage } from '@/utils';
 import { abortAllActiveSse } from '@/utils/querySSE';
@@ -23,6 +25,18 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [bootNonce, setBootNonce] = useState(0);
   const bootingRef = useRef(true);
   const authEpochRef = useRef(0);
+  const userRef = useRef<UserResponse | null>(null);
+  userRef.current = user;
+
+  const clearWorkspaceOnLogout = (userId?: string) => {
+    if (!userId) return;
+    void clearWorkspaceForUser(userId);
+    try {
+      localStorage.removeItem(`joyagent.workspaceId.${userId}`);
+    } catch {
+      // Ignore quota / private-mode storage errors during logout.
+    }
+  };
 
   const refreshAnonymousCsrf = useCallback(async () => {
     clearCsrf();
@@ -37,9 +51,11 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     authEpochRef.current += 1;
     // Plan §7.5 / §11.10: cancel in-flight SSE before navigating away.
     abortAllActiveSse();
+    clearWorkspaceOnLogout(userRef.current?.id);
     setUser(null);
     setStatus('unauthenticated');
     setBootError(null);
+    resetUserScopedState();
 
     if (bootingRef.current) {
       // Boot path: KEEP csrf (already fetched).
@@ -152,9 +168,11 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch {
       // Still clear local session even if logout request fails.
     }
+    clearWorkspaceOnLogout(userRef.current?.id);
     setUser(null);
     setStatus('unauthenticated');
     clearCsrf();
+    resetUserScopedState();
     await refreshAnonymousCsrf();
     navigate('/login', { replace: true });
   }, [navigate, refreshAnonymousCsrf]);

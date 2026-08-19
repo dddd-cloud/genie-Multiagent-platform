@@ -18,6 +18,8 @@ import {
 } from './PyodideRuntimeManager';
 import { parseBrowserSkillExecutionSignal } from './signal';
 import type { WorkerToMainMessage } from './types';
+import { getBoundWorkspaceExecutionContext } from '@/features/workspace/executionBind';
+import { createWorkspaceExecutionFileBridge } from '@/services/workspace/workspaceExecutionFiles';
 
 export interface BrowserSkillExecutionRunnerOptions {
   runtime?: PyodideRuntimeManager;
@@ -117,13 +119,33 @@ export class BrowserSkillExecutionRunner {
       // Main-thread defensive unpack + manifest bind before Worker.
       validateSkillBundleAgainstSignal(zipBytes, signal);
 
+      const bind = getBoundWorkspaceExecutionContext();
+      const bridge = bind
+        ? createWorkspaceExecutionFileBridge({
+            service: bind.service,
+            scope: bind.scope,
+            fileIds: bind.fileIds,
+          })
+        : null;
+      const workspaceFiles = bridge
+        ? await bridge.loadInputFiles(signal, controller.signal)
+        : undefined;
+
       const workerMsg = await this.runtime.execute(
         signal.executionId,
         signal.entrypointName,
         zipBytes,
         signal.timeoutMs,
         controller.signal,
+        workspaceFiles,
       );
+      if (bridge && workerMsg.type === 'result' && workerMsg.outputFiles?.length) {
+        try {
+          await bridge.saveOutputFiles(signal, workerMsg.outputFiles, controller.signal);
+        } catch {
+          // Output persistence must not hide a successful Python result.
+        }
+      }
       const result = toResult(signal.executionId, workerMsg);
       this.finishedIds.add(signal.executionId);
       try {

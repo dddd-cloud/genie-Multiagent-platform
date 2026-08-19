@@ -31,12 +31,39 @@ public class AdminUserService {
         this.passwordEncoder = passwordEncoder; this.clock = clock;
     }
 
-    public PageResponse<AdminUserResponse> list(String tenantId, int page, int pageSize) {
+    private static final int MAX_KEYWORD_LENGTH = 64;
+
+    public PageResponse<AdminUserResponse> list(String tenantId, int page, int pageSize,
+                                                String keyword, String role, String status) {
         if (page < 1 || pageSize < 1 || pageSize > 100) throw new UserValidationException("invalid page");
-        List<UserEntity> rows = userMapper.listByTenant(tenantId, (page - 1) * pageSize, pageSize + 1);
+        List<UserEntity> rows = userMapper.searchByTenant(tenantId, keywordPattern(keyword),
+            parse(role, UserRole.class, "role"), parse(status, UserStatus.class, "status"),
+            (page - 1) * pageSize, pageSize + 1);
         boolean hasMore = rows.size() > pageSize;
         if (hasMore) rows = rows.subList(0, pageSize);
         return new PageResponse<>(rows.stream().map(this::response).toList(), page, pageSize, hasMore);
+    }
+
+    public AdminUserResponse get(String tenantId, String userId) {
+        return response(requireUser(tenantId, userId));
+    }
+
+    /** Escapes LIKE metacharacters so an admin searching for "a_b" does not match "axb". */
+    private static String keywordPattern(String keyword) {
+        if (keyword == null || keyword.isBlank()) return null;
+        String trimmed = keyword.trim();
+        if (trimmed.length() > MAX_KEYWORD_LENGTH) throw new UserValidationException("keyword is too long");
+        String escaped = trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return "%" + escaped + "%";
+    }
+
+    private static <E extends Enum<E>> String parse(String raw, Class<E> type, String field) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return Enum.valueOf(type, raw.trim()).name();
+        } catch (IllegalArgumentException ex) {
+            throw new UserValidationException("invalid " + field);
+        }
     }
 
     @Transactional

@@ -23,12 +23,27 @@ public interface UserMapper {
     long countAll();
 
     @Select("SELECT id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version "
-        + "FROM app_user WHERE tenant_id = #{tenantId} ORDER BY created_at DESC, id DESC LIMIT #{limit} OFFSET #{offset}")
-    List<UserEntity> listByTenant(@Param("tenantId") String tenantId, @Param("offset") int offset, @Param("limit") int limit);
-
-    @Select("SELECT id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version "
         + "FROM app_user WHERE id = #{userId} AND tenant_id = #{tenantId}")
     UserEntity findByIdAndTenantId(@Param("userId") String userId, @Param("tenantId") String tenantId);
+
+    /**
+     * Admin list with optional filters. The keyword pattern is built by the caller so LIKE wildcards
+     * inside the raw keyword can be escaped before they reach SQL.
+     */
+    @Select("<script>"
+        + "SELECT id, tenant_id, username, display_name, password_hash, role, status, created_at, updated_at, version "
+        + "FROM app_user WHERE tenant_id = #{tenantId} "
+        + "<if test='keywordPattern != null'>AND (username LIKE #{keywordPattern} OR display_name LIKE #{keywordPattern}) </if>"
+        + "<if test='role != null'>AND role = #{role} </if>"
+        + "<if test='status != null'>AND status = #{status} </if>"
+        + "ORDER BY created_at DESC, id DESC LIMIT #{limit} OFFSET #{offset}"
+        + "</script>")
+    List<UserEntity> searchByTenant(@Param("tenantId") String tenantId,
+                                    @Param("keywordPattern") String keywordPattern,
+                                    @Param("role") String role,
+                                    @Param("status") String status,
+                                    @Param("offset") int offset,
+                                    @Param("limit") int limit);
 
     @Update("UPDATE app_user SET status = #{status}, updated_at = #{updatedAt}, version = version + 1 "
         + "WHERE id = #{userId} AND tenant_id = #{tenantId}")

@@ -1,4 +1,4 @@
-import { useState, useCallback, memo, useRef } from 'react';
+import { useState, useCallback, memo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { message, Image } from 'antd';
 import classNames from 'classnames';
@@ -15,6 +15,7 @@ import {
 } from '@/utils/constants';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import ExecutionModeSelector from '@/features/phase2/executionMode/ExecutionModeSelector';
+import { useUserSettings } from '@/features/userSettings/useUserSettings';
 import type { ExecutionMode } from '@/contracts';
 import { MvpApiError } from '@/services/apiError';
 import { createConversation } from './api';
@@ -27,6 +28,7 @@ type HomeProps = Record<string, never>;
 const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
   const navigate = useNavigate();
   const layout = useConversationLayout();
+  const { preferences, status: preferencesStatus } = useUserSettings();
   const [inputInfo, setInputInfo] = useState<CHAT.TInputInfo>({
     message: '',
     deepThink: false,
@@ -45,6 +47,29 @@ const ConversationHome: GenieType.FC<HomeProps> = memo(() => {
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('AUTO');
   const [allowedAgentIds, setAllowedAgentIds] = useState<string[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
+  const preferencesAppliedRef = useRef(false);
+
+  /**
+   * Saved defaults seed the picker once preferences arrive, and only on an untouched form: this is a
+   * starting point for the next send, not a lock on what the user chose here.
+   */
+  useEffect(() => {
+    if (preferencesStatus !== 'ready' || preferencesAppliedRef.current) {
+      return;
+    }
+    preferencesAppliedRef.current = true;
+    setExecutionMode(preferences.defaultExecutionMode);
+    const preferred = productList.find(
+      (item) => item.type === preferences.defaultOutputStyle,
+    );
+    if (preferred) {
+      setProduct(preferred);
+    }
+  }, [
+    preferences.defaultExecutionMode,
+    preferences.defaultOutputStyle,
+    preferencesStatus,
+  ]);
 
   const showDetail = useCallback((modelInfo: CHAT.ModelInfo) => {
     setCurModel(modelInfo);

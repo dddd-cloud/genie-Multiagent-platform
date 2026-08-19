@@ -9,10 +9,11 @@ test.describe('Phase2 real management pages', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
+    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
   });
 
   test('agents / skills / mcp load; create skill when API allows', async ({page}) => {
-    const nav = page.getByTestId('phase2-navigation');
+    const nav = page.getByTestId('settings-nav');
 
     await nav.getByRole('link', { name: 'Agent' }).click();
     await expect(page.getByTestId('agent-list-page')).toBeVisible();
@@ -38,7 +39,7 @@ test.describe('Phase2 real management pages', () => {
 
     // Create when API allows; stay resilient if backend rejects (soft).
     const created = await page
-      .waitForURL(/\/app\/skills\/(?!new$)[^/]+/, { timeout: 15_000 })
+      .waitForURL(/\/app\/(?:settings\/)?skills\/(?!new$)[^/]+/, { timeout: 15_000 })
       .then(() => true)
       .catch(() => false);
     if (created) {

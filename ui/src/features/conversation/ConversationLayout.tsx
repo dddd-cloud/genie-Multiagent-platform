@@ -7,15 +7,22 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
-import { Button, message } from 'antd';
-import { FormOutlined } from '@ant-design/icons';
+import { Tooltip, message } from 'antd';
+import {
+  FormOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+} from '@ant-design/icons';
 import type { ConversationListItem } from '@/contracts';
 import { useAuth } from '@/features/auth/useAuth';
-import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import LocalMemoryProvider from '@/features/phase2/localMemory/LocalMemoryProvider';
-import Phase2Navigation from '@/layout/Phase2Navigation';
+import { useUserSettings } from '@/features/userSettings/useUserSettings';
+import LogoutButton from '@/features/userSettings/LogoutButton';
+import UserProfilePanel from '@/features/userSettings/UserProfilePanel';
+import AppNavigation from '@/layout/AppNavigation';
 import { MvpApiError } from '@/services/apiError';
 import {
   createConversation,
@@ -78,9 +85,12 @@ const ConversationLayout: GenieType.FC = memo(() => {
     conversationReducer,
     initialConversationListState,
   );
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { preferences, status: preferencesStatus } = useUserSettings();
   const navigate = useNavigate();
   const { conversationId } = useParams<{ conversationId?: string }>();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const collapseTouchedRef = useRef(false);
   const itemsRef = useRef(state.items);
   itemsRef.current = state.items;
   const conversationIdRef = useRef(conversationId);
@@ -358,9 +368,20 @@ const ConversationLayout: GenieType.FC = memo(() => {
     [conversationId, navigate],
   );
 
-  const handleLogout = useCallback(async () => {
-    await logout();
-  }, [logout]);
+  /**
+   * The saved default is applied only once preferences are known to be loaded, and never on top of a
+   * collapse the user already performed in this session.
+   */
+  useEffect(() => {
+    if (preferencesStatus === 'ready' && !collapseTouchedRef.current) {
+      setSidebarCollapsed(preferences.sidebarCollapsed);
+    }
+  }, [preferences.sidebarCollapsed, preferencesStatus]);
+
+  const toggleSidebar = useCallback(() => {
+    collapseTouchedRef.current = true;
+    setSidebarCollapsed((prev) => !prev);
+  }, []);
 
   const contextValue = useMemo<ConversationLayoutContextValue>(
     () => ({
@@ -378,43 +399,75 @@ const ConversationLayout: GenieType.FC = memo(() => {
   const layout = (
     <ConversationLayoutContext.Provider value={contextValue}>
       <div className="h-full w-full flex bg-page">
-        <div className="h-full w-[272px] shrink-0 flex flex-col bg-sidebar border-r border-border">
-          <div className="w-full px-14 py-12 border-b border-border flex items-center justify-between gap-8">
-            <div className="min-w-0">
-              <div className="text-[12px] text-text-secondary leading-[18px]">
-                当前用户
-              </div>
-              <div className="text-[14px] font-medium text-text-primary truncate leading-[22px]">
-                {user?.displayName || user?.username || '—'}
+        {sidebarCollapsed ? (
+          <div className="h-full w-[52px] shrink-0 flex flex-col items-center gap-4 bg-sidebar border-r border-border py-12">
+            <Tooltip title="展开侧边栏" placement="right">
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label="展开侧边栏"
+                aria-expanded={false}
+                data-testid="sidebar-toggle"
+                className="flex h-32 w-32 items-center justify-center rounded-[8px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
+              >
+                <MenuUnfoldOutlined className="text-[16px]" />
+              </button>
+            </Tooltip>
+            <Tooltip title="新会话" placement="right">
+              <button
+                type="button"
+                onClick={handleNew}
+                aria-label="新会话"
+                className="flex h-32 w-32 items-center justify-center rounded-[8px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
+              >
+                <FormOutlined className="text-[16px]" />
+              </button>
+            </Tooltip>
+          </div>
+        ) : (
+          <div className="h-full w-[272px] shrink-0 flex flex-col bg-sidebar border-r border-border">
+            <div className="w-full px-14 py-12 border-b border-border flex items-center justify-between gap-8">
+              <UserProfilePanel compact />
+              <div className="flex shrink-0 items-center gap-4">
+                <LogoutButton />
+                <Tooltip title="收起侧边栏">
+                  <button
+                    type="button"
+                    onClick={toggleSidebar}
+                    aria-label="收起侧边栏"
+                    aria-expanded
+                    data-testid="sidebar-toggle"
+                    className="flex h-24 w-24 items-center justify-center rounded-[6px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
+                  >
+                    <MenuFoldOutlined className="text-[14px]" />
+                  </button>
+                </Tooltip>
               </div>
             </div>
-            <Button size="small" onClick={handleLogout}>
-              退出
-            </Button>
+            <div className="w-full px-10 pt-10 pb-8 border-b border-border flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={handleNew}
+                aria-label="新会话"
+                className="w-full flex items-center gap-8 rounded-[8px] px-10 py-8 text-[14px] leading-[22px] text-text-primary hover:bg-[#F5F5F7] transition-colors duration-150"
+              >
+                <FormOutlined className="text-[15px] text-text-secondary" />
+                <span>新会话</span>
+              </button>
+            </div>
+            <AppNavigation />
+            <div className="flex-1 min-h-0 w-full">
+              <ConversationSidebar
+                state={state}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                onLoadMore={handleLoadMore}
+                onRetry={() => void reload()}
+                onSelect={handleSelect}
+              />
+            </div>
           </div>
-          <div className="w-full px-10 pt-10 pb-8 border-b border-border flex flex-col gap-4">
-            <button
-              type="button"
-              onClick={handleNew}
-              aria-label="新会话"
-              className="w-full flex items-center gap-8 rounded-[8px] px-10 py-8 text-[14px] leading-[22px] text-text-primary hover:bg-[#F5F5F7] transition-colors duration-150"
-            >
-              <FormOutlined className="text-[15px] text-text-secondary" />
-              <span>新会话</span>
-            </button>
-          </div>
-          {isPhase2Enabled() ? <Phase2Navigation /> : null}
-          <div className="flex-1 min-h-0 w-full">
-            <ConversationSidebar
-              state={state}
-              onRename={handleRename}
-              onDelete={handleDelete}
-              onLoadMore={handleLoadMore}
-              onRetry={() => void reload()}
-              onSelect={handleSelect}
-            />
-          </div>
-        </div>
+        )}
         <div className="flex-1 min-w-0 h-full overflow-hidden bg-surface">
           <Outlet />
         </div>

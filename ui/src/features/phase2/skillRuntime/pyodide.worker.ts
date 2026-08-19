@@ -3,10 +3,15 @@
  * Pyodide runs only inside this Worker — never on the UI thread.
  * One Worker + FIFO queue is owned by PyodideRuntimeManager on the main thread.
  */
-import type { MainToWorkerMessage, WorkerToMainMessage } from './types';
+import type {
+  MainToWorkerMessage,
+  WorkerToMainMessage,
+} from './types';
 import { BROWSER_SKILL_EXECUTION_LIMITS as LIMITS } from './types';
+import type { WorkspaceExecutionInputFile, WorkspaceExecutionOutputFile } from './types';
 import {BROWSER_SKILL_EXECUTION_MANIFEST_PATH,} from '@/contracts';
 import { unzipSync } from 'fflate';
+import { normalizeFileName } from '@/platform/workspace/types';
 import {
   isAllowedPyodidePackageSpec,
   isSafeRelativePath,
@@ -27,6 +32,7 @@ type PyodideInterface = {
     writeFile: (path: string, data: Uint8Array | string) => void;
     chdir: (path: string) => void;
     readdir: (path: string) => string[];
+    readFile: (path: string, options?: { encoding?: 'binary' | 'utf8' }) => Uint8Array | string;
     isDir: (mode: number) => boolean;
     stat: (path: string) => { mode: number };
     unlink: (path: string) => void;
@@ -69,11 +75,60 @@ function safeJsonStringify(value: unknown): string | null {
   }
 }
 
+function validateZipMetadata(zipBytes: ArrayBuffer): void {
+  const bytes = new Uint8Array(zipBytes);
+  const view = new DataView(zipBytes);
+  const minOffset = Math.max(0, bytes.byteLength - 65_557);
+  let end = -1;
+  for (let offset = bytes.byteLength - 22; offset >= minOffset; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      end = offset;
+      break;
+    }
+  }
+  if (end < 0) throw new Error('invalid zip end record');
+  const entryCount = view.getUint16(end + 10, true);
+  const centralSize = view.getUint32(end + 12, true);
+  let offset = view.getUint32(end + 16, true);
+  if (entryCount === 0 || entryCount > LIMITS.MAX_ZIP_ENTRIES || offset + centralSize > end) {
+    throw new Error('zip entry count invalid');
+  }
+  let totalBytes = 0;
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > end || view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error('invalid zip central directory');
+    }
+    const uncompressedBytes = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const nameEnd = offset + 46 + nameLength;
+    if (nameEnd > end) throw new Error('invalid zip entry name');
+    const name = decoder.decode(bytes.slice(offset + 46, nameEnd));
+    if (!name.endsWith('/') && !isSafeRelativePath(name.replace(/\\/g, '/'))) {
+      throw new Error(`unsafe path: ${name}`);
+    }
+    if (uncompressedBytes > LIMITS.MAX_ENTRY_BYTES) {
+      throw new Error(`entry too large: ${name}`);
+    }
+    totalBytes += uncompressedBytes;
+    if (totalBytes > LIMITS.MAX_ZIP_UNCOMPRESSED_BYTES) {
+      throw new Error('zip uncompressed size exceeds limit');
+    }
+    offset = nameEnd + extraLength + commentLength;
+  }
+  if (offset !== view.getUint32(end + 16, true) + centralSize) {
+    throw new Error('invalid zip central directory size');
+  }
+}
+
 function unpackToFs(
   fs: PyodideInterface['FS'],
   root: string,
   zipBytes: ArrayBuffer,
-): void {
+): Record<string, Uint8Array> {
+  validateZipMetadata(zipBytes);
   const entries = unzipSync(new Uint8Array(zipBytes), {
     filter(file) {
       return !file.name.endsWith('/');
@@ -100,6 +155,84 @@ function unpackToFs(
     }
     fs.writeFile(full, data);
   }
+  return entries;
+}
+
+function writeWorkspaceInputs(
+  fs: PyodideInterface['FS'],
+  root: string,
+  files: readonly WorkspaceExecutionInputFile[] | undefined,
+): void {
+  fs.mkdirTree(`${root}/input`);
+  fs.mkdirTree(`${root}/output`);
+  if (!files?.length) return;
+  for (const file of files) {
+    const name = normalizeFileName(file.name);
+    fs.writeFile(`${root}/input/${name}`, new Uint8Array(file.bytes));
+  }
+}
+
+function collectOutputFiles(
+  fs: PyodideInterface['FS'],
+  root: string,
+): WorkspaceExecutionOutputFile[] {
+  const outputRoot = `${root}/output`;
+  const files: WorkspaceExecutionOutputFile[] = [];
+  let totalBytes = 0;
+
+  const walk = (dir: string) => {
+    let names: string[] = [];
+    try {
+      names = fs.readdir(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (name === '.' || name === '..') continue;
+      const full = `${dir}/${name}`;
+      try {
+        const st = fs.stat(full);
+        if (fs.isDir(st.mode)) {
+          walk(full);
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      let storedName: string;
+      try {
+        storedName = normalizeFileName(name);
+      } catch {
+        continue;
+      }
+      if (files.length >= LIMITS.MAX_WORKSPACE_OUTPUT_FILES) {
+        throw Object.assign(new Error('Python 产物数量超过上限'), {
+          errorCode: 'SKILL_EXECUTION_FAILED',
+        });
+      }
+      const raw = fs.readFile(full, { encoding: 'binary' });
+      const bytes = raw instanceof Uint8Array ? raw : new Uint8Array();
+      if (bytes.byteLength > LIMITS.MAX_WORKSPACE_OUTPUT_FILE_BYTES) {
+        throw Object.assign(new Error(`output file too large: ${storedName}`), {
+          errorCode: 'SKILL_EXECUTION_FAILED',
+        });
+      }
+      totalBytes += bytes.byteLength;
+      if (totalBytes > LIMITS.MAX_WORKSPACE_OUTPUT_BYTES) {
+        throw Object.assign(new Error('Python 产物总大小超过上限'), {
+          errorCode: 'SKILL_EXECUTION_FAILED',
+        });
+      }
+      const copy = bytes.slice();
+      files.push({
+        name: storedName,
+        mimeType: 'application/octet-stream',
+        bytes: copy.buffer,
+      });
+    }
+  };
+  walk(outputRoot);
+  return files;
 }
 
 function rmTree(fs: PyodideInterface['FS'], path: string): void {
@@ -141,45 +274,40 @@ async function initPyodide(indexURL: string): Promise<void> {
   post({ type: 'ready' });
 }
 
+const ALLOWED_PYODIDE_PACKAGES = new Set([
+  'beautifulsoup4',
+  'lxml',
+  'matplotlib',
+  'numpy',
+  'openpyxl',
+  'pandas',
+  'pillow',
+  'python-dateutil',
+  'regex',
+  'scikit-learn',
+  'scipy',
+  'sympy',
+  'xlsxwriter',
+]);
+
 async function installPackages(packages: string[]): Promise<void> {
   if (!pyodide || packages.length === 0) return;
   for (const spec of packages) {
     if (!isAllowedPyodidePackageSpec(spec)) {
-      throw Object.assign(new Error(`unsupported package: ${spec}`), {errorCode: 'SKILL_EXECUTION_FAILED',});
+      throw Object.assign(new Error(`unsupported package: ${spec}`), { errorCode: 'SKILL_EXECUTION_FAILED' });
     }
-  }
-
-  const micropipSpecs: string[] = [];
-  for (const spec of packages) {
-    // Version constraints must go through micropip — never silently drop them.
-    if (/[<>=!~]/.test(spec)) {
-      micropipSpecs.push(spec);
-      continue;
+    const packageName = spec.split(/[<>=!~]/, 1)[0]?.trim().toLowerCase();
+    if (!packageName || !ALLOWED_PYODIDE_PACKAGES.has(packageName)) {
+      throw Object.assign(new Error(`package is not in the Pyodide allowlist: ${spec}`), { errorCode: 'SKILL_EXECUTION_FAILED' });
     }
     try {
-      await pyodide.loadPackage(spec);
-    } catch {
-      micropipSpecs.push(spec);
+      await pyodide.loadPackage(packageName);
+    } catch (error) {
+      throw Object.assign(
+        new Error(error instanceof Error ? `package load failed: ${error.message}` : 'package load failed'),
+        { errorCode: 'SKILL_EXECUTION_FAILED' },
+      );
     }
-  }
-
-  if (micropipSpecs.length === 0) return;
-
-  await pyodide.loadPackage('micropip');
-  const micropip = pyodide.pyimport('micropip');
-  try {
-    await micropip.install(micropipSpecs);
-  } catch (error) {
-    throw Object.assign(
-      new Error(
-        error instanceof Error
-          ? `package install failed: ${error.message}`
-          : 'package install failed',
-      ),
-      { errorCode: 'SKILL_EXECUTION_FAILED' },
-    );
-  } finally {
-    micropip.destroy?.();
   }
 }
 
@@ -187,6 +315,7 @@ async function execute(
   executionId: string,
   entrypointName: string,
   zipBytes: ArrayBuffer,
+  workspaceFiles?: readonly WorkspaceExecutionInputFile[],
 ): Promise<WorkerToMainMessage> {
   if (!pyodide) {
     return {
@@ -216,17 +345,13 @@ async function execute(
   };
 
   try {
-    unpackToFs(pyodide.FS, root, zipBytes);
-    const manifestRaw = new TextDecoder('utf-8').decode(
-      (() => {
-        const entries = unzipSync(new Uint8Array(zipBytes));
-        const bytes = entries[BROWSER_SKILL_EXECUTION_MANIFEST_PATH];
-        if (!bytes) {
-          throw new Error(`missing ${BROWSER_SKILL_EXECUTION_MANIFEST_PATH}`);
-        }
-        return bytes;
-      })(),
-    );
+    const entries = unpackToFs(pyodide.FS, root, zipBytes);
+    writeWorkspaceInputs(pyodide.FS, root, workspaceFiles);
+    const manifestBytes = entries[BROWSER_SKILL_EXECUTION_MANIFEST_PATH];
+    if (!manifestBytes) {
+      throw new Error(`missing ${BROWSER_SKILL_EXECUTION_MANIFEST_PATH}`);
+    }
+    const manifestRaw = new TextDecoder('utf-8').decode(manifestBytes);
     const manifestJson = JSON.parse(manifestRaw) as unknown;
     const manifest = parseExecutionManifest(manifestJson, executionId);
     if (!manifest) {
@@ -358,6 +483,7 @@ _joy_stderr_text = "".join(_joy_stderr)
       errorCode: null,
       message: null,
       truncated,
+      outputFiles: collectOutputFiles(pyodide.FS, root),
     };
   } catch (error) {
     const message =
@@ -432,6 +558,7 @@ self.onmessage = (event: MessageEvent<MainToWorkerMessage>) => {
             msg.executionId,
             msg.entrypointName,
             msg.zipBytes,
+            msg.workspaceFiles,
           );
           post(result);
         } finally {

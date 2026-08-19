@@ -12,4 +12,9 @@ describe('PyodideUnsupportedPackageTest', () => {
     expect(isAllowedPyodidePackageSpec('http://cdn.example/x')).toBe(false);
     expect(isAllowedPyodidePackageSpec('file:/tmp/x')).toBe(false);
   });
+
+  it('allows version-constrained specs for allowlisted packages', () => {
+    expect(isAllowedPyodidePackageSpec('pandas==2.2.0')).toBe(true);
+    expect(isAllowedPyodidePackageSpec('numpy>=1.26')).toBe(true);
+  });
 });
