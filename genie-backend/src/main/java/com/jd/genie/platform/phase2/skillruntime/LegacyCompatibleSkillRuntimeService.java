@@ -146,7 +146,7 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
                 throw new Phase2ContractException(MvpErrorCode.SKILL_PACKAGE_INVALID, "filesystem package changed after profile snapshot");
             SkillPackageBytesSnapshot snapshot = new SkillPackageBytesSnapshot(loaded.packageHash(), loaded.files());
             for (var entrypoint : skill.entrypoints()) {
-                String name = runtimeName(skill.skillId(), entrypoint.name());
+                String name = packageHasher.runtimeToolName(skill.skillId(), entrypoint.name());
                 if (!names.add(name)) throw new Phase2ContractException(MvpErrorCode.TOOL_BINDING_INVALID, "skill tool runtime name conflict");
                 if (entrypoint.runtime() == SkillEntrypointRuntime.pyodide)
                     tools.add(new BrowserPyodideSkillTool(name, skill.skillId(), user, context, snapshot, entrypoint,
@@ -169,11 +169,6 @@ public class LegacyCompatibleSkillRuntimeService implements SkillRuntimePort {
             .orElseThrow(() -> new Phase2ContractException(MvpErrorCode.SKILL_ENTRYPOINT_NOT_FOUND, "entrypoint not found"));
         throw new Phase2ContractException(MvpErrorCode.SKILL_ENTRYPOINT_NOT_AVAILABLE,
             entrypoint.runtime() + " entrypoint requires runtime tool execution");
-    }
-
-    private String runtimeName(String skillId, String entrypointName) {
-        String digest = packageHasher.legacyHash(skillId + "\u0000" + entrypointName, 0, "", "", "", "", List.of());
-        return "skill_" + digest.substring(0, 24);
     }
 
     private static final class UnavailableSkillTool implements BaseTool {

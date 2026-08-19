@@ -395,6 +395,7 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - When the user asks multiple agents to each do something (各/分别/每个), use one PARALLEL_AGENTS step with independent subTasks when suitable
                 - Do not add a final summary / 汇总成稿 / 回答用户全部问题 step; the system synthesizes the user-facing answer after specialists finish
                 - Every objective must stay on the user's original query; never substitute a generic industry, region, or role-default topic
+                - Never copy raw JSON, code, or quoted payloads from the query into objective. Refer to them as "the JSON/code in the user query" so the plan remains valid JSON.
                 - Agent names and descriptions are capabilities only; they do not change the topic of the user question
                 - Each objective must be a self-contained instruction for its current execution unit; never ask it to discover available agents
                 - Planning only decomposes work and assigns evidence-gathering tasks; it must not draft the final overall answer
@@ -450,7 +451,12 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
         if (candidates == null) {
             throw new AgentBridgeException(MvpErrorCode.ORCHESTRATION_PLAN_INVALID, "Candidates missing");
         }
-        return planParser.parse(content);
+        // Some OpenAI-compatible providers wrap an otherwise valid JSON object in
+        // a markdown fence or a short preamble despite the JSON-only instruction.
+        // Normalize only the outer transport noise here; OrchestrationPlanParser
+        // still enforces the exact field allowlist and the validator still checks
+        // candidate ids, step modes, dependencies, and size limits.
+        return planParser.parse(extractJson(content));
     }
 
     private String chat(String systemPrompt, String userPrompt) {

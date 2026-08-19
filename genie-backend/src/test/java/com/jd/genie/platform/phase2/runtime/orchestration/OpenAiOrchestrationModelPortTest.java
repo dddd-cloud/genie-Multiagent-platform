@@ -48,12 +48,28 @@ class OpenAiOrchestrationModelPortTest {
     }
 
     @Test
+    void acceptsAValidFixedPlanWrappedByProviderMarkdown() {
+        AtomicInteger requests = new AtomicInteger();
+        OpenAiOrchestrationModelPort port = port(requests, """
+                ```json
+                {"steps":[{"stepId":"step-1","mode":"SINGLE_AGENT","objective":"Analyze the input","inputRefs":[],"agentId":"agent-a","subTasks":[]}]}
+                ```
+                """);
+
+        OrchestrationPlan plan = port.createPlan("question", CANDIDATES, 1, Map.of(), Map.of());
+
+        assertEquals(1, requests.get());
+        assertEquals("step-1", plan.steps().get(0).stepId());
+        assertEquals("agent-a", plan.steps().get(0).agentId());
+    }
+
+    @Test
     void rejectsTwoInvalidPlannerResponsesWithoutSynthesizingAPlan() {
         AtomicInteger requests = new AtomicInteger();
         OpenAiOrchestrationModelPort port = port(
                 requests,
-                "```json\n{\"steps\":[]}\n```",
-                "prefix {\"steps\":[]} suffix"
+                "```json\n{\"steps\":[],\"unexpected\":true}\n```",
+                "prefix {\"steps\":[],\"unexpected\":true} suffix"
         );
 
         AgentBridgeException error = assertThrows(
@@ -169,6 +185,7 @@ class OpenAiOrchestrationModelPortTest {
         assertTrue(body.contains("约三千亿。"));
         assertTrue(body.contains("recentConversation"));
         assertTrue(body.contains("use history only to resolve references"));
+        assertTrue(body.contains("Never copy raw JSON, code, or quoted payloads"));
     }
 
     @Test

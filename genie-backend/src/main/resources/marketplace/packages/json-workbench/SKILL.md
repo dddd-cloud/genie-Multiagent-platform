@@ -8,6 +8,7 @@ entrypoints:
     runtime: pyodide
     script: scripts/entrypoint.py
     description: Inspect JSON structure, select a dotted path, and optionally flatten values
+    inputSchemaJson: '{"type":"object","properties":{"json_text":{"type":"string","description":"JSON text to inspect"},"path":{"type":"string","description":"Optional dotted path such as data.items.2.meta.score"},"flatten":{"type":"boolean","description":"Whether to flatten the selected value"}},"required":["json_text"],"additionalProperties":false}'
 ---
 
 当用户需要检查 JSON 字段、数据类型、嵌套结构或提取某个路径时，调用 `inspect_json`。

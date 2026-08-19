@@ -20,7 +20,9 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public final class BrowserPyodideSkillTool implements BaseTool {
     private final String name, skillId;
     private final CurrentUser user;
@@ -61,8 +63,13 @@ public final class BrowserPyodideSkillTool implements BaseTool {
                 throw new Phase2ContractException(MvpErrorCode.TOOL_NOT_BOUND, "compatible printer unavailable", e);
             }
             BrowserSkillExecutionResult result = execution.future().get(timeoutMs, TimeUnit.MILLISECONDS);
-            if (!result.success()) throw new Phase2ContractException(MvpErrorCode.SKILL_EXECUTION_FAILED,
-                result.message() == null ? "browser skill execution failed" : result.message());
+            if (!result.success()) {
+                log.error("Browser skill failed skillId={} entrypoint={} errorCode={} message={} stderr={}",
+                    skillId, entrypoint.name(), result.errorCode(), result.message(), result.stderr());
+                throw new Phase2ContractException(MvpErrorCode.SKILL_EXECUTION_FAILED,
+                    result.message() == null || result.message().isBlank()
+                        ? "browser skill execution failed" : result.message());
+            }
             validateJson(result.outputJson());
             return visibleToAgent(result.outputJson());
         } catch (TimeoutException e) {

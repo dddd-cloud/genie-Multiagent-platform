@@ -536,7 +536,7 @@ public class LLM {
                     return callClaudeFunctionCallStream(context, params);
                 }
                 // 调用流式 API
-                return callOpenAIFunctionCallStream(context, params);
+                return callOpenAIFunctionCallStream(context, params, timeout);
             }
 
         } catch (Exception e) {
@@ -612,13 +612,14 @@ public class LLM {
     /**
      * 调用 OpenAI 流式 API（抽象方法，实际实现需要在子类中提供）
      */
-    public CompletableFuture<ToolCallResponse> callOpenAIFunctionCallStream(AgentContext context, Map<String, Object> params) {
+    public CompletableFuture<ToolCallResponse> callOpenAIFunctionCallStream(AgentContext context, Map<String, Object> params, int timeout) {
         CompletableFuture<ToolCallResponse> future = new CompletableFuture<>();
         try {
             OkHttpClient client = new OkHttpClient.Builder()
-                    .connectTimeout(300, TimeUnit.SECONDS)
-                    .readTimeout(300, TimeUnit.SECONDS)
-                    .writeTimeout(300, TimeUnit.SECONDS)
+                    .callTimeout(timeout, TimeUnit.SECONDS)
+                    .connectTimeout(timeout, TimeUnit.SECONDS)
+                    .readTimeout(timeout, TimeUnit.SECONDS)
+                    .writeTimeout(timeout, TimeUnit.SECONDS)
                     .build();
 
             String apiEndpoint = baseUrl + interfaceUrl;

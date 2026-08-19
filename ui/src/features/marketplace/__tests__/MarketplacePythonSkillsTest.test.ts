@@ -26,10 +26,13 @@ async function runSkill(
   );
   await pyodide.runPythonAsync(readFileSync(entrypoint, 'utf8'));
   pyodide.globals.set('_marketplace_args_json', JSON.stringify(args));
-  const output = pyodide.runPython(
-    `json.dumps(${functionName}(**json.loads(_marketplace_args_json)))`,
-  );
+  pyodide.globals.set('_marketplace_args', args);
+  const invocation = functionName === 'main'
+    ? `${functionName}(_marketplace_args)`
+    : `${functionName}(**json.loads(_marketplace_args_json))`;
+  const output = pyodide.runPython(`json.dumps(${invocation})`);
   pyodide.globals.delete('_marketplace_args_json');
+  pyodide.globals.delete('_marketplace_args');
   return JSON.parse(String(output)) as Record<string, unknown>;
 }
 
@@ -39,7 +42,7 @@ describe('MarketplacePythonSkillsTest', () => {
   }, 30_000);
 
   it('executes the JSON workbench entrypoint in Pyodide', async () => {
-    const result = await runSkill('json-workbench', 'inspect_json', {
+    const result = await runSkill('json-workbench', 'main', {
       json_text: '{"items":[{"id":1},{"id":2}]}',
       path: 'items.1.id',
       flatten: true,

@@ -29,6 +29,11 @@ public class SkillPackageHasher {
         return java.util.HexFormat.of().formatHex(digest.digest());
     }
 
+    public String runtimeToolName(String skillId, String entrypointName) {
+        String digest = legacyHash(skillId + "\u0000" + entrypointName, 0, "", "", "", "", List.of());
+        return "skill_" + digest.substring(0, 24);
+    }
+
     private String safe(String value) { return value == null ? "" : value; }
     private void updateField(MessageDigest digest, byte[] bytes) {
         digest.update(ByteBuffer.allocate(Long.BYTES).putLong(bytes.length).array());

@@ -7,6 +7,9 @@ import com.jd.genie.agent.tool.ToolCollection;
 import com.jd.genie.agent.util.SpringContextHolder;
 import com.jd.genie.config.GenieConfig;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
+import com.jd.genie.platform.phase2contract.dto.AgentRuntimeSkill;
+import com.jd.genie.platform.phase2contract.dto.SkillEntrypointView;
+import com.jd.genie.platform.phase2contract.enums.SkillEntrypointRuntime;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
 
@@ -105,6 +108,32 @@ class ConfiguredReactAgentFactoryTest {
 
             assertEquals(10, agent.getMaxSteps());
             assertNotNull(agent.getAvailableTools());
+        } finally {
+            installApplicationContext(null);
+        }
+    }
+
+    @Test
+    void mapsHumanSkillEntrypointsToTheirExactRuntimeToolNames() {
+        AgentRuntimeSkill skill = new AgentRuntimeSkill(
+                "skill-json", 1L, 1, "Call inspect_json", null, "json-workbench",
+                "FILESYSTEM", "1", "hash", List.of(),
+                List.of(new SkillEntrypointView("inspect_json", SkillEntrypointRuntime.pyodide,
+                        "scripts/entrypoint.py", "Inspect JSON", "{\"type\":\"object\"}"))
+        );
+        AgentRuntimeProfile mappedProfile = new AgentRuntimeProfile(
+                "agent-1", 1L, "Agent", "description", "frozen prompt", "frozen-model",
+                List.of(skill), List.of()
+        );
+        AgentContext context = AgentContext.builder().requestId("request-1").query("query")
+                .task("task").dateInfo("").basePrompt("").build();
+        context.setToolCollection(new ToolCollection());
+        installApplicationContext(applicationContext());
+        try {
+            ReactImplAgent agent = factory.create(context, mappedProfile, new ConfiguredAgentPrinter(), 1);
+            assertEquals(true, agent.getSystemPrompt().contains("Skill `json-workbench`, entrypoint `inspect_json`"));
+            assertEquals(true, agent.getSystemPrompt().contains("runtime tool `skill_"));
+            assertEquals(true, agent.getSystemPrompt().contains("never reuse a tool name from conversation history"));
         } finally {
             installApplicationContext(null);
         }

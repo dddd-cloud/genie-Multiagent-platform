@@ -6,6 +6,7 @@ import com.jd.genie.agent.llm.LLM;
 import com.jd.genie.agent.printer.Printer;
 import com.jd.genie.agent.tool.ToolCollection;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageHasher;
 
 public final class ConfiguredReactAgentFactory {
     private static final int DEFAULT_MAX_STEPS = 10;
@@ -39,6 +40,7 @@ public final class ConfiguredReactAgentFactory {
             Answer from the data the tool already returned; do not repeat the same query for a fuller result.
             """;
     static final int MAX_OBSERVE_CHARS = 2_000;
+    private final SkillPackageHasher packageHasher = new SkillPackageHasher();
 
     public ReactImplAgent create(
             AgentContext context,
@@ -65,6 +67,7 @@ public final class ConfiguredReactAgentFactory {
         }
         ReactImplAgent agent = new ReactImplAgent(context);
         String prompt = (profile.compiledSystemPromptTemplate() == null ? "" : profile.compiledSystemPromptTemplate())
+                + skillToolMapping(profile)
                 + RESULT_CONTRACT;
         agent.setSystemPrompt(prompt);
         agent.setSystemPromptSnapshot(prompt);
@@ -77,5 +80,26 @@ public final class ConfiguredReactAgentFactory {
         agent.setLlmTimeoutSeconds(600);
         agent.setAvailableTools(context.getToolCollection());
         return agent;
+    }
+
+    private String skillToolMapping(AgentRuntimeProfile profile) {
+        StringBuilder mapping = new StringBuilder("\n# Exact Skill Tool Mapping\n\n");
+        boolean present = false;
+        for (var skill : profile.skills()) {
+            for (var entrypoint : skill.entrypoints()) {
+                present = true;
+                mapping.append("- Skill `")
+                        .append(skill.skillKey() == null || skill.skillKey().isBlank() ? skill.skillId() : skill.skillKey())
+                        .append("`, entrypoint `").append(entrypoint.name())
+                        .append("`: call runtime tool `")
+                        .append(packageHasher.runtimeToolName(skill.skillId(), entrypoint.name()))
+                        .append("`\n");
+            }
+        }
+        if (!present) {
+            return "";
+        }
+        mapping.append("Use only the exact runtime tool mapped to the requested Skill entrypoint; never reuse a tool name from conversation history.\n");
+        return mapping.toString();
     }
 }

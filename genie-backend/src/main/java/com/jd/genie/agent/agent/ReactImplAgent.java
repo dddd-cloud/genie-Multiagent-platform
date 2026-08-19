@@ -22,6 +22,8 @@ import org.springframework.context.ApplicationContext;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 工具调用代理 - 处理工具/函数调用的基础代理类
@@ -30,6 +32,8 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @EqualsAndHashCode(callSuper = true)
 public class ReactImplAgent extends ReActAgent {
+
+    static final int FINISH_TURN_TIMEOUT_SECONDS = 120;
 
     private List<ToolCall> toolCalls;
     private Integer maxObserve;
@@ -99,17 +103,18 @@ public class ReactImplAgent extends ReActAgent {
             context.setStreamMessageType("tool_thought");
 
             int timeout = llmTimeoutSeconds == null || llmTimeoutSeconds <= 0 ? 300 : llmTimeoutSeconds;
+            int requestTimeout = finishTurn ? Math.min(timeout, FINISH_TURN_TIMEOUT_SECONDS) : timeout;
             CompletableFuture<LLM.ToolCallResponse> future = getLlm().askTool(
                     context,
                     getMemory().getMessages(),
                     Message.systemMessage(getSystemPrompt(), null),
                     finishTurn ? new ToolCollection() : availableTools,
-                    finishTurn ? ToolChoice.NONE : ToolChoice.AUTO, null, context.getIsStream(), timeout
+                    finishTurn ? ToolChoice.NONE : ToolChoice.AUTO, null, context.getIsStream(), requestTimeout
             );
 
-            LLM.ToolCallResponse response = future.get();
+            LLM.ToolCallResponse response = awaitResponse(future, requestTimeout, TimeUnit.SECONDS);
 
-            setToolCalls(response.getToolCalls());
+            setToolCalls(toolCallsForTurn(finishTurn, response.getToolCalls()));
 
             // 记录响应信息
             if (!context.getIsStream() && response.getContent() != null && !response.getContent().isEmpty()) {
@@ -135,6 +140,22 @@ public class ReactImplAgent extends ReActAgent {
         }
 
         return true;
+    }
+
+    static <T> T awaitResponse(CompletableFuture<T> future, long timeout, TimeUnit unit) throws Exception {
+        try {
+            return future.get(timeout, unit);
+        } catch (TimeoutException ex) {
+            future.cancel(true);
+            throw ex;
+        }
+    }
+
+    static List<ToolCall> toolCallsForTurn(boolean finishTurn, List<ToolCall> responseToolCalls) {
+        if (finishTurn || responseToolCalls == null) {
+            return List.of();
+        }
+        return responseToolCalls;
     }
 
     @Override

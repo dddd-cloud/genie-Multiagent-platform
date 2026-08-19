@@ -71,3 +71,15 @@ def inspect_json(json_text="", path="", flatten=False):
         return result
     except (json.JSONDecodeError, ValueError, TypeError, IndexError) as error:
         return {"ok": False, "error": str(error)}
+
+
+def main(input):
+    """Worker entrypoint; keep inspect_json importable for direct package tests."""
+    if hasattr(input, "to_py"):
+        input = input.to_py()
+    payload = input if isinstance(input, dict) else {}
+    return inspect_json(
+        json_text=payload.get("json_text", payload.get("json", "")),
+        path=payload.get("path", ""),
+        flatten=bool(payload.get("flatten", False)),
+    )
