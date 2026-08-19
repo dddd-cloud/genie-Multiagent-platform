@@ -7,6 +7,7 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
+import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
@@ -41,6 +42,11 @@ class SystemResourceBuilderTest {
         assertTrue(SystemResourceBuilder.requiresResourceCreation("create a data analysis agent"));
         assertFalse(SystemResourceBuilder.requiresResourceCreation("请用现有团队生成一个软件"));
         assertFalse(SystemResourceBuilder.requiresResourceCreation("分析这个 CSV"));
+        assertFalse(SystemResourceBuilder.requiresResourceCreation(
+                "请比较 REST 和 GraphQL，只给三点结论，不要创建任何 Agent 或 Team"));
+        assertFalse(SystemResourceBuilder.requiresResourceCreation(
+                "Compare REST and GraphQL; do not create an agent or team"));
+        assertTrue(SystemResourceBuilder.requiresResourceCreation("不要创建 Agent，只创建 Team"));
     }
 
     @Test
@@ -73,7 +79,7 @@ class SystemResourceBuilderTest {
         when(teams.createTeam(eq(USER), any(TeamCreateRequest.class))).thenReturn(new TeamResponse(
                 "team-1", "数据分析团队", "", "agent-1", "agent-1", List.of("agent-2", "agent-3"), 0L, Instant.now(), Instant.now()));
 
-        String result = new SystemResourceBuilder(skills, mcps, agents, teams)
+        String result = builder(skills, mcps, agents, teams)
                 .create(USER, "请创建一个数据分析团队");
 
         assertTrue(result.contains("team-1"));
@@ -115,7 +121,7 @@ class SystemResourceBuilderTest {
                     List.of(), List.of(), Instant.now(), Instant.now());
         });
 
-        new SystemResourceBuilder(skills, mcps, agents, teams)
+        builder(skills, mcps, agents, teams)
                 .create(USER, "帮我创建一个分析数据的agent");
 
         ArgumentCaptor<AgentCreateRequest> create = ArgumentCaptor.forClass(AgentCreateRequest.class);
@@ -147,7 +153,7 @@ class SystemResourceBuilderTest {
                 "agent-2", "数据分析师 (2)", "", "RAW", null, "", "system-default", "ONLINE", 1L,
                 List.of(), List.of(), Instant.now(), Instant.now()));
 
-        new SystemResourceBuilder(skills, mcps, agents, teams)
+        builder(skills, mcps, agents, teams)
                 .create(USER, "帮我创建一个分析数据的agent");
 
         ArgumentCaptor<AgentCreateRequest> create = ArgumentCaptor.forClass(AgentCreateRequest.class);
@@ -175,7 +181,7 @@ class SystemResourceBuilderTest {
         when(teams.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
         when(teams.createTeam(eq(USER), any())).thenReturn(new TeamResponse("team-1", "软件开发团队", "", "new-1", "", List.of(), 0L, Instant.now(), Instant.now()));
 
-        String result = new SystemResourceBuilder(skills, mcps, agents, teams).create(USER, "创建一个软件开发团队");
+        String result = builder(skills, mcps, agents, teams).create(USER, "创建一个软件开发团队");
 
         verify(agents, times(3)).createAgent(eq(USER), any(AgentCreateRequest.class));
         assertTrue(result.contains("复用 1 个既有 Agent，新建 3 个"));
@@ -199,8 +205,79 @@ class SystemResourceBuilderTest {
         when(teams.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
         when(teams.createTeam(eq(USER), any())).thenReturn(new TeamResponse("team-10", "软件开发团队", "", "agent-1", "", List.of(), 0L, Instant.now(), Instant.now()));
 
-        new SystemResourceBuilder(skills, mcps, agents, teams).create(USER, "创建一个由 10 个 Agent 组成的软件开发团队");
+        builder(skills, mcps, agents, teams).create(USER, "创建一个由 10 个 Agent 组成的软件开发团队");
 
         verify(agents, times(10)).createAgent(eq(USER), any(AgentCreateRequest.class));
+    }
+
+    @Test
+    void honorsQuotedTeamNameAndFourPersonCountWithoutReadingDateDigitsAsCount() {
+        SkillDefinitionService skills = mock(SkillDefinitionService.class);
+        McpServerService mcps = mock(McpServerService.class);
+        AgentDefinitionService agents = mock(AgentDefinitionService.class);
+        AgentTeamService teams = mock(AgentTeamService.class);
+        AgentResponse lead = onlineAgent("lead", "技术负责人", "负责技术方案和验收");
+        AgentResponse backend = onlineAgent("backend", "后端开发", "负责服务端接口");
+        AgentResponse frontend = onlineAgent("frontend", "前端开发", "负责界面交互");
+        AgentResponse qa = onlineAgent("qa", "测试工程师", "负责质量保障");
+        when(skills.listSkills(USER, 1, 100)).thenReturn(new PageResponse<>(List.of(), 1, 100, false));
+        when(mcps.capabilities(USER)).thenReturn(List.of());
+        when(agents.listAgents(USER, 1, 100)).thenReturn(
+                new PageResponse<>(List.of(lead, backend, frontend, qa), 1, 100, false));
+        when(teams.nextAvailableName(USER, "QA-E2E-复用团队-20260819"))
+                .thenReturn("QA-E2E-复用团队-20260819");
+        when(teams.createTeam(eq(USER), any(TeamCreateRequest.class))).thenReturn(new TeamResponse(
+                "team-four", "QA-E2E-复用团队-20260819", "", "lead", "技术负责人",
+                List.of("backend", "frontend", "qa"), 0L, Instant.now(), Instant.now()));
+
+        String result = builder(skills, mcps, agents, teams).create(USER,
+                "请一键创建一个名为“QA-E2E-复用团队-20260819”的软件开发团队，" +
+                        "团队总人数必须正好为 4 人，必须包含技术负责人、后端开发、前端开发、测试工程师");
+
+        verify(agents, never()).createAgent(eq(USER), any(AgentCreateRequest.class));
+        ArgumentCaptor<TeamCreateRequest> created = ArgumentCaptor.forClass(TeamCreateRequest.class);
+        verify(teams).createTeam(eq(USER), created.capture());
+        assertEquals("QA-E2E-复用团队-20260819", created.getValue().name());
+        assertEquals("lead", created.getValue().masterAgentId());
+        assertEquals(List.of("backend", "frontend", "qa"), created.getValue().memberAgentIds());
+        assertTrue(result.contains("共 4 个 Agent"));
+        assertTrue(result.contains("复用 4 个既有 Agent，新建 0 个"));
+    }
+
+    @Test
+    void skipsAValidButOversizedCombinedSkillPromptInsteadOfFailingTeamCreation() {
+        SkillDefinitionService skills = mock(SkillDefinitionService.class);
+        McpServerService mcps = mock(McpServerService.class);
+        AgentDefinitionService agents = mock(AgentDefinitionService.class);
+        AgentTeamService teams = mock(AgentTeamService.class);
+        SkillResponse small = new SkillResponse("small", "代码助手", "代码", "帮助编写代码。", "", "ENABLED", 1L,
+                List.of(), Instant.now(), Instant.now());
+        SkillResponse huge = new SkillResponse("huge", "代码规范", "代码", "x".repeat(19_800), "", "ENABLED", 1L,
+                List.of(), Instant.now(), Instant.now());
+        when(skills.listSkills(USER, 1, 100)).thenReturn(new PageResponse<>(List.of(small, huge), 1, 100, false));
+        when(mcps.capabilities(USER)).thenReturn(List.of());
+        when(agents.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        when(agents.createAgent(eq(USER), any(AgentCreateRequest.class))).thenAnswer(call -> {
+            AgentCreateRequest request = call.getArgument(1);
+            return new AgentResponse("agent-1", request.name(), request.description(), "RAW", null, request.systemPrompt(),
+                    "system-default", "DRAFT", 0L, request.skills().stream().map(item -> item.skillId()).toList(), List.of(), Instant.now(), Instant.now());
+        });
+        when(agents.onlineAgent(eq(USER), any(), any())).thenAnswer(call -> new AgentResponse(call.getArgument(1), "online", "", "RAW", null, "", "system-default", "ONLINE", 1L, List.of(), List.of(), Instant.now(), Instant.now()));
+
+        builder(skills, mcps, agents, teams).create(USER, "创建一个软件开发 agent");
+
+        ArgumentCaptor<AgentCreateRequest> created = ArgumentCaptor.forClass(AgentCreateRequest.class);
+        verify(agents).createAgent(eq(USER), created.capture());
+        assertEquals(List.of("small"), created.getValue().skills().stream().map(item -> item.skillId()).toList());
+    }
+
+    private SystemResourceBuilder builder(SkillDefinitionService skills, McpServerService mcps,
+                                          AgentDefinitionService agents, AgentTeamService teams) {
+        return new SystemResourceBuilder(skills, mcps, agents, teams, new AgentPromptCompiler());
+    }
+
+    private AgentResponse onlineAgent(String id, String name, String description) {
+        return new AgentResponse(id, name, description, "RAW", null, "", "system-default", "ONLINE", 1L,
+                List.of(), List.of(), Instant.now(), Instant.now());
     }
 }

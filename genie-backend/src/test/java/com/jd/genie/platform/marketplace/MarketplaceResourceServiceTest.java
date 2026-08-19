@@ -14,12 +14,15 @@ class MarketplaceResourceServiceTest {
 
     @Test
     void catalogContainsAllFourResourceKindsWithoutCredentials() {
-        assertThat(service.entries()).hasSize(10);
+        assertThat(service.entries()).hasSize(22);
         assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
-            .containsExactlyInAnyOrder(MarketplaceResourceType.AGENT, MarketplaceResourceType.AGENT,
-                MarketplaceResourceType.TEAM, MarketplaceResourceType.TEAM,
-                MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL, MarketplaceResourceType.SKILL,
-                MarketplaceResourceType.MCP, MarketplaceResourceType.MCP);
+            .filteredOn(MarketplaceResourceType.AGENT::equals).hasSize(5);
+        assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
+            .filteredOn(MarketplaceResourceType.TEAM::equals).hasSize(4);
+        assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
+            .filteredOn(MarketplaceResourceType.SKILL::equals).hasSize(8);
+        assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
+            .filteredOn(MarketplaceResourceType.MCP::equals).hasSize(5);
         assertThat(service.entries()).allSatisfy(entry -> {
             assertThat(entry.draft().toString()).doesNotContainIgnoringCase("credential_envelope");
             assertThat(entry.draft().toString()).doesNotContain("apiKey");
@@ -35,7 +38,7 @@ class MarketplaceResourceServiceTest {
                 "skill-csv-summary", "skill-create-pdf-report");
         assertThat(service.search(null, null, "github"))
             .extracting(MarketplaceResourceView::id)
-            .containsExactly("mcp-github-public-tools");
+            .containsExactly("mcp-deepwiki-readonly", "mcp-github-public-tools");
     }
 
     @Test
@@ -54,6 +57,13 @@ class MarketplaceResourceServiceTest {
         MarketplaceDraftResponse team = service.createDraft(USER, "team-research-report");
         assertThat(team.status()).isEqualTo("NEEDS_CONFIGURATION");
         assertThat(team.missingFields()).containsExactly("masterAgentId", "memberAgentIds");
+
+        MarketplaceDraftResponse github = service.createDraft(USER, "mcp-github-public-tools");
+        assertThat(github.status()).isEqualTo("NEEDS_CONFIGURATION");
+        assertThat(github.missingFields()).containsExactly("授权凭据（需在 MCP 设置中填写）");
+        assertThat(service.get("mcp-himalayas-remote-jobs").installMode()).isEqualTo("INSTALL");
+        assertThat(service.get("mcp-deepwiki-readonly").installMode()).isEqualTo("CONFIGURE");
+        assertThat(service.get("mcp-context7-docs").installMode()).isEqualTo("CONFIGURE");
     }
 
     @Test

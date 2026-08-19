@@ -42,6 +42,21 @@ export function phase2Post<T>(
   });
 }
 
+export function phase2PostWithTimeout<T>(
+  url: string,
+  body: unknown,
+  timeout: number,
+  signal?: AbortSignal,
+): Promise<T | null> {
+  return requestMvp<T>({
+    method: 'POST',
+    url,
+    data: body,
+    timeout,
+    signal,
+  });
+}
+
 /** POST with query params (e.g. MCP enable/disable `?version=`). */
 export function phase2PostWithParams<T>(
   url: string,

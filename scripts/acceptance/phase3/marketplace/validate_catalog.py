@@ -44,9 +44,19 @@ def main() -> int:
         assert isinstance(entry["setup"], list)
         assert not any(SECRET_KEYS.search(str(key)) for key in walk_keys(entry["draft"])), f"secret-like draft key in {entry['id']}"
         if entry["type"] == "MCP":
-            assert not entry["draft"].get("serverUrl"), f"MCP serverUrl must be configured by the user in {entry['id']}"
+            draft = entry["draft"]
+            assert draft.get("authType") in {"NONE", "BEARER_TOKEN", "QUERY_PARAM"}, f"invalid MCP auth type in {entry['id']}"
+            assert draft.get("transportType") in {"SSE", "STREAMABLE_HTTP"}, f"invalid MCP transport in {entry['id']}"
+            if draft.get("serverUrl"):
+                assert draft["serverUrl"].startswith("https://"), f"MCP URL must use HTTPS in {entry['id']}"
+            if draft.get("authType") == "NONE" and draft.get("transportType") == "SSE":
+                assert draft.get("allowedTools"), f"installable MCP must declare a reviewed tool allowlist in {entry['id']}"
+            if draft.get("authType") != "NONE":
+                assert not any(str(key).lower() in {"credential", "token", "apikey", "password"} for key in draft), (
+                    f"authenticated MCP template must not embed credential fields in {entry['id']}"
+                )
 
-    print(f"marketplace catalog: PASS ({len(entries)} curated entries; four types; no embedded secrets)")
+    print(f"marketplace catalog: PASS ({len(entries)} curated entries; four types; reviewed packages; no embedded secrets)")
     return 0
 
 

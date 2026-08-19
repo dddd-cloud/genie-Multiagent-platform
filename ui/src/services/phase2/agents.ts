@@ -4,7 +4,13 @@ import type {
   Phase2McpToolResponse,
   Phase2ModelResponse,
 } from '@/contracts/phase2';
-import { phase2Delete, phase2Get, phase2Post, phase2Put } from './client';
+import {
+  phase2Delete,
+  phase2Get,
+  phase2Post,
+  phase2PostWithTimeout,
+  phase2Put,
+} from './client';
 import type {
   AgentCreateRequest,
   AgentSkillBindingWire,
@@ -183,7 +189,12 @@ export function testAgent(
   body: AgentTestRequest,
   signal?: AbortSignal,
 ) {
-  return phase2Post<AgentTestResponse>(`${AGENTS_BASE}/${id}/test`, body, signal);
+  return phase2PostWithTimeout<AgentTestResponse>(
+    `${AGENTS_BASE}/${id}/test`,
+    body,
+    120_000,
+    signal,
+  );
 }
 
 export async function previewPrompt(

@@ -34,15 +34,30 @@ import type {
 } from '@/services/marketplace';
 
 const TYPE_OPTIONS: Array<{ label: string; value: MarketplaceResourceType | 'ALL' }> = [
-  { label: '全部', value: 'ALL' },
-  { label: 'Agent', value: 'AGENT' },
-  { label: 'Team', value: 'TEAM' },
-  { label: 'Skill', value: 'SKILL' },
-  { label: 'MCP', value: 'MCP' },
+  {
+    label: '全部',
+    value: 'ALL'
+  },
+  {
+    label: 'Agent',
+    value: 'AGENT'
+  },
+  {
+    label: 'Team',
+    value: 'TEAM'
+  },
+  {
+    label: 'Skill',
+    value: 'SKILL'
+  },
+  {
+    label: 'MCP',
+    value: 'MCP'
+  },
 ];
 
 function canInstall(resource: MarketplaceResource): boolean {
-  return resource.type === 'AGENT' || resource.type === 'TEAM' || resource.type === 'SKILL';
+  return resource.installMode === 'INSTALL';
 }
 
 export interface MarketplacePageProps {
@@ -136,10 +151,17 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
     setAddingId(resource.id);
     setError(undefined);
     try {
-      await installMarketplaceResource(resource.id);
+      const result = await installMarketplaceResource(resource.id);
       setSelected(undefined);
       setDraftResult(undefined);
-      setSuccessToast({ id: Date.now(), text: '添加成功' });
+      if (result?.enabled) {
+        setSuccessToast({
+          id: Date.now(),
+          text: result.warnings[0] || '添加并启用成功',
+        });
+      } else {
+        setError(result?.warnings.join('；') || '资源已添加，但尚未通过可用性检测。');
+      }
     } catch (err: unknown) {
       setError(phase2ErrorMessage(err, '安装失败：请检查模型、资源权限或同名资源后重试。'));
     } finally {
@@ -185,7 +207,10 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
           placeholder="按分类筛选"
           value={category}
           onChange={setCategory}
-          options={categories.map((item) => ({ label: item, value: item }))}
+          options={categories.map((item) => ({
+            label: item,
+            value: item
+          }))}
           className="w-[180px]"
         />
         <Input
@@ -242,7 +267,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                       void addResource(resource);
                     }}
                   >
-                    添加
+                    添加并启用
                   </Button>
                 ) : (
                   <Button
@@ -253,7 +278,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                       void copyDraft(resource);
                     }}
                   >
-                    添加配置
+                    查看配置
                   </Button>
                 )}
               </div>
@@ -284,6 +309,9 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
             <div>
               <Typography.Text strong>许可证：</Typography.Text> {selected.license}{' '}
               <Tag color="green">{selected.trustTier}</Tag>
+              <Tag color={canInstall(selected) ? 'blue' : 'orange'}>
+                {canInstall(selected) ? '可直接添加' : '需要授权配置'}
+              </Tag>
             </div>
             <div>
               <Typography.Text strong>能力：</Typography.Text>
@@ -309,7 +337,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                 data-testid="marketplace-add-agent-confirm"
                 onClick={() => void addResource(selected)}
               >
-                添加
+                添加并启用
               </Button>
             ) : (
               <Button
@@ -318,7 +346,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                 icon={<CopyOutlined />}
                 onClick={() => void copyDraft(selected)}
               >
-                添加配置
+                查看配置要求
               </Button>
             )}
             {draftResult && !canInstall(selected) && (

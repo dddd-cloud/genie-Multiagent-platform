@@ -75,7 +75,7 @@ services:
   ui:
     environment:
       VITE_PHASE2_ENABLED: ${VITE_PHASE2_ENABLED:-false}
-      VITE_PYODIDE_INDEX_URL: ${VITE_PYODIDE_INDEX_URL:-https://cdn.jsdelivr.net/pyodide/v0.27.7/full/}
+      VITE_PYODIDE_INDEX_URL: ${VITE_PYODIDE_INDEX_URL:-/pyodide/}
       FILE_TOOL_BASE_URL: http://genie-tool:1601
     volumes:
       - ../docs:/workspace/docs:ro

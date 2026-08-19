@@ -7,6 +7,10 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingRequest;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
+import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationRequest;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptSkillFragment;
+import com.jd.genie.platform.phase2.configuration.prompt.PromptValidationException;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
@@ -43,22 +47,26 @@ public class SystemResourceBuilder {
     private final McpServerService mcpServerService;
     private final AgentDefinitionService agentService;
     private final AgentTeamService teamService;
+    private final AgentPromptCompiler promptCompiler;
 
     public SystemResourceBuilder(
             SkillDefinitionService skillService,
             McpServerService mcpServerService,
             AgentDefinitionService agentService,
-            AgentTeamService teamService
+            AgentTeamService teamService,
+            AgentPromptCompiler promptCompiler
     ) {
         this.skillService = skillService;
         this.mcpServerService = mcpServerService;
         this.agentService = agentService;
         this.teamService = teamService;
+        this.promptCompiler = promptCompiler;
     }
 
     public static boolean requiresResourceCreation(String query) {
-        String text = normalize(query);
+        String text = stripNegatedCreationClauses(normalize(query));
         if (text.isBlank()) return false;
+        if (containsAny(text, "现有团队", "当前团队", "existing team", "current team")) return false;
         boolean create = containsAny(text, "创建", "新建", "生成", "组建", "搭建", "帮我建", "一键建", "create ", "build ");
         boolean resource = containsAny(text, "团队", "小组", " team", "team ", "agent", "智能体", "代理");
         return create && resource;
@@ -114,7 +122,7 @@ public class SystemResourceBuilder {
     private AgentResponse createOnlineAgent(
             CurrentUser user, RoleSpec role, Available available, String query
     ) {
-        List<SkillResponse> skills = selectSkills(available.skills(), role.skillHint(), query);
+        List<SkillResponse> skills = selectSkills(available.skills(), role, query);
         List<String> capabilities = selectCapabilities(available.mcpTools(), role.skillHint(), query);
         List<AgentSkillBindingRequest> bindings = new ArrayList<>();
         for (int index = 0; index < skills.size(); index++) {
@@ -147,11 +155,42 @@ public class SystemResourceBuilder {
                 .findFirst();
     }
 
-    private List<SkillResponse> selectSkills(List<SkillResponse> candidates, String skillHint, String query) {
-        return candidates.stream()
-                .filter(skill -> matches(skillHint + " " + query, skill.name() + " " + skill.description() + " " + skill.instruction()))
-                .limit(5)
-                .toList();
+    /**
+     * Agent prompts embed each selected Skill instruction.  A marketplace Skill can be
+     * perfectly valid on its own yet be too large in combination with other Skills.
+     * Build the selection incrementally with the same compiler used by Agent creation,
+     * so an oversized or legacy-invalid package never aborts Team creation.
+     */
+    private List<SkillResponse> selectSkills(List<SkillResponse> candidates, RoleSpec role, String query) {
+        List<SkillResponse> selected = new ArrayList<>();
+        for (SkillResponse candidate : candidates) {
+            if (!matches(role.skillHint() + " " + query,
+                    candidate.name() + " " + candidate.description() + " " + candidate.instruction())) {
+                continue;
+            }
+            List<SkillResponse> proposed = new ArrayList<>(selected);
+            proposed.add(candidate);
+            if (isCompilable(role.systemPrompt(), proposed)) {
+                selected.add(candidate);
+            }
+            if (selected.size() == 5) break;
+        }
+        return List.copyOf(selected);
+    }
+
+    private boolean isCompilable(String systemPrompt, List<SkillResponse> skills) {
+        List<PromptSkillFragment> fragments = new ArrayList<>();
+        for (int index = 0; index < skills.size(); index++) {
+            SkillResponse skill = skills.get(index);
+            fragments.add(new PromptSkillFragment(skill.id(), skill.version(), skill.name(), index + 1,
+                    skill.instruction(), skill.outputRequirement()));
+        }
+        try {
+            promptCompiler.compile(new PromptCompilationRequest("RAW", null, systemPrompt, fragments));
+            return true;
+        } catch (PromptValidationException ex) {
+            return false;
+        }
     }
 
     private List<String> selectCapabilities(List<McpToolResponse> candidates, String skillHint, String query) {
@@ -181,6 +220,18 @@ public class SystemResourceBuilder {
 
     private static String normalize(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).trim();
+    }
+
+    private static String stripNegatedCreationClauses(String value) {
+        String withoutChineseNegation = Pattern.compile(
+                "(?:不要|无需|不用|不必|不需要|别|禁止|不可|不能|不是(?:让|要)?)\\s*(?:再)?\\s*" +
+                        "(?:创建|新建|生成|组建|搭建)[^，。；;,.!?]*",
+                Pattern.CASE_INSENSITIVE
+        ).matcher(value).replaceAll(" ");
+        return Pattern.compile(
+                "(?:do\\s+not|don't|dont|no\\s+need\\s+to|without)\\s+(?:create|build|generate)\\b[^,.;!?]*",
+                Pattern.CASE_INSENSITIVE
+        ).matcher(withoutChineseNegation).replaceAll(" ").trim();
     }
 
     private static String nullToEmpty(String value) { return value == null ? "" : value; }
@@ -213,21 +264,51 @@ public class SystemResourceBuilder {
     }
 
     private record Request(boolean team, String name, String description, List<RoleSpec> roles, String rawQuery) {
-        private static final Pattern ARABIC_COUNT = Pattern.compile("(?<!\\d)([2-9]|1\\d|20)\\s*(?:个|名|位|人)?(?:agent|智能体|代理|成员|人)?", Pattern.CASE_INSENSITIVE);
+        private static final Pattern ARABIC_COUNT = Pattern.compile(
+                "(?<!\\d)(20|1\\d|[2-9])\\s*(?:(?:个|名|位)\\s*(?:agents?|智能体|代理|成员|人)?|人|agents?|智能体|代理|成员)(?!\\d)",
+                Pattern.CASE_INSENSITIVE
+        );
+        private static final Pattern NAMED_RESOURCE = Pattern.compile(
+                "(?:名为|名称(?:是|为)?|叫(?:做|作)?|named)\\s*[“\\\"']([^”\\\"'\\r\\n]{1,80})[”\\\"']",
+                Pattern.CASE_INSENSITIVE
+        );
+        private static final Pattern QUOTED_TEAM = Pattern.compile(
+                "(?:创建|新建|组建|搭建)\\s*(?:一个|一支|1\\s*个)?\\s*[“\\\"']([^”\\\"'\\r\\n]{1,80})[”\\\"']\\s*(?:的)?(?:团队|小组|team)",
+                Pattern.CASE_INSENSITIVE
+        );
 
         static Request from(String query) {
             String text = normalize(query);
             boolean team = containsAny(text, "团队", "小组", " team", "team ");
+            Request request;
             if (containsAny(text, "软件", "开发", "code", "代码", "web", "前端", "后端")) {
-                return withRequestedCount(software(team, query), requestedCount(text));
+                request = software(team, query);
+            } else if (containsAny(text, "数据", "csv", "excel", "分析", "报表")) {
+                request = data(team, query);
+            } else if (containsAny(text, "研究", "调研", "竞品", "财报")) {
+                request = research(team, query);
+            } else {
+                request = general(team, query);
             }
-            if (containsAny(text, "数据", "csv", "excel", "分析", "报表")) {
-                return withRequestedCount(data(team, query), requestedCount(text));
+            return withRequestedName(withRequestedCount(request, requestedCount(text)), query);
+        }
+
+        private static Request withRequestedName(Request request, String query) {
+            if (!request.team()) return request;
+            String requestedName = requestedName(query);
+            if (requestedName == null) return request;
+            return new Request(true, requestedName, request.description(), request.roles(), request.rawQuery());
+        }
+
+        private static String requestedName(String query) {
+            for (Pattern pattern : List.of(NAMED_RESOURCE, QUOTED_TEAM)) {
+                Matcher matcher = pattern.matcher(query == null ? "" : query);
+                if (matcher.find()) {
+                    String name = matcher.group(1).trim();
+                    if (!name.isBlank()) return name;
+                }
             }
-            if (containsAny(text, "研究", "调研", "竞品", "财报")) {
-                return withRequestedCount(research(team, query), requestedCount(text));
-            }
-            return withRequestedCount(general(team, query), requestedCount(text));
+            return null;
         }
 
         private static Request withRequestedCount(Request request, Integer requestedCount) {

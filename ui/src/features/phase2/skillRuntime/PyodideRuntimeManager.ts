@@ -344,7 +344,17 @@ let singleton: PyodideRuntimeManager | null = null;
 
 export function getPyodideIndexURL(): string {
   const url = import.meta.env.VITE_PYODIDE_INDEX_URL as string | undefined;
-  return (url ?? '').trim();
+  const configured = (url ?? '').trim();
+  // The local bundle is the reliable default. Existing compose files used the
+  // jsDelivr URL as their implicit default; map that legacy default locally so
+  // browser Skills keep working on offline, filtered, or TLS-inspected networks.
+  if (
+    !configured ||
+    configured === 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/'
+  ) {
+    return '/pyodide/';
+  }
+  return configured.endsWith('/') ? configured : `${configured}/`;
 }
 
 export function getSharedPyodideRuntimeManager(

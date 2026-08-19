@@ -1,9 +1,58 @@
-import { defineConfig, loadEnv } from 'vite';
+import { createReadStream, cpSync, existsSync, statSync } from 'node:fs';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
 import { mvpMockApiPlugin } from './mocks/viteMockPlugin';
 import { sseProxyPlugin } from './vite.sseProxyPlugin';
+
+const PYODIDE_PUBLIC_PATH = '/pyodide/';
+
+function pyodideAssetsPlugin(): Plugin {
+  const sourceDir = path.resolve(__dirname, 'node_modules', 'pyodide');
+  const safeAssetName = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+  return {
+    name: 'local-pyodide-assets',
+    configureServer(server) {
+      server.middlewares.use(PYODIDE_PUBLIC_PATH, (req, res, next) => {
+        const assetName = decodeURIComponent((req.url ?? '').split('?')[0])
+          .replace(/^\/+/, '');
+        if (!safeAssetName.test(assetName)) {
+          next();
+          return;
+        }
+        const filePath = path.resolve(sourceDir, assetName);
+        if (
+          !filePath.startsWith(`${sourceDir}${path.sep}`) ||
+          !existsSync(filePath) ||
+          !statSync(filePath).isFile()
+        ) {
+          next();
+          return;
+        }
+        const extension = path.extname(assetName).toLowerCase();
+        const contentTypes: Record<string, string> = {
+          '.js': 'text/javascript; charset=utf-8',
+          '.mjs': 'text/javascript; charset=utf-8',
+          '.json': 'application/json; charset=utf-8',
+          '.wasm': 'application/wasm',
+          '.zip': 'application/zip',
+          '.whl': 'application/zip',
+        };
+        res.setHeader('Content-Type', contentTypes[extension] ?? 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        createReadStream(filePath).pipe(res);
+      });
+    },
+    closeBundle() {
+      if (existsSync(sourceDir)) {
+        cpSync(sourceDir, path.resolve(__dirname, 'dist', 'pyodide'), {
+          recursive: true,
+        });
+      }
+    },
+  };
+}
 
 export default defineConfig(({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -47,6 +96,7 @@ export default defineConfig(({ command, mode, isPreview }) => {
 
   return {
     plugins: [
+      pyodideAssetsPlugin(),
       react(),
       tailwindcss(),
       mvpMockApiPlugin(isMvpMock),

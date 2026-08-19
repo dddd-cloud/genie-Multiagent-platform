@@ -179,7 +179,7 @@ services:
       # Vite inlines VITE_* at build time — must be present for `pnpm build`.
       # Stage 2 real Phase2 UI: set VITE_PHASE2_ENABLED=true before build/preview.
       VITE_PHASE2_ENABLED: ${VITE_PHASE2_ENABLED:-false}
-      VITE_PYODIDE_INDEX_URL: ${VITE_PYODIDE_INDEX_URL:-https://cdn.jsdelivr.net/pyodide/v0.27.7/full/}
+      VITE_PYODIDE_INDEX_URL: ${VITE_PYODIDE_INDEX_URL:-/pyodide/}
       FILE_TOOL_BASE_URL: ${FILE_TOOL_BASE_URL:-http://genie-tool:1601}
     ports:
       - "3000:3000"
@@ -195,7 +195,7 @@ services:
         corepack prepare pnpm@9.15.0 --activate
         pnpm install --frozen-lockfile
         export VITE_PHASE2_ENABLED="${VITE_PHASE2_ENABLED:-false}"
-        export VITE_PYODIDE_INDEX_URL="${VITE_PYODIDE_INDEX_URL:-https://cdn.jsdelivr.net/pyodide/v0.27.7/full/}"
+        export VITE_PYODIDE_INDEX_URL="${VITE_PYODIDE_INDEX_URL:-/pyodide/}"
         pnpm build
         exec pnpm preview --host 0.0.0.0 --port 3000
     networks:

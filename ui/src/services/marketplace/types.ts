@@ -15,6 +15,7 @@ export interface MarketplaceResource {
   trustTier: string;
   capabilities: string[];
   setup: string[];
+  installMode: 'INSTALL' | 'CONFIGURE';
 }
 
 export interface MarketplaceDraftResponse {

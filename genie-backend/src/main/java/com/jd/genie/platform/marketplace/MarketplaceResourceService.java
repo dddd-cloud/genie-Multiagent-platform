@@ -14,6 +14,13 @@ import com.jd.genie.platform.phase2.configuration.skill.service.SkillPackageImpo
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamResponse;
 import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
+import com.jd.genie.platform.phase2.tooling.AuthType;
+import com.jd.genie.platform.phase2.tooling.CreateMcpServerRequest;
+import com.jd.genie.platform.phase2.tooling.McpServerResponse;
+import com.jd.genie.platform.phase2.tooling.McpServerService;
+import com.jd.genie.platform.phase2.tooling.McpServerStatus;
+import com.jd.genie.platform.phase2.tooling.McpToolResponse;
+import com.jd.genie.platform.phase2.tooling.UpdateToolEnabledRequest;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,8 +33,10 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.stream.IntStream;
@@ -41,6 +50,7 @@ public class MarketplaceResourceService {
     private final AgentDefinitionService agentDefinitionService;
     private final AgentTeamService agentTeamService;
     private final MarketplacePackageArchiveService packageArchiveService;
+    private final McpServerService mcpServerService;
 
     @Autowired
     public MarketplaceResourceService(
@@ -48,14 +58,28 @@ public class MarketplaceResourceService {
         SkillPackageImportService skillPackageImportService,
         AgentDefinitionService agentDefinitionService,
         AgentTeamService agentTeamService,
-        MarketplacePackageArchiveService packageArchiveService
+        MarketplacePackageArchiveService packageArchiveService,
+        McpServerService mcpServerService
     ) {
         this.objectMapper = objectMapper;
         this.skillPackageImportService = skillPackageImportService;
         this.agentDefinitionService = agentDefinitionService;
         this.agentTeamService = agentTeamService;
         this.packageArchiveService = packageArchiveService;
+        this.mcpServerService = mcpServerService;
         this.catalog = loadCatalog();
+    }
+
+    /** Backward-compatible constructor used by focused marketplace tests. */
+    public MarketplaceResourceService(
+        ObjectMapper objectMapper,
+        SkillPackageImportService skillPackageImportService,
+        AgentDefinitionService agentDefinitionService,
+        AgentTeamService agentTeamService,
+        MarketplacePackageArchiveService packageArchiveService
+    ) {
+        this(objectMapper, skillPackageImportService, agentDefinitionService, agentTeamService,
+            packageArchiveService, null);
     }
 
     /** Public test seam for catalog-only behavior; no installation services are available. */
@@ -65,6 +89,7 @@ public class MarketplaceResourceService {
         this.agentDefinitionService = null;
         this.agentTeamService = null;
         this.packageArchiveService = null;
+        this.mcpServerService = null;
         this.catalog = loadCatalog();
     }
 
@@ -75,6 +100,7 @@ public class MarketplaceResourceService {
         this.agentDefinitionService = null;
         this.agentTeamService = null;
         this.packageArchiveService = null;
+        this.mcpServerService = null;
         this.catalog = parseCatalogDocument(catalogJson);
     }
 
@@ -90,8 +116,7 @@ public class MarketplaceResourceService {
             case SKILL -> installSkill(user, entry);
             case AGENT -> installAgent(user, entry);
             case TEAM -> installTeam(user, entry);
-            case MCP -> throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR,
-                "MCP templates require user-owned endpoint and credential configuration");
+            case MCP -> installMcp(entry);
         };
     }
 
@@ -231,7 +256,7 @@ public class MarketplaceResourceService {
 
     private MarketplaceInstallResponse installAgent(CurrentUser user, MarketplaceCatalogEntry entry) {
         requireInstallServices();
-        InstalledAgent installed = createOnlineAgent(user, entry, entry.name());
+        InstalledAgent installed = createOnlineAgent(user, entry, entry.name(), new LinkedHashMap<>());
         return new MarketplaceInstallResponse(entry.id(), entry.type(), installed.agent().id(), List.of(installed.agent().id()),
             installed.skillIds(), null, "INSTALLED", "ONLINE".equals(installed.agent().status()), List.of());
     }
@@ -241,16 +266,18 @@ public class MarketplaceResourceService {
         List<String> templateIds = stringList(entry.draft().path("recommendedAgentTemplates"));
         if (templateIds.isEmpty()) throw invalid("Team template has no Agent blueprints");
         List<InstalledAgent> installed = new ArrayList<>();
+        Map<String, String> installedSkillIds = new LinkedHashMap<>();
         for (int i = 0; i < templateIds.size(); i++) {
             MarketplaceCatalogEntry blueprint = find(templateIds.get(i)).orElseThrow(() -> invalid("Team Agent blueprint is missing"));
             if (blueprint.type() != MarketplaceResourceType.AGENT) throw invalid("Team blueprint must reference Agent templates");
-            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · " + blueprint.name()));
+            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · " + blueprint.name(), installedSkillIds));
         }
         if (installed.size() == 1) {
             MarketplaceCatalogEntry blueprint = find(templateIds.get(0)).orElseThrow(() -> invalid("Team Agent blueprint is missing"));
-            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · 结果复核"));
+            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · 结果复核", installedSkillIds));
         }
-        TeamResponse team = agentTeamService.createTeam(user, new TeamCreateRequest(entry.name(), entry.description(),
+        String teamName = agentTeamService.nextAvailableName(user, entry.name());
+        TeamResponse team = agentTeamService.createTeam(user, new TeamCreateRequest(teamName, entry.description(),
             installed.get(0).agent().id(), installed.subList(1, installed.size()).stream().map(item -> item.agent().id()).toList()));
         List<String> agents = installed.stream().map(item -> item.agent().id()).toList();
         List<String> skills = installed.stream().flatMap(item -> item.skillIds().stream()).distinct().toList();
@@ -258,12 +285,13 @@ public class MarketplaceResourceService {
             "INSTALLED", true, List.of());
     }
 
-    private InstalledAgent createOnlineAgent(CurrentUser user, MarketplaceCatalogEntry entry, String name) {
-        List<String> installedSkills = installLinkedSkills(user, entry.draft());
+    private InstalledAgent createOnlineAgent(CurrentUser user, MarketplaceCatalogEntry entry, String name,
+                                             Map<String, String> installedSkillIds) {
+        List<String> installedSkills = installLinkedSkills(user, entry.draft(), installedSkillIds);
         List<AgentSkillBindingRequest> bindings = IntStream.range(0, installedSkills.size())
             .mapToObj(index -> new AgentSkillBindingRequest(installedSkills.get(index), index + 1)).toList();
         AgentResponse created = agentDefinitionService.createAgent(user, new AgentCreateRequest(
-            name,
+            agentDefinitionService.nextAvailableName(user, name),
             entry.draft().path("description").asText(entry.description()),
             entry.draft().path("promptMode").asText("RAW"),
             entry.draft().path("promptConfig").isMissingNode() ? null : entry.draft().path("promptConfig").asText(null),
@@ -275,14 +303,72 @@ public class MarketplaceResourceService {
         return new InstalledAgent(agentDefinitionService.onlineAgent(user, created.id(), created.version()), installedSkills);
     }
 
-    private List<String> installLinkedSkills(CurrentUser user, JsonNode draft) {
+    private List<String> installLinkedSkills(CurrentUser user, JsonNode draft, Map<String, String> installedSkillIds) {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         for (String linkedId : stringList(draft.path("marketplaceSkillIds"))) {
             MarketplaceCatalogEntry skillEntry = find(linkedId).orElseThrow(() -> invalid("linked Skill template is missing"));
             if (skillEntry.type() != MarketplaceResourceType.SKILL) throw invalid("linked resource is not a Skill");
-            ids.add(installSkill(user, skillEntry).primaryResourceId());
+            String installedId = installedSkillIds.get(linkedId);
+            if (installedId == null) {
+                installedId = installSkill(user, skillEntry).primaryResourceId();
+                installedSkillIds.put(linkedId, installedId);
+            }
+            ids.add(installedId);
         }
         return List.copyOf(ids);
+    }
+
+    private MarketplaceInstallResponse installMcp(MarketplaceCatalogEntry entry) {
+        if (mcpServerService == null) {
+            throw new IllegalStateException("Marketplace MCP install service is unavailable in this test seam");
+        }
+        JsonNode draft = entry.draft();
+        String serverUrl = draft == null ? "" : draft.path("serverUrl").asText("").trim();
+        String authType = draft == null ? "" : draft.path("authType").asText("").trim();
+        String transportType = draft == null ? "" : draft.path("transportType").asText("").trim();
+        Set<String> allowedTools = new LinkedHashSet<>(stringList(draft == null ? null : draft.path("allowedTools")));
+        if (serverUrl.isBlank() || !AuthType.NONE.name().equals(authType)
+            || !"SSE".equals(transportType) || allowedTools.isEmpty()) {
+            throw invalid("MCP template requires compatible transport, a reviewed tool allowlist, or user authorization");
+        }
+
+        McpServerResponse server = mcpServerService.list().stream()
+            .filter(existing -> serverUrl.equals(existing.serverUrl()))
+            .findFirst()
+            .orElseGet(() -> mcpServerService.create(new CreateMcpServerRequest(
+                draft.path("name").asText(entry.name()), serverUrl, AuthType.NONE, null, null)));
+
+        if (server.status() == McpServerStatus.ENABLED) {
+            return new MarketplaceInstallResponse(entry.id(), entry.type(), server.id(), List.of(), List.of(),
+                null, "INSTALLED", true, List.of("该 MCP 已存在，未重复创建。"));
+        }
+        try {
+            List<McpToolResponse> discovered = mcpServerService.refreshTools(server.id());
+            if (discovered.isEmpty()) {
+                return new MarketplaceInstallResponse(entry.id(), entry.type(), server.id(), List.of(), List.of(),
+                    null, "INSTALLED", false, List.of("已添加到 MCP 设置，但服务没有返回可用工具，暂未启用。"));
+            }
+            long reviewedToolCount = discovered.stream().filter(tool -> allowedTools.contains(tool.toolName())).count();
+            for (McpToolResponse tool : discovered) {
+                if (!allowedTools.contains(tool.toolName()) && tool.enabled()) {
+                    mcpServerService.setToolEnabled(server.id(), tool.id(),
+                        new UpdateToolEnabledRequest(false, tool.version()));
+                }
+            }
+            if (reviewedToolCount == 0) {
+                return new MarketplaceInstallResponse(entry.id(), entry.type(), server.id(), List.of(), List.of(),
+                    null, "INSTALLED", false,
+                    List.of("已添加到 MCP 设置，但远程服务未返回经过广场审核的只读工具，暂未启用。"));
+            }
+            McpServerResponse enabled = mcpServerService.setStatus(server.id(), server.version(), McpServerStatus.ENABLED);
+            return new MarketplaceInstallResponse(entry.id(), entry.type(), enabled.id(), List.of(), List.of(),
+                null, "INSTALLED", true, List.of());
+        } catch (Phase2ContractException exception) {
+            return new MarketplaceInstallResponse(entry.id(), entry.type(), server.id(), List.of(), List.of(),
+                null, "INSTALLED", false,
+                List.of("已添加到 MCP 设置，但连接检测未通过（" + exception.errorCode().name()
+                    + "），请稍后在 MCP 页面重试。"));
+        }
     }
 
     private List<String> stringList(JsonNode node) {
@@ -324,6 +410,7 @@ public class MarketplaceResourceService {
             if (!draft.path("memberAgentIds").isArray() || draft.path("memberAgentIds").isEmpty()) missing.add("memberAgentIds");
         } else if (type == MarketplaceResourceType.MCP) {
             if (draft.path("serverUrl").asText().isBlank()) missing.add("serverUrl");
+            if (!"NONE".equals(draft.path("authType").asText())) missing.add("授权凭据（需在 MCP 设置中填写）");
         }
         return missing;
     }
