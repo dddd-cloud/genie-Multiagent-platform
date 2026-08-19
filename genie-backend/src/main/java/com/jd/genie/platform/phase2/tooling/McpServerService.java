@@ -3,6 +3,7 @@ package com.jd.genie.platform.phase2.tooling;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.CurrentUserProvider;
+import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import java.security.MessageDigest;
@@ -74,7 +75,8 @@ public class McpServerService {
         markCheck(u.tenantId(),u.userId(),id,"SUCCESS",null); return tools(id);
     }
     public List<McpToolResponse> tools(String id) { var u=currentUser.requireCurrentUser(); one(u.tenantId(),u.userId(),id); return jdbc.query("SELECT id,tool_name,runtime_name,description,input_schema,enabled,available,version FROM mcp_tool WHERE mcp_server_id=? AND tenant_id=? AND owner_id=? ORDER BY tool_name",(rs,n)->tool(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4),parse(rs.getString(5)),rs.getBoolean(6),rs.getBoolean(7),rs.getLong(8)),id,u.tenantId(),u.userId()); }
-    public List<McpToolResponse> capabilities() { var u=currentUser.requireCurrentUser(); return jdbc.query("SELECT id,tool_name,runtime_name,description,input_schema,enabled,available,version FROM mcp_tool WHERE tenant_id=? AND owner_id=? AND enabled=TRUE AND available=TRUE ORDER BY runtime_name",(rs,n)->tool(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4),parse(rs.getString(5)),rs.getBoolean(6),rs.getBoolean(7),rs.getLong(8)),u.tenantId(),u.userId()); }
+    public List<McpToolResponse> capabilities() { return capabilities(currentUser.requireCurrentUser()); }
+    public List<McpToolResponse> capabilities(CurrentUser u) { if(u==null || u.tenantId()==null || u.userId()==null) throw validation(); return jdbc.query("SELECT id,tool_name,runtime_name,description,input_schema,enabled,available,version FROM mcp_tool WHERE tenant_id=? AND owner_id=? AND enabled=TRUE AND available=TRUE ORDER BY runtime_name",(rs,n)->tool(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4),parse(rs.getString(5)),rs.getBoolean(6),rs.getBoolean(7),rs.getLong(8)),u.tenantId(),u.userId()); }
     @Transactional public McpToolResponse setToolEnabled(String serverId,String toolId,UpdateToolEnabledRequest req){if(req==null||req.enabled()==null)throw validation();var u=currentUser.requireCurrentUser();one(u.tenantId(),u.userId(),serverId);int c=jdbc.update("UPDATE mcp_tool SET enabled=?,updated_at=?,version=version+1 WHERE id=? AND mcp_server_id=? AND tenant_id=? AND owner_id=? AND version=?",req.enabled(),LocalDateTime.now(clock),toolId,serverId,u.tenantId(),u.userId(),req.version());if(c!=1)throw new Phase2ContractException(MvpErrorCode.VERSION_CONFLICT,"Tool version conflict");return tools(serverId).stream().filter(t->t.id().equals(toolId)).findFirst().orElseThrow(()->notFound());}
     private McpServerResponse one(String tenant,String owner,String id){try{return jdbc.queryForObject("SELECT * FROM mcp_server WHERE id=? AND tenant_id=? AND owner_id=? AND deleted_at IS NULL",this::server,id,tenant,owner);}catch(Exception e){throw notFound();}}
     private Raw raw(String tenant,String owner,String id){try{return jdbc.queryForObject("SELECT credential_envelope,last_check_status,auth_type,auth_name FROM mcp_server WHERE id=? AND tenant_id=? AND owner_id=? AND deleted_at IS NULL",(rs,n)->new Raw(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4)),id,tenant,owner);}catch(Exception e){throw notFound();}}

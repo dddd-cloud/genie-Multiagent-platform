@@ -13,6 +13,7 @@ import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentExecutor;
 import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentPrinter;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
+import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
@@ -40,6 +41,7 @@ public final class SerialOrchestrationService {
     private final ConfiguredAgentExecutor executor;
     private final OrchestrationModelPort modelPort;
     private final DirectFallbackExecutor directFallbackExecutor;
+    private final SystemResourceBuilder systemResourceBuilder;
     private final ThreadLocal<AtomicReference<String>> requestRunningStep = new ThreadLocal<>();
     private final int maxAgentSteps;
 
@@ -70,7 +72,7 @@ public final class SerialOrchestrationService {
             int maxAgentSteps,
             OrchestrationModelPort modelPort
     ) {
-        this(catalogPort, toolCollectionPort, skillRuntimePort, executor, maxAgentSteps, modelPort, null);
+        this(catalogPort, toolCollectionPort, skillRuntimePort, executor, maxAgentSteps, modelPort, null, null);
     }
 
     public SerialOrchestrationService(
@@ -82,6 +84,19 @@ public final class SerialOrchestrationService {
             OrchestrationModelPort modelPort,
             DirectFallbackExecutor directFallbackExecutor
     ) {
+        this(catalogPort, toolCollectionPort, skillRuntimePort, executor, maxAgentSteps, modelPort, directFallbackExecutor, null);
+    }
+
+    public SerialOrchestrationService(
+            AgentRuntimeCatalogPort catalogPort,
+            RuntimeToolCollectionPort toolCollectionPort,
+            SkillRuntimePort skillRuntimePort,
+            ConfiguredAgentExecutor executor,
+            int maxAgentSteps,
+            OrchestrationModelPort modelPort,
+            DirectFallbackExecutor directFallbackExecutor,
+            SystemResourceBuilder systemResourceBuilder
+    ) {
         this.catalogPort = catalogPort;
         this.toolCollectionPort = toolCollectionPort;
         this.skillRuntimePort = skillRuntimePort;
@@ -89,6 +104,7 @@ public final class SerialOrchestrationService {
         this.maxAgentSteps = maxAgentSteps;
         this.modelPort = modelPort;
         this.directFallbackExecutor = directFallbackExecutor;
+        this.systemResourceBuilder = systemResourceBuilder;
     }
 
     public Map<String, AgentTaskResult> execute(
@@ -624,6 +640,9 @@ public final class SerialOrchestrationService {
         }
         ConfiguredAgentPrinter printer = new ConfiguredAgentPrinter();
         try {
+            if (SystemResourceBuilder.isSystemAgent(agentId)) {
+                return executeSystemResourceStep(user, query, step, executionId, events, traceChannel, attemptNo, subTask);
+            }
             AgentRuntimeProfile profile = catalogPort.loadOnlineProfile(user, agentId);
             String agentName = profile.name() == null || profile.name().isBlank() ? agentId : profile.name();
             printer = new ConfiguredAgentPrinter(
@@ -749,6 +768,34 @@ public final class SerialOrchestrationService {
             printer.close();
             runningStepId.set(null);
         }
+    }
+
+    private AgentTaskResult executeSystemResourceStep(
+            CurrentUser user,
+            String query,
+            OrchestrationStep step,
+            String executionId,
+            OrchestrationEventSink events,
+            OrchestrationTraceChannel traceChannel,
+            int attemptNo,
+            boolean subTask
+    ) {
+        String agentName = SystemResourceBuilder.candidate().name();
+        if (systemResourceBuilder == null) {
+            return AgentTaskResult.failure("SYSTEM_RESOURCE_BUILDER_UNAVAILABLE", false);
+        }
+        emitExecutionEvent(events, "STARTED", step, executionId, SystemResourceBuilder.AGENT_ID, agentName, null, Map.of("agentName", agentName), subTask);
+        if (traceChannel != null) {
+            emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, SystemResourceBuilder.AGENT_ID, agentName,
+                    OrchestrationTraceChannel.KIND_STATUS, "开始执行：" + step.objective(), false, subTask);
+        }
+        AgentTaskResult result = AgentTaskResult.success(systemResourceBuilder.create(user, query));
+        emitExecutionEvent(events, "COMPLETED", step, executionId, SystemResourceBuilder.AGENT_ID, agentName, result, Map.of("agentName", agentName), subTask);
+        if (traceChannel != null) {
+            emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, SystemResourceBuilder.AGENT_ID, agentName,
+                    OrchestrationTraceChannel.KIND_OUTPUT, result.output(), false, subTask);
+        }
+        return result;
     }
 
     private void emitExecutionEvent(

@@ -390,6 +390,7 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - PARALLEL_AGENTS requires agentId null and 2..4 subTasks
                 - Every subTask must contain exactly subTaskId, agentId, objective; subTaskId values are unique across the plan
                 - Every agentId must be from candidates
+                - The reserved candidate id __system_resource_builder__ is a hidden platform Agent. Only use it for a request that creates an Agent or Team; when used it must be the first SINGLE_AGENT step, never a PARALLEL subTask. Its step creates resources only. Any later work must remain assigned to the user's existing visible candidates; never assume the newly created Team has replaced the current conversation Team.
                 - A candidate may appear in multiple distinct parallel subTasks
                 - When the user asks multiple agents to each do something (各/分别/每个), use one PARALLEL_AGENTS step with independent subTasks when suitable
                 - Do not add a final summary / 汇总成稿 / 回答用户全部问题 step; the system synthesizes the user-facing answer after specialists finish

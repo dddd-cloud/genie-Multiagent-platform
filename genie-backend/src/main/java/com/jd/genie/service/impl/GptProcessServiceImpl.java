@@ -23,6 +23,7 @@ import com.jd.genie.platform.phase2.memory.store.LocalMemorySnapshot;
 import com.jd.genie.platform.phase2.memory.store.MemoryDocumentService;
 import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationConversationHistory;
 import com.jd.genie.platform.phase2.runtime.orchestration.Phase2OrchestrationRuntime;
+import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.MasterPersona;
@@ -346,9 +347,21 @@ public class GptProcessServiceImpl implements IGptProcessService {
             return new OrchestrationTargets(List.of(), MasterPersona.none());
         }
         if (request.teamId() != null && !request.teamId().isBlank()) {
-            return loadTeamTargets(currentUser, request.teamId());
+            return withSystemResourceBuilder(loadTeamTargets(currentUser, request.teamId()), request.trustedRequest().getQuery());
         }
-        return new OrchestrationTargets(loadCandidateSnapshot(currentUser, request), MasterPersona.none());
+        return withSystemResourceBuilder(
+                new OrchestrationTargets(loadCandidateSnapshot(currentUser, request), MasterPersona.none()),
+                request.trustedRequest().getQuery()
+        );
+    }
+
+    private OrchestrationTargets withSystemResourceBuilder(OrchestrationTargets targets, String query) {
+        if (!SystemResourceBuilder.requiresResourceCreation(query)) {
+            return targets;
+        }
+        List<AgentCapabilitySummary> candidates = new java.util.ArrayList<>(targets.candidates());
+        candidates.add(SystemResourceBuilder.candidate());
+        return new OrchestrationTargets(List.copyOf(candidates), targets.masterPersona());
     }
 
     private OrchestrationTargets loadTeamTargets(CurrentUser currentUser, String teamId) {

@@ -6,6 +6,7 @@ import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentExecutor;
 import com.jd.genie.platform.phase2.runtime.agent.ConfiguredReactAgentFactory;
 import com.jd.genie.platform.phase2.runtime.event.OrchestrationEventMapper;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
+import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
 import com.jd.genie.platform.phase2contract.port.SkillRuntimePort;
@@ -46,6 +47,7 @@ public class Phase2OrchestrationConfiguration {
             SkillRuntimePort skillRuntimePort,
             ConfiguredAgentExecutor executor,
             OrchestrationModelPort modelPort,
+            SystemResourceBuilder systemResourceBuilder,
             GenieConfig genieConfig,
             @Value("${GENIE_ORCHESTRATION_MAX_AGENT_STEPS:10}") int maxAgentSteps
     ) {
@@ -54,7 +56,7 @@ public class Phase2OrchestrationConfiguration {
         if (reactMax != null && reactMax > 0) {
             capped = Math.max(1, Math.min(Math.min(capped, reactMax), 20));
         }
-        return new SerialOrchestrationService(catalogPort, toolCollectionPort, skillRuntimePort, executor, capped, modelPort);
+        return new SerialOrchestrationService(catalogPort, toolCollectionPort, skillRuntimePort, executor, capped, modelPort, null, systemResourceBuilder);
     }
 
     @Bean

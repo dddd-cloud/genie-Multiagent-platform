@@ -11,6 +11,7 @@ import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
+import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
@@ -155,23 +156,12 @@ public final class Phase2OrchestrationRuntime {
             }
 
             Map<String, String> successes = new LinkedHashMap<>();
-            OrchestrationPlan plan = planValidator.validate(
-                    assignCandidatesToMainOnlySteps(
-                            modelPort.createPlan(
-                                    query,
-                                    conversationHistory,
-                                    longTermMemory,
-                                    conversationSummary,
-                                    candidates,
-                                    1,
-                                    Map.of(),
-                                    Map.of(),
-                                    persona
-                            ),
-                            candidates
-                    ),
-                    candidates
+            OrchestrationPlan modelPlan = modelPort.createPlan(
+                    query, conversationHistory, longTermMemory, conversationSummary, candidates,
+                    1, Map.of(), Map.of(), persona
             );
+            OrchestrationPlan plan = planValidator.validate(
+                    enforceSystemResourceStep(query, assignCandidatesToMainOnlySteps(modelPlan, candidates)), candidates);
             List<OrchestrationPlanStepView> steps = plan.steps().stream()
                     .map(step -> stepView(step, candidates))
                     .toList();
@@ -254,6 +244,9 @@ public final class Phase2OrchestrationRuntime {
             List<AgentCapabilitySummary> candidates,
             MasterPersona masterPersona
     ) {
+        if (SystemResourceBuilder.requiresResourceCreation(query)) {
+            return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "RESOURCE_CREATION_REQUEST");
+        }
         if ("ORCHESTRATED".equals(mode)) {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST");
         }
@@ -467,6 +460,32 @@ public final class Phase2OrchestrationRuntime {
             }
         }
         return changed ? new OrchestrationPlan(remapped) : plan;
+    }
+
+    /** A resource request always begins with the hidden system Agent exactly once. */
+    static OrchestrationPlan enforceSystemResourceStep(String query, OrchestrationPlan plan) {
+        if (!SystemResourceBuilder.requiresResourceCreation(query) || plan == null) {
+            return plan;
+        }
+        List<OrchestrationStep> retained = new java.util.ArrayList<>();
+        java.util.Set<String> removedIds = new java.util.HashSet<>();
+        for (OrchestrationStep step : plan.steps()) {
+            if (SystemResourceBuilder.isSystemAgent(step.agentId())) {
+                removedIds.add(step.stepId());
+            } else {
+                retained.add(step);
+            }
+        }
+        List<OrchestrationStep> normalized = new java.util.ArrayList<>();
+        normalized.add(new OrchestrationStep(
+                "system-resource-create", SystemResourceBuilder.AGENT_ID,
+                "根据用户请求创建当前用户自己的 Agent 或 Team，并按最小权限匹配已启用的 Skill 和 MCP 工具。", List.of()
+        ));
+        for (OrchestrationStep step : retained) {
+            List<String> refs = step.inputRefs().stream().filter(ref -> !removedIds.contains(ref)).toList();
+            normalized.add(new OrchestrationStep(step.stepId(), step.mode(), step.objective(), refs, step.agentId(), step.subTasks()));
+        }
+        return new OrchestrationPlan(normalized);
     }
 
     private String agentName(String agentId, List<AgentCapabilitySummary> candidates) {
