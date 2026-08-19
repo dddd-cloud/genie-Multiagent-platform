@@ -6,6 +6,8 @@ COPY ui/package.json ./
 RUN npm config set registry https://registry.npmmirror.com
 RUN pnpm install
 COPY ui/ .
+COPY docs /docs
+ENV VITE_PHASE2_ENABLED=true
 RUN pnpm build
 
 # 后端构建阶段
@@ -18,7 +20,7 @@ RUN chmod +x build.sh start.sh
 RUN ./build.sh
 
 # Python 环境准备阶段
-FROM docker.m.daocloud.io/library/python:3.11-slim as python-base
+FROM docker.m.daocloud.io/library/python:3.11-slim-bookworm as python-base
 WORKDIR /app
 
 RUN rm /etc/apt/sources.list.d/* && echo 'deb https://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware' \
@@ -39,7 +41,7 @@ RUN apt-get clean && \
 RUN pip install uv
 
 # 最终运行阶段
-FROM docker.m.daocloud.io/library/python:3.11-slim
+FROM docker.m.daocloud.io/library/python:3.11-slim-bookworm
 
 # 安装系统依赖
 RUN rm /etc/apt/sources.list.d/* && echo 'deb https://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware' \

@@ -479,7 +479,7 @@ public final class Phase2OrchestrationRuntime {
         List<OrchestrationStep> normalized = new java.util.ArrayList<>();
         normalized.add(new OrchestrationStep(
                 "system-resource-create", SystemResourceBuilder.AGENT_ID,
-                "根据用户请求创建当前用户自己的 Agent 或 Team，并按最小权限匹配已启用的 Skill 和 MCP 工具。", List.of()
+                "按用户意图创建 Agent 或 Team：使用贴合任务的名称、职责说明和系统提示词，并按最小权限绑定已启用的 Skill 和 MCP 工具。", List.of()
         ));
         for (OrchestrationStep step : retained) {
             List<String> refs = step.inputRefs().stream().filter(ref -> !removedIds.contains(ref)).toList();

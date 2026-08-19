@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectPhase2Nav, loginAsAcceptanceUser } from './helpers';
+import { openSettingsSection } from '../helpers';
 
 const realReady = process.env.PHASE2_REAL_E2E_READY === '1';
 
@@ -10,8 +11,7 @@ test.describe('Phase2 real local memory', () => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
 
-    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
-    await page.getByTestId('settings-nav').getByRole('link', { name: '本地记忆' }).click();
+    await openSettingsSection(page, '本地记忆');
 
     await expect(page.getByRole('heading', { name: '记忆' })).toBeVisible();
     await expect(page.getByText(/磁盘状态：/)).toHaveCount(0);

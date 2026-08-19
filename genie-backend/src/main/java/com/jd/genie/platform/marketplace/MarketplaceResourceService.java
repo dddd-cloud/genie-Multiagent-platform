@@ -8,6 +8,7 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingRequest;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillPackageImportService;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
@@ -267,7 +268,7 @@ public class MarketplaceResourceService {
             entry.draft().path("promptMode").asText("RAW"),
             entry.draft().path("promptConfig").isMissingNode() ? null : entry.draft().path("promptConfig").asText(null),
             entry.draft().path("systemPrompt").asText(),
-            entry.draft().path("modelName").asText("default"),
+            catalogModelName(entry.draft()),
             bindings,
             stringList(entry.draft().path("capabilityKeys"))
         ));
@@ -289,6 +290,14 @@ public class MarketplaceResourceService {
         List<String> values = new ArrayList<>();
         for (JsonNode item : node) if (item.isTextual() && !item.asText().isBlank()) values.add(item.asText());
         return List.copyOf(values);
+    }
+
+    private static String catalogModelName(JsonNode draft) {
+        String value = draft == null ? "" : draft.path("modelName").asText("").trim();
+        if (value.isBlank() || "default".equals(value)) {
+            return ModelCatalogService.SYSTEM_DEFAULT;
+        }
+        return value;
     }
 
     private void requireInstallServices() {

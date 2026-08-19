@@ -3,7 +3,6 @@ import type { AgentFormState } from '@/features/phase2/agents/agentFormModel';
 import { emptyAgentFormState } from '@/features/phase2/agents/agentFormModel';
 import type { TeamFormState } from '@/features/phase2/teams/teamFormModel';
 import { emptyTeamFormState } from '@/features/phase2/teams/teamFormModel';
-import type { GenerationDraftResponse } from '@/services/generation';
 import type { MarketplaceDraftResponse } from '@/services/marketplace';
 
 function stringValue(value: unknown): string | undefined {
@@ -14,6 +13,15 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+/** Catalog templates use "default"; the model catalog stores that as system default (null). */
+function resolveMarketplaceModelName(value: unknown): string | null {
+  const name = stringValue(value)?.trim();
+  if (!name || name === 'default' || name === 'system-default') {
+    return null;
+  }
+  return name;
 }
 
 export function mapDraftToAgentForm(draft: Record<string, unknown>): AgentFormState {
@@ -36,7 +44,7 @@ export function mapDraftToAgentForm(draft: Record<string, unknown>): AgentFormSt
     promptMode,
     promptConfigText,
     systemPrompt: stringValue(draft.systemPrompt) ?? base.systemPrompt,
-    modelName: stringValue(draft.modelName) ?? base.modelName,
+    modelName: resolveMarketplaceModelName(draft.modelName),
     skillIds,
     capabilityKeys: stringList(draft.capabilityKeys),
   };
@@ -59,10 +67,4 @@ export function marketplaceDraftTarget(
   if (result.type === 'AGENT') return 'AGENT';
   if (result.type === 'TEAM') return 'TEAM';
   return null;
-}
-
-export function generationDraftTarget(
-  result: GenerationDraftResponse,
-): 'AGENT' | 'TEAM' {
-  return result.target === 'TEAM' ? 'TEAM' : 'AGENT';
 }

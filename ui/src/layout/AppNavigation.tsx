@@ -5,8 +5,6 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   FolderOpenOutlined,
-  SettingOutlined,
-  ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import classNames from 'classnames';
@@ -40,23 +38,6 @@ const WORKBENCH_GROUP: NavGroup = {
       label: '资源广场',
       icon: <AppstoreOutlined />,
     },
-    {
-      to: '/app/generate',
-      label: '一句话生成',
-      icon: <ThunderboltOutlined />,
-    },
-  ],
-};
-
-const SETTINGS_GROUP: NavGroup = {
-  key: 'settings',
-  title: '设置',
-  items: [
-    {
-      to: '/app/settings',
-      label: '设置中心',
-      icon: <SettingOutlined />,
-    },
   ],
 };
 
@@ -87,9 +68,7 @@ const AppNavigation: GenieType.FC = memo(() => {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const groups =
-    user?.role === 'ADMIN'
-      ? [WORKBENCH_GROUP, SETTINGS_GROUP, ADMIN_GROUP]
-      : [WORKBENCH_GROUP, SETTINGS_GROUP];
+    user?.role === 'ADMIN' ? [WORKBENCH_GROUP, ADMIN_GROUP] : [WORKBENCH_GROUP];
 
   return (
     <div className="w-full">
@@ -97,7 +76,7 @@ const AppNavigation: GenieType.FC = memo(() => {
       <nav
         className="w-full px-10 py-8 border-b border-border"
         data-testid="app-navigation"
-        aria-label="设置与管理导航"
+        aria-label="工作台与管理导航"
       >
         {groups.map((group) => (
           <div key={group.key} className="mb-4 last:mb-0">

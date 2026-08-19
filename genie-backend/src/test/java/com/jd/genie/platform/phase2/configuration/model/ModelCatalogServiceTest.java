@@ -41,6 +41,32 @@ class ModelCatalogServiceTest {
         assertFalse(result.available());
     }
 
+    @Test
+    void treatsCatalogDefaultAsSystemDefaultWhenItIsNotAConfiguredModel() {
+        ModelCatalogService service = new ModelCatalogService(config("qwen-plus", Map.of(
+            "qwen-plus", LLMSettings.builder().build()
+        )));
+
+        ModelResolutionResult result = service.resolveForStorage("default");
+
+        assertNull(result.storedModelName());
+        assertEquals("qwen-plus", result.resolvedModelName());
+        assertTrue(result.available());
+    }
+
+    @Test
+    void keepsLiteralDefaultWhenItIsAConfiguredModel() {
+        ModelCatalogService service = new ModelCatalogService(config("qwen-plus", Map.of(
+            "default", LLMSettings.builder().build(),
+            "qwen-plus", LLMSettings.builder().build()
+        )));
+
+        ModelResolutionResult result = service.resolveForStorage("default");
+
+        assertEquals("default", result.storedModelName());
+        assertTrue(result.available());
+    }
+
     static GenieConfig config(String reactModelName, Map<String, LLMSettings> settings) {
         return new GenieConfig() {
             @Override

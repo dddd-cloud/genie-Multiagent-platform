@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router-dom';
 import MarketplacePage from '@/features/marketplace/MarketplacePage';
 import type { MarketplaceDraftResponse } from '@/services/marketplace';
 import {
-  mapDraftToAgentForm,
   mapDraftToTeamForm,
   marketplaceDraftTarget,
 } from './draftMapping';
@@ -15,12 +14,6 @@ export default function MarketplaceMount() {
     if (target === 'TEAM') {
       navigate('/app/teams/new', {
         state: { draft: mapDraftToTeamForm(result.draft) },
-      });
-      return;
-    }
-    if (target === 'AGENT') {
-      navigate('/app/settings/agents/new', {
-        state: { draft: mapDraftToAgentForm(result.draft) },
       });
     }
   }

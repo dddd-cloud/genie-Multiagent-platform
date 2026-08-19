@@ -36,12 +36,17 @@ public class ModelCatalogService {
 
     public ModelResolutionResult resolveForStorage(String requestedModelName) {
         Map<String, LLMSettings> settings = safeSettings();
-        if (requestedModelName == null || requestedModelName.isBlank() || SYSTEM_DEFAULT.equals(requestedModelName.trim())) {
+        String requested = requestedModelName == null ? "" : requestedModelName.trim();
+        if (requested.isBlank() || SYSTEM_DEFAULT.equals(requested) || isLegacyDefaultAlias(requested, settings)) {
             String defaultModelName = genieConfig.getReactModelName();
             return new ModelResolutionResult(null, defaultModelName, defaultModelName != null && settings.containsKey(defaultModelName));
         }
-        String modelName = requestedModelName.trim();
-        return new ModelResolutionResult(modelName, modelName, settings.containsKey(modelName));
+        return new ModelResolutionResult(requested, requested, settings.containsKey(requested));
+    }
+
+    /** Catalog drafts historically stored "default"; that is not an llmSettingsMap key. */
+    private static boolean isLegacyDefaultAlias(String requested, Map<String, LLMSettings> settings) {
+        return "default".equals(requested) && !settings.containsKey(requested);
     }
 
     public ModelResolutionResult requireAvailableForStorage(String requestedModelName) {

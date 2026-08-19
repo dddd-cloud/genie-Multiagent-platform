@@ -12,43 +12,12 @@ const NotFound = React.lazy(() => import('@/components/NotFound'));
 const ConversationLayout = React.lazy(
   () => import('@/features/conversation/ConversationLayout'),
 );
-const AgentListPage = React.lazy(
-  () => import('@/features/phase2/agents/AgentListPage'),
-);
-const AgentEditorPage = React.lazy(
-  () => import('@/features/phase2/agents/AgentEditorPage'),
-);
 const TeamListPage = React.lazy(
   () => import('@/features/phase2/teams/TeamListPage'),
 );
 const TeamEditorPage = React.lazy(
   () => import('@/features/phase2/teams/TeamEditorPage'),
 );
-const SkillListPage = React.lazy(
-  () => import('@/features/phase2/skills/SkillListPage'),
-);
-const SkillEditorPage = React.lazy(
-  () => import('@/features/phase2/skills/SkillEditorPage'),
-);
-const McpListPage = React.lazy(
-  () => import('@/features/phase2/mcp/McpListPage'),
-);
-const McpEditorPage = React.lazy(
-  () => import('@/features/phase2/mcp/McpEditorPage'),
-);
-const MemorySettingsPage = React.lazy(
-  () => import('@/features/phase2/localMemory/MemorySettingsPage'),
-);
-const SettingsLayout = React.lazy(
-  () => import('@/features/settings/SettingsLayout'),
-);
-const ModelSettingsPage = React.lazy(
-  () => import('@/features/settings/pages/ModelSettingsPage'),
-);
-const PreferencesPage = React.lazy(
-  () => import('@/features/settings/PreferencesPage'),
-);
-const AccountPage = React.lazy(() => import('@/features/settings/AccountPage'));
 const AdminGuard = React.lazy(() => import('@/features/admin/AdminGuard'));
 const AdminLayout = React.lazy(() => import('@/features/admin/AdminLayout'));
 const AdminUsersPage = React.lazy(
@@ -62,9 +31,6 @@ const WorkspaceMount = React.lazy(
 );
 const MarketplaceMount = React.lazy(
   () => import('@/layout/mounts/MarketplaceMount'),
-);
-const GenerationMount = React.lazy(
-  () => import('@/layout/mounts/GenerationMount'),
 );
 
 function Page(element: React.ReactNode) {
@@ -123,10 +89,6 @@ const router = createBrowserRouter([
                 element: Page(<MarketplaceMount />),
               },
               {
-                path: 'generate',
-                element: Page(<GenerationMount />),
-              },
-              {
                 path: 'agents',
                 element: <Navigate to="/app/settings/agents" replace />,
               },
@@ -175,70 +137,8 @@ const router = createBrowserRouter([
                 element: <RedirectTo to="/app/settings/mcp/:serverId" />,
               },
               {
-                path: 'settings',
-                element: Page(<SettingsLayout />),
-                children: [
-                  {
-                    index: true,
-                    element: <Navigate to="/app/settings/models" replace />,
-                  },
-                  {
-                    path: 'models',
-                    element: Page(<ModelSettingsPage />),
-                  },
-                  {
-                    path: 'agents',
-                    element: Page(<AgentListPage />),
-                  },
-                  {
-                    path: 'agents/new',
-                    element: Page(<AgentEditorPage />),
-                  },
-                  {
-                    path: 'agents/:agentId',
-                    element: Page(<AgentEditorPage />),
-                  },
-                  {
-                    path: 'skills',
-                    element: Page(<SkillListPage />),
-                  },
-                  {
-                    path: 'skills/new',
-                    element: Page(<SkillEditorPage />),
-                  },
-                  {
-                    path: 'skills/:skillId',
-                    element: Page(<SkillEditorPage />),
-                  },
-                  {
-                    path: 'mcp',
-                    element: Page(<McpListPage />),
-                  },
-                  {
-                    path: 'mcp/new',
-                    element: Page(<McpEditorPage />),
-                  },
-                  {
-                    path: 'mcp/:serverId',
-                    element: Page(<McpEditorPage />),
-                  },
-                  {
-                    path: 'memory',
-                    element: Page(<MemorySettingsPage />),
-                  },
-                  {
-                    path: 'preferences',
-                    element: Page(<PreferencesPage />),
-                  },
-                  {
-                    path: 'profile',
-                    element: <Navigate to="/app/settings/account" replace />,
-                  },
-                  {
-                    path: 'account',
-                    element: Page(<AccountPage />),
-                  },
-                ],
+                path: 'settings/*',
+                element: null,
               },
               {
                 path: 'admin',

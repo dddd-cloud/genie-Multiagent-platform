@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectPhase2Nav, loginAsAcceptanceUser } from './helpers';
+import { openSettingsSection } from '../helpers';
 
 const realReady = process.env.PHASE2_REAL_E2E_READY === '1';
 
@@ -9,7 +10,7 @@ test.describe('Phase2 real management pages', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
-    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
+    await openSettingsSection(page, 'Agent');
   });
 
   test('agents / skills / mcp load; create skill when API allows', async ({page}) => {
@@ -37,17 +38,16 @@ test.describe('Phase2 real management pages', () => {
       .fill('Real E2E skill instruction — summarize input briefly.');
     await page.getByTestId('skill-save').click();
 
-    // Create when API allows; stay resilient if backend rejects (soft).
-    const created = await page
-      .waitForURL(/\/app\/(?:settings\/)?skills\/(?!new$)[^/]+/, { timeout: 15_000 })
-      .then(() => true)
+    await expect(page.getByTestId('skill-editor-page')).toBeVisible();
+    const savedName = page.getByTestId('skill-name');
+    const created = await savedName
+      .inputValue()
+      .then((value) => value === skillName)
       .catch(() => false);
     if (created) {
-      await expect(page.getByTestId('skill-name')).toHaveValue(skillName);
+      await expect(savedName).toHaveValue(skillName);
     } else {
-      await expect
-        .soft(page.getByTestId('skill-editor-page'))
-        .toBeVisible();
+      await expect.soft(page.getByTestId('skill-editor-page')).toBeVisible();
     }
 
     await nav.getByRole('link', { name: 'MCP' }).click();

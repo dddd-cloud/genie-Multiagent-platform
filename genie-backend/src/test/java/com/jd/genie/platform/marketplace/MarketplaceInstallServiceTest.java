@@ -3,13 +3,16 @@ package com.jd.genie.platform.marketplace;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.UserRole;
+import com.jd.genie.platform.phase2.configuration.agent.dto.AgentCreateRequest;
 import com.jd.genie.platform.phase2.configuration.agent.dto.AgentResponse;
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillPackageImportService;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamResponse;
 import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,7 +20,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MarketplaceInstallServiceTest {
@@ -51,6 +56,10 @@ class MarketplaceInstallServiceTest {
 
         MarketplaceInstallResponse result = service.install(USER, "team-data-quality");
 
+        ArgumentCaptor<AgentCreateRequest> create = ArgumentCaptor.forClass(AgentCreateRequest.class);
+        verify(agents, atLeastOnce()).createAgent(any(), create.capture());
+        assertThat(create.getAllValues()).isNotEmpty();
+        assertThat(create.getAllValues()).allMatch(request -> ModelCatalogService.SYSTEM_DEFAULT.equals(request.modelName()));
         assertThat(result.createdTeamId()).isEqualTo("team-1");
         assertThat(result.createdAgentIds()).containsExactly("agent-1", "agent-2");
         assertThat(result.createdSkillIds()).containsExactly("skill-1", "skill-2");

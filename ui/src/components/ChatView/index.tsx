@@ -9,6 +9,7 @@ import type { ExecutionMode, OutputStyle } from '@/contracts';
 import { OUTPUT_STYLES } from '@/contracts';
 import { notifyMvpError } from '@/features/auth/mvpErrorBus';
 import { useConversationLayout } from '@/features/conversation/ConversationLayout';
+import { useSettingsModal } from '@/features/settings/SettingsModalContext';
 import type { PersistedChatItem } from '@/features/conversation/types';
 import { isUuid } from '@/features/conversation/requestId';
 import {
@@ -59,7 +60,6 @@ import querySSE, {
 import Dialogue from '@/components/Dialogue';
 import GeneralInput from '@/components/GeneralInput';
 import ActionView from '@/components/ActionView';
-import Logo from '@/components/Logo';
 import PrivacyModeToggle from '@/features/conversation/PrivacyModeToggle';
 import { WorkspacePanel } from '@/features/workspace';
 import WorkspaceMount from '@/layout/mounts/WorkspaceMount';
@@ -182,7 +182,7 @@ type LocalContextChoice = { action: 'abort' } | { action: 'continue' };
 async function ensureLocalMemoryUsable(
   conversationId: string,
   localMemory: ReturnType<typeof useLocalMemoryOptional>,
-  navigate: (path: string) => void,
+  openMemorySettings: () => void,
   modal: HookAPI,
 ): Promise<LocalContextChoice> {
   if (!localMemory?.repository) {
@@ -255,7 +255,7 @@ async function ensureLocalMemoryUsable(
       return { action: 'abort' };
     }
     if (choice === 'navigate') {
-      navigate('/app/settings/memory');
+      openMemorySettings();
       return { action: 'abort' };
     }
     return { action: 'continue' };
@@ -323,6 +323,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   }
   const [modal, modalContextHolder] = Modal.useModal();
   const navigate = useNavigate();
+  const { openSettings } = useSettingsModal();
   const layout = useConversationLayout();
   const localMemory = useLocalMemoryOptional();
   const phase2 = isPhase2Enabled();
@@ -699,7 +700,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         const memoryCheck = await ensureLocalMemoryUsable(
           sessionId,
           localMemory,
-          navigate,
+          () => openSettings('/app/settings/memory'),
           modal,
         );
         if (memoryCheck.action === 'abort') {
@@ -1180,7 +1181,6 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
             )}
           >
             <div className="flex min-w-0 flex-1 items-center">
-              <Logo hideSplit={isComposer} />
               {isComposer ? null : (
                 <>
                   <div className="mr-8 overflow-hidden whitespace-nowrap text-ellipsis text-[16px] font-medium text-text-primary">

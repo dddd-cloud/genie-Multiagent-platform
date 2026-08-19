@@ -69,6 +69,28 @@ public class AgentTeamService {
     }
 
     @Transactional(readOnly = true)
+    public String nextAvailableName(CurrentUser user, String desiredName) {
+        requireUser(user);
+        String base = desiredName == null ? "" : desiredName.trim();
+        if (base.isEmpty() || base.codePointCount(0, base.length()) > MAX_NAME_CODE_POINTS) {
+            throw error(MvpErrorCode.VALIDATION_ERROR);
+        }
+        if (!teamMapper.existsOwnedActiveName(user.tenantId(), user.userId(), base, null)) {
+            return base;
+        }
+        for (int i = 2; i <= 99; i++) {
+            String candidate = base + " (" + i + ")";
+            if (candidate.codePointCount(0, candidate.length()) > MAX_NAME_CODE_POINTS) {
+                break;
+            }
+            if (!teamMapper.existsOwnedActiveName(user.tenantId(), user.userId(), candidate, null)) {
+                return candidate;
+            }
+        }
+        throw error(MvpErrorCode.VALIDATION_ERROR);
+    }
+
+    @Transactional(readOnly = true)
     public TeamResponse getTeam(CurrentUser user, String teamId) {
         AgentTeamEntity entity = requireOwnedTeam(user, teamId);
         return toResponse(entity, masterName(user, entity.getMasterAgentId()), loadMemberIds(user, teamId));

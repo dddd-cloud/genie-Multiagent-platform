@@ -22,9 +22,11 @@ import type { ConversationListItem } from '@/contracts';
 import { useAuth } from '@/features/auth/useAuth';
 import LocalMemoryProvider from '@/features/phase2/localMemory/LocalMemoryProvider';
 import { useUserSettings } from '@/features/userSettings/useUserSettings';
-import LogoutButton from '@/features/userSettings/LogoutButton';
-import UserProfilePanel from '@/features/userSettings/UserProfilePanel';
+import SidebarUserMenu from '@/features/userSettings/SidebarUserMenu';
+import Logo from '@/components/Logo';
 import AppNavigation from '@/layout/AppNavigation';
+import SettingsModal from '@/features/settings/SettingsModal';
+import { SettingsModalProvider } from '@/features/settings/SettingsModalContext';
 import { MvpApiError } from '@/services/apiError';
 import {
   deleteConversation,
@@ -408,22 +410,19 @@ const ConversationLayout: GenieType.FC = memo(() => {
         ) : (
           <div className="h-full w-[272px] shrink-0 flex flex-col bg-sidebar border-r border-border">
             <div className="w-full px-14 py-12 border-b border-border flex items-center justify-between gap-8">
-              <UserProfilePanel compact />
-              <div className="flex shrink-0 items-center gap-4">
-                <LogoutButton />
-                <Tooltip title="收起侧边栏">
-                  <button
-                    type="button"
-                    onClick={toggleSidebar}
-                    aria-label="收起侧边栏"
-                    aria-expanded
-                    data-testid="sidebar-toggle"
-                    className="flex h-24 w-24 items-center justify-center rounded-[6px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
-                  >
-                    <MenuFoldOutlined className="text-[14px]" />
-                  </button>
-                </Tooltip>
-              </div>
+              <Logo hideSplit />
+              <Tooltip title="收起侧边栏">
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  aria-label="收起侧边栏"
+                  aria-expanded
+                  data-testid="sidebar-toggle"
+                  className="flex h-24 w-24 items-center justify-center rounded-[6px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
+                >
+                  <MenuFoldOutlined className="text-[14px]" />
+                </button>
+              </Tooltip>
             </div>
             <div className="w-full px-10 pt-10 pb-8 border-b border-border flex flex-col gap-4">
               <button
@@ -447,6 +446,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
                 onSelect={handleSelect}
               />
             </div>
+            <SidebarUserMenu />
           </div>
         )}
         <div className="flex-1 min-w-0 h-full overflow-hidden bg-surface">
@@ -465,16 +465,23 @@ const ConversationLayout: GenieType.FC = memo(() => {
           )}
         </div>
       </div>
+      <SettingsModal />
     </ConversationLayoutContext.Provider>
   );
 
   if (user?.id) {
     return (
-      <LocalMemoryProvider userId={user.id}>{layout}</LocalMemoryProvider>
+      <SettingsModalProvider>
+        <LocalMemoryProvider userId={user.id}>{layout}</LocalMemoryProvider>
+      </SettingsModalProvider>
     );
   }
 
-  return layout;
+  return (
+    <SettingsModalProvider>
+      {layout}
+    </SettingsModalProvider>
+  );
 });
 
 ConversationLayout.displayName = 'ConversationLayout';

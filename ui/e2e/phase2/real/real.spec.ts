@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectPhase2Nav, loginAsAcceptanceUser } from './helpers';
+import { openSettingsSection } from '../helpers';
 
 /**
  * Real Phase2 smoke E2E against acceptance stack.
@@ -15,7 +16,7 @@ test.describe('Phase2 real E2E smoke', () => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
     await expect(page.getByTestId('phase2-navigation')).toBeVisible();
-    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
+    await openSettingsSection(page, 'Agent');
     await expect(
       page.getByTestId('settings-nav').getByRole('link', { name: 'Agent' }),
     ).toBeVisible();

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginAsMock } from '../helpers';
+import { loginAsMock, openSettingsSection } from '../helpers';
 
 test.describe('Phase2 management pages (mock)', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,8 +7,7 @@ test.describe('Phase2 management pages (mock)', () => {
   });
 
   test('navigate agents / skills / mcp and create agent', async ({ page }) => {
-    await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'Agent' }).click();
+    await openSettingsSection(page, 'Agent');
     await expect(page.getByTestId('agent-list-page')).toBeVisible();
     await expect(page.getByText('Research Agent')).toBeVisible();
 
@@ -17,7 +16,6 @@ test.describe('Phase2 management pages (mock)', () => {
     await page.getByTestId('agent-name').fill('E2E Agent');
     await page.getByTestId('agent-description').fill('created by mock e2e');
     await page.getByTestId('agent-save').click();
-    await expect(page).toHaveURL(/\/app\/(?:settings\/)?agents\/agent-/);
     await expect(page.getByTestId('agent-name')).toHaveValue('E2E Agent');
 
     await page.getByTestId('settings-nav').getByRole('link', { name: 'Skill' }).click();

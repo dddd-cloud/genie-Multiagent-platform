@@ -1,0 +1,15 @@
+.git
+**/.git
+**/.gitignore
+.env
+**/.env
+**/node_modules
+**/dist
+**/__pycache__
+**/.venv
+**/*.pyc
+genie-backend/target
+ui/playwright-report
+ui/test-results
+ui/coverage
+**/.DS_Store

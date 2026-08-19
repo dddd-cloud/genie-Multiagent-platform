@@ -19,12 +19,15 @@ export async function openSettingsSection(
   page: Page,
   name: 'Agent' | 'Skill' | 'MCP' | '本地记忆' | '模型' | '偏好' | '账户与用量',
 ): Promise<void> {
-  await page.getByTestId('app-navigation').getByRole('link', { name: '设置中心' }).click();
+  await page.getByTestId('sidebar-user-menu').click();
+  await page.getByTestId('settings-menu-item').click();
+  await page.getByTestId('settings-nav').waitFor();
   await page.getByTestId('settings-nav').getByRole('link', { name }).click();
 }
 
 export async function logoutMock(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /退出|logout/i }).click();
+  await page.getByTestId('sidebar-user-menu').click();
+  await page.getByTestId('logout-button').click();
   await page.waitForURL(/\/login/);
 }
 

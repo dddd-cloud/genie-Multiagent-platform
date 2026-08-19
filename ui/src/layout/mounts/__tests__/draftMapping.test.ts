@@ -23,6 +23,16 @@ describe('draftMapping', () => {
     });
   });
 
+  it('maps catalog default modelName to the system default', () => {
+    const form = mapDraftToAgentForm({
+      name: '数据分析师',
+      modelName: 'default',
+      promptMode: 'RAW',
+      systemPrompt: 'be careful',
+    });
+    expect(form.modelName).toBeNull();
+  });
+
   it('keeps team master/members pending when the draft left them empty', () => {
     const form = mapDraftToTeamForm({
       name: 'Research Team',

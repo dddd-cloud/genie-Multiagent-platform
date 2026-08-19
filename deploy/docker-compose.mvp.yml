@@ -89,7 +89,7 @@ services:
       - -lc
       - |
         set -euo pipefail
-        mvn -DskipTests package
+        mvn -DskipTests -s aliyun-settings.xml package
         exec java \
           -classpath "target/genie-backend/conf/:target/genie-backend/lib/*" \
           -Dbasedir=target/genie-backend \

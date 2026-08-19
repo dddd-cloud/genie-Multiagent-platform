@@ -532,9 +532,9 @@ const ConversationPage: GenieType.FC = memo(() => {
     }
   }, [chats, conversationId, pendingDraft]);
 
-  const liveHandoff =
-    Boolean(conversationId) &&
-    peekLiveChatRun(conversationId)?.sendInFlight === true;
+  const liveHandoff = Boolean(
+    conversationId && peekLiveChatRun(conversationId)?.sendInFlight === true,
+  );
   const showBootSpinner =
     Boolean(conversationId) &&
     loading &&

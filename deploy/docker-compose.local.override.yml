@@ -9,6 +9,28 @@
 
 services:
   genie-backend:
+    # Fast local loop: incremental `mvn compile` + existing unpacked libs.
+    # Full `package` (the ~10min Windows bind-mount copy) only runs when lib/ is
+    # missing, or when GENIE_BACKEND_REPACKAGE=1 (after pom.xml dependency changes).
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        if [ ! -d target/genie-backend/lib ] || [ "$${GENIE_BACKEND_REPACKAGE:-}" = "1" ]; then
+          echo "genie-backend: full package (runtime libs missing or GENIE_BACKEND_REPACKAGE=1)"
+          mvn -Dmaven.test.skip=true -Djacoco.skip=true -s aliyun-settings.xml package
+        else
+          echo "genie-backend: fast compile, reusing target/genie-backend/lib"
+          mvn -Dmaven.test.skip=true -Djacoco.skip=true -s aliyun-settings.xml compile
+        fi
+        exec java \
+          -classpath "target/classes:target/genie-backend/conf/:target/genie-backend/lib/*" \
+          -Dbasedir=target/genie-backend \
+          -Dfile.encoding=UTF-8 \
+          com.jd.genie.GenieApplication
+    healthcheck:
+      start_period: 90s
     environment:
       # Avoid initializing the optional Data Agent catalogue during the MVP stack startup.
       AUTOBOTS_DATA_AGENT_STARTUP_INIT_ENABLED: "false"
@@ -35,6 +57,8 @@ services:
   genie-tool:
     ports:
       - "1601:1601"
+    volumes:
+      - mvp_tool_venv:/workspace/genie-tool/.venv
     environment:
       USE_JD_SEARCH_GATEWAY: ${USE_JD_SEARCH_GATEWAY:-false}
       USE_SEARCH_ENGINE: ${USE_SEARCH_ENGINE:-serp}
@@ -43,6 +67,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       DEFAULT_MODEL: ${DEFAULT_MODEL:-}
+
+  genie-client:
+    volumes:
+      - mvp_client_venv:/workspace/genie-client/.venv
 
   ui:
     environment:
@@ -56,3 +84,5 @@ services:
 
 volumes:
   mvp_ui_node_modules:
+  mvp_tool_venv:
+  mvp_client_venv:
