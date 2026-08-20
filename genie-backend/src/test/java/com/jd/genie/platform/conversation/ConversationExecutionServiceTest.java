@@ -104,6 +104,7 @@ class ConversationExecutionServiceTest {
     void setUpSchema() {
         jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS=0");
         jdbcTemplate.execute("DROP TRIGGER IF EXISTS trg_fail_conversation_update");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS conversation_attachment");
         jdbcTemplate.execute("DROP TABLE IF EXISTS conversation_message");
         jdbcTemplate.execute("DROP TABLE IF EXISTS conversation");
         jdbcTemplate.execute("DROP TABLE IF EXISTS app_user");

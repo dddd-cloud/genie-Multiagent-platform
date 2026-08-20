@@ -3,12 +3,14 @@
   "message": "success",
   "data": [
     {
+      "id": "gpt-4o-mini",
       "name": "gpt-4o-mini",
       "displayName": "GPT-4o Mini",
       "isDefault": true,
       "available": true
     },
     {
+      "id": "gpt-4o",
       "name": "gpt-4o",
       "displayName": "GPT-4o",
       "isDefault": false,

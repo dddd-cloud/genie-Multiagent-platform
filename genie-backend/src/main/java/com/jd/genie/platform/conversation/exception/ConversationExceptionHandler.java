@@ -11,6 +11,9 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice(basePackages = "com.jd.genie.platform.conversation")
 public class ConversationExceptionHandler {
@@ -24,9 +27,15 @@ public class ConversationExceptionHandler {
     @ExceptionHandler({
         MethodArgumentTypeMismatchException.class,
         MissingServletRequestParameterException.class,
+        MissingServletRequestPartException.class,
+        MaxUploadSizeExceededException.class,
+        MultipartException.class,
         HttpMessageNotReadableException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception exception) {
+        if (exception instanceof MaxUploadSizeExceededException) {
+            return error(HttpStatus.BAD_REQUEST, MvpErrorCode.VALIDATION_ERROR, "file is too large");
+        }
         return error(HttpStatus.BAD_REQUEST, MvpErrorCode.VALIDATION_ERROR, "Invalid request");
     }
 

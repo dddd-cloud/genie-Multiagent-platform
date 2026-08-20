@@ -11,6 +11,7 @@ import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanValidator;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
+import com.jd.genie.platform.conversation.attachment.ChatAttachmentPrompt;
 import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
@@ -138,11 +139,32 @@ public final class Phase2OrchestrationRuntime {
             MasterPersona masterPersona,
             String teamId
     ) {
+        execute(user, requestId, runId, query, conversationSummary, longTermMemory, conversationHistory,
+                candidates, route, observer, masterPersona, teamId, query);
+    }
+
+    public void execute(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            RouteDecision route,
+            ConversationStreamObserver observer,
+            MasterPersona masterPersona,
+            String teamId,
+            String specialistQuery
+    ) {
         MasterPersona persona = masterPersona == null ? MasterPersona.none() : masterPersona;
         Map<String, String> failures = new LinkedHashMap<>();
         AtomicLong sequence = new AtomicLong();
         OrchestrationTraceChannel traces = new OrchestrationTraceChannel(
                 observer, requestId, runId, sequence, persona.displayName());
+        String planningQuery = ChatAttachmentPrompt.withoutUploadedFileBodies(query);
+        String agentQuery = specialistQuery == null || specialistQuery.isBlank() ? query : specialistQuery;
         try {
             Map<String, Object> routeDetails = new LinkedHashMap<>();
             routeDetails.put("route", route.route().name());
@@ -157,11 +179,11 @@ public final class Phase2OrchestrationRuntime {
 
             Map<String, String> successes = new LinkedHashMap<>();
             OrchestrationPlan modelPlan = modelPort.createPlan(
-                    query, conversationHistory, longTermMemory, conversationSummary, candidates,
+                    planningQuery, conversationHistory, longTermMemory, conversationSummary, candidates,
                     1, Map.of(), Map.of(), persona
             );
             OrchestrationPlan plan = planValidator.validate(
-                    enforceSystemResourceStep(query, assignCandidatesToMainOnlySteps(modelPlan, candidates)), candidates);
+                    enforceSystemResourceStep(planningQuery, assignCandidatesToMainOnlySteps(modelPlan, candidates)), candidates);
             List<OrchestrationPlanStepView> steps = plan.steps().stream()
                     .map(step -> stepView(step, candidates))
                     .toList();
@@ -175,7 +197,7 @@ public final class Phase2OrchestrationRuntime {
             java.util.List<com.jd.genie.agent.dto.File> deliverableFiles =
                     java.util.Collections.synchronizedList(new java.util.ArrayList<>());
             Map<String, AgentTaskResult> results = serialService.execute(
-                    user, query, conversationHistory, UntrustedLocalContext.body(longTermMemory, conversationSummary), plan.steps(),
+                    user, agentQuery, conversationHistory, UntrustedLocalContext.body(longTermMemory, conversationSummary), plan.steps(),
                     new OrchestrationEventSink() {
                         @Override
                         public void emit(String eventType, OrchestrationStep step, AgentTaskResult result, Map<String, Object> details) {
@@ -207,7 +229,7 @@ public final class Phase2OrchestrationRuntime {
                     requestId,
                     runId,
                     sequence,
-                    query,
+                    planningQuery,
                     conversationHistory,
                     longTermMemory,
                     conversationSummary,
@@ -244,14 +266,15 @@ public final class Phase2OrchestrationRuntime {
             List<AgentCapabilitySummary> candidates,
             MasterPersona masterPersona
     ) {
-        if (SystemResourceBuilder.requiresResourceCreation(query)) {
+        String routingQuery = ChatAttachmentPrompt.withoutUploadedFileBodies(query);
+        if (SystemResourceBuilder.requiresResourceCreation(routingQuery)) {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "RESOURCE_CREATION_REQUEST");
         }
         if ("ORCHESTRATED".equals(mode)) {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST");
         }
         try {
-            return modelPort.selectRoute(query, conversationSummary, conversationHistory, candidates, masterPersona);
+            return modelPort.selectRoute(routingQuery, conversationSummary, conversationHistory, candidates, masterPersona);
         } catch (RuntimeException error) {
             log.warn("Router call failed, falling back to DIRECT: {}", error.getMessage(), error);
             return new RouteDecision(RouteDecision.Route.DIRECT, "ROUTER_FALLBACK");

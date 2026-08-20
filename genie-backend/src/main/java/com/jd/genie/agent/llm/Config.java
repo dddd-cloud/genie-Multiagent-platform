@@ -21,6 +21,10 @@ public class Config {
      * 获取 LLM 配置
      */
     public static LLMSettings getLLMConfig(String modelName) {
+        LLMSettings override = RequestScopedLlmSettings.get();
+        if (override != null) {
+            return override;
+        }
         ApplicationContext applicationContext = SpringContextHolder.getApplicationContext();
         GenieConfig genieConfig = applicationContext.getBean(GenieConfig.class);
         if (Objects.nonNull(genieConfig.getLlmSettingsMap())) {

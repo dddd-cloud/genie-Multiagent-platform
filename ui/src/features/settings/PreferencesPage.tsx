@@ -1,9 +1,11 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Select, Spin, Switch, message } from 'antd';
 import type { UserPreferences, UserPreferencesPatch } from '@/contracts';
-import { EXECUTION_MODE_PREFERENCES, OUTPUT_STYLES } from '@/contracts';
+import { EXECUTION_MODE_PREFERENCES } from '@/contracts';
+import type { Phase2ModelResponse } from '@/contracts/phase2';
 import { useUserSettings } from '@/features/userSettings/useUserSettings';
 import { MvpApiError } from '@/services/apiError';
+import { listModels } from '@/services/phase2/models';
 import SettingRow from './SettingRow';
 
 const EXECUTION_MODE_LABELS: Record<
@@ -15,19 +17,10 @@ const EXECUTION_MODE_LABELS: Record<
   ORCHESTRATED: '编排多个 Agent 协作',
 };
 
-const OUTPUT_STYLE_LABELS: Record<(typeof OUTPUT_STYLES)[number], string> = {
-  dataAgent: '智能问数',
-  html: '网页模式',
-  docs: '文档模式',
-  ppt: 'PPT 模式',
-  table: '表格模式',
-};
-
-const FOLLOW_SYSTEM = '__follow_system__';
-
 const PreferencesPage: GenieType.FC = memo(() => {
   const { preferences, status, error, reload, save } = useUserSettings();
   const [savingKey, setSavingKey] = useState<keyof UserPreferences | null>(null);
+  const [models, setModels] = useState<Phase2ModelResponse[]>([]);
 
   const apply = useCallback(
     async <K extends keyof UserPreferences>(
@@ -51,6 +44,20 @@ const PreferencesPage: GenieType.FC = memo(() => {
     },
     [preferences, save],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listModels(controller.signal)
+      .then((items) => {
+        setModels(
+          (items ?? []).filter((item) => item.name !== 'system-default'),
+        );
+      })
+      .catch(() => {
+        setModels([]);
+      });
+    return () => controller.abort();
+  }, []);
 
   if (status === 'error') {
     return (
@@ -98,40 +105,21 @@ const PreferencesPage: GenieType.FC = memo(() => {
               />
             </SettingRow>
             <SettingRow
-              label="默认开启深度思考"
-              hint="更慢但更细致，适合复杂任务。"
-            >
-              <Switch
-                checked={preferences.defaultDeepThink}
-                loading={savingKey === 'defaultDeepThink'}
-                onChange={(checked) => void apply('defaultDeepThink', checked)}
-              />
-            </SettingRow>
-            <SettingRow
-              label="默认输出风格"
-              hint="决定新会话预选哪种输出模式。"
+              label="默认模型"
+              hint="新对话和所有 Agent 都会使用这个模型，也可在输入框左侧随时切换。"
               last
             >
               <Select
                 className="w-[260px]"
-                value={preferences.defaultOutputStyle || FOLLOW_SYSTEM}
-                loading={savingKey === 'defaultOutputStyle'}
-                options={[
-                  {
-                    value: FOLLOW_SYSTEM,
-                    label: '跟随系统默认',
-                  },
-                  ...OUTPUT_STYLES.map((style) => ({
-                    value: style,
-                    label: OUTPUT_STYLE_LABELS[style],
-                  })),
-                ]}
-                onChange={(value) =>
-                  void apply(
-                    'defaultOutputStyle',
-                    value === FOLLOW_SYSTEM ? '' : value,
-                  )
-                }
+                value={preferences.preferredModelName || undefined}
+                loading={savingKey === 'preferredModelName'}
+                placeholder={models.length === 0 ? '请先在「模型」中配置' : '选择默认模型'}
+                options={models.map((item) => ({
+                  value: item.name,
+                  label: item.displayName || item.name,
+                }))}
+                onChange={(value) => void apply('preferredModelName', value)}
+                data-testid="preferences-default-model"
               />
             </SettingRow>
           </div>

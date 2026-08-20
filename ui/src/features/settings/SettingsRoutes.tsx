@@ -27,6 +27,9 @@ const MemorySettingsPage = React.lazy(
 const ModelSettingsPage = React.lazy(
   () => import('@/features/settings/pages/ModelSettingsPage'),
 );
+const ModelEditorPage = React.lazy(
+  () => import('@/features/settings/pages/ModelEditorPage'),
+);
 const PreferencesPage = React.lazy(
   () => import('@/features/settings/PreferencesPage'),
 );
@@ -81,6 +84,8 @@ export default function SettingsRoutes() {
       <Route path="/app/settings" element={<SettingsLayout />}>
         <Route index element={<Navigate to="models" replace />} />
         <Route path="models" element={Page(<ModelSettingsPage />)} />
+        <Route path="models/new" element={Page(<ModelEditorPage />)} />
+        <Route path="models/:modelId" element={Page(<ModelEditorPage />)} />
         <Route path="agents" element={Page(<AgentListPage />)} />
         <Route path="agents/new" element={Page(<AgentEditorPage />)} />
         <Route path="agents/:agentId" element={Page(<AgentEditorPage />)} />

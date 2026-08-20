@@ -33,4 +33,15 @@ class AgentStateTransitionTest extends Phase2AMySqlTestSupport {
         AgentResponse stillOffline = agentService.offlineAgent(userA(), draft.id(), offline.version());
         assertEquals(offline.version(), stillOffline.version());
     }
+
+    @Test
+    void deletesOnlineAgentWithoutOffline() {
+        AgentResponse draft = agentService.createAgent(userA(), new AgentCreateRequest("Online Delete", "desc", "RAW", null, "prompt", null, List.of(), List.of()));
+        AgentResponse online = agentService.onlineAgent(userA(), draft.id(), draft.version());
+        assertEquals("ONLINE", online.status());
+        agentService.deleteAgent(userA(), online.id(), online.version());
+        AgentConfigurationException missing = assertThrows(AgentConfigurationException.class,
+            () -> agentService.getAgent(userA(), online.id()));
+        assertEquals(MvpErrorCode.RESOURCE_NOT_FOUND, missing.code());
+    }
 }

@@ -377,6 +377,9 @@ public class MultiAgentServiceImpl implements IMultiAgentService {
         );
         agentRequest.setIsStream(true);
         agentRequest.setOutputStyle(request.getOutputStyle());
+        agentRequest.setRuntimeModelName(request.getModelName());
+        agentRequest.setRuntimeTenantId(request.getRuntimeTenantId());
+        agentRequest.setRuntimeOwnerId(request.getRuntimeOwnerId());
         return agentRequest;
     }
 

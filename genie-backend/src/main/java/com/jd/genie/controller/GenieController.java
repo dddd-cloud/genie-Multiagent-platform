@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.jd.genie.agent.agent.AgentContext;
+import com.jd.genie.agent.llm.RequestScopedLlmSettings;
 import com.jd.genie.agent.printer.Printer;
 import com.jd.genie.agent.printer.SSEPrinter;
 import com.jd.genie.agent.tool.ToolCollection;
@@ -14,11 +15,13 @@ import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.config.GenieConfig;
 import com.jd.genie.model.req.AgentRequest;
 import com.jd.genie.model.req.GptQueryReq;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.service.AgentHandlerService;
 import com.jd.genie.service.IGptProcessService;
 import com.jd.genie.service.impl.AgentHandlerFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +51,8 @@ public class GenieController {
     private AgentHandlerFactory agentHandlerFactory;
     @Autowired
     private IGptProcessService gptProcessService;
+    @Autowired
+    private ObjectProvider<ModelCatalogService> modelCatalogServiceProvider;
 
     /**
      * 开启SSE心跳。与业务 send 共用 sendLock，失败只记日志，绝不掐断连接。
@@ -122,6 +127,7 @@ public class GenieController {
         // 执行调度引擎
         ThreadUtil.execute(() -> {
             try {
+                applyRuntimeModel(request);
                 Printer printer = new SSEPrinter(emitter, request, request.getAgentType(), sendLock);
                 AgentContext agentContext = AgentContext.builder()
                         .requestId(request.getRequestId())
@@ -151,10 +157,33 @@ public class GenieController {
 
             } catch (Exception e) {
                 log.error("{} auto agent failed", request.getRequestId());
+            } finally {
+                RequestScopedLlmSettings.clear();
             }
         });
 
         return emitter;
+    }
+
+    private void applyRuntimeModel(AgentRequest request) {
+        ModelCatalogService catalog = modelCatalogServiceProvider == null
+                ? null
+                : modelCatalogServiceProvider.getIfAvailable();
+        if (catalog == null || request == null) {
+            return;
+        }
+        if (StringUtils.isBlank(request.getRuntimeTenantId()) || StringUtils.isBlank(request.getRuntimeOwnerId())) {
+            return;
+        }
+        try {
+            RequestScopedLlmSettings.set(catalog.resolveRuntimeSettings(
+                    request.getRuntimeTenantId(),
+                    request.getRuntimeOwnerId(),
+                    request.getRuntimeModelName()
+            ));
+        } catch (Exception error) {
+            log.warn("{} failed to resolve selected model, falling back to env catalog", request.getRequestId(), error);
+        }
     }
 
 

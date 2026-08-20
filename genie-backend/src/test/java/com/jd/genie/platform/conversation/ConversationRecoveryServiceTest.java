@@ -77,6 +77,7 @@ class ConversationRecoveryServiceTest {
     @BeforeEach
     void setUpSchema() {
         jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS=0");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS conversation_attachment");
         jdbcTemplate.execute("DROP TABLE IF EXISTS conversation_message");
         jdbcTemplate.execute("DROP TABLE IF EXISTS conversation");
         jdbcTemplate.execute("DROP TABLE IF EXISTS app_user");

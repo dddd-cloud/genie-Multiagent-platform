@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import AgentForm from '../AgentForm';
 import {
   emptyAgentFormState,
@@ -7,30 +8,13 @@ import {
   validateAgentForm,
   type AgentFormState,
 } from '../agentFormModel';
-import { useState } from 'react';
 
-function AgentFormHarness({initial = emptyAgentFormState(),}: {
-  initial?: AgentFormState;
-}) {
+function AgentFormHarness({ initial = emptyAgentFormState() }: { initial?: AgentFormState }) {
   const [value, setValue] = useState(initial);
   return (
     <AgentForm
       value={value}
       onChange={setValue}
-      models={[
-        {
-          name: 'gpt-4o-mini',
-          displayName: 'GPT-4o mini',
-          isDefault: true,
-          available: true,
-        },
-        {
-          name: 'offline-model',
-          displayName: 'Offline',
-          isDefault: false,
-          available: false,
-        },
-      ]}
       skills={[
         {
           id: 'skill-a',
@@ -48,7 +32,7 @@ function AgentFormHarness({initial = emptyAgentFormState(),}: {
       capabilities={[
         {
           key: 'builtin:file',
-          displayName: 'File',
+          displayName: '文件',
           available: true,
         },
       ]}
@@ -57,38 +41,37 @@ function AgentFormHarness({initial = emptyAgentFormState(),}: {
 }
 
 describe('AgentEditorTest', () => {
-  it('renders structured/raw toggle and validates empty name', () => {
+  it('renders product fields and hides developer internals', () => {
     render(<AgentFormHarness />);
     expect(screen.getByTestId('agent-form')).toBeTruthy();
-    expect(screen.getByTestId('agent-prompt-mode')).toBeTruthy();
-    expect(screen.getByTestId('agent-prompt-config')).toBeTruthy();
-
-    const state = emptyAgentFormState();
-    expect(validateAgentForm(state)).toBe('请填写 Agent 名称');
+    expect(screen.getByTestId('agent-name')).toBeTruthy();
+    expect(screen.getByTestId('agent-description')).toBeTruthy();
+    expect(screen.getByTestId('agent-instructions')).toBeTruthy();
+    expect(screen.queryByTestId('agent-test-open')).toBeNull();
+    expect(screen.getByTestId('agent-skills')).toBeTruthy();
+    expect(screen.getByTestId('agent-capabilities')).toBeTruthy();
+    expect(screen.queryByTestId('prompt-preview-panel')).toBeNull();
+    expect(screen.queryByTestId('agent-prompt-mode')).toBeNull();
+    expect(screen.queryByText(/ID:/)).toBeNull();
+    expect(screen.queryByText(/promptConfig/)).toBeNull();
+    expect(validateAgentForm(emptyAgentFormState())).toBe('请填写名称');
   });
 
-  it('validates STRUCTURED JSON object editor', () => {
+  it('validates missing instructions', () => {
+    expect(
+      validateAgentForm({
+        ...emptyAgentFormState(),
+        name: '研究助手',
+      }),
+    ).toBe('请填写指令');
+  });
+
+  it('keeps parsePromptConfigText for leftover structured payloads', () => {
     expect(parsePromptConfigText('{', 'STRUCTURED').ok).toBe(false);
-    expect(parsePromptConfigText('[]', 'STRUCTURED').ok).toBe(false);
     expect(parsePromptConfigText('{"role":"x"}', 'STRUCTURED')).toEqual({
       ok: true,
       value: { role: 'x' },
     });
-
-    const state: AgentFormState = {
-      ...emptyAgentFormState(),
-      name: 'A',
-      promptMode: 'STRUCTURED',
-      promptConfigText: 'not-json',
-    };
-    expect(validateAgentForm(state)).toBe('promptConfig JSON 格式无效');
-  });
-
-  it('switches to RAW systemPrompt field', () => {
-    render(<AgentFormHarness />);
-    fireEvent.click(screen.getByRole('radio', { name: 'RAW' }));
-    expect(screen.getByTestId('agent-system-prompt')).toBeTruthy();
-    expect(screen.queryByTestId('agent-prompt-config')).toBeNull();
   });
 
   it('notifies onChange when name is edited', () => {
@@ -97,12 +80,13 @@ describe('AgentEditorTest', () => {
       <AgentForm
         value={emptyAgentFormState()}
         onChange={onChange}
-        models={[]}
         skills={[]}
         capabilities={[]}
       />,
     );
-    fireEvent.change(screen.getByTestId('agent-name'), {target: { value: 'Research' },});
+    fireEvent.change(screen.getByTestId('agent-name'), {
+      target: { value: 'Research' },
+    });
     expect(onChange).toHaveBeenCalled();
     expect(onChange.mock.calls[0]![0].name).toBe('Research');
   });

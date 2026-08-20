@@ -37,6 +37,8 @@ declare global {
 
     export type TInputInfo = {
       files?: TFile[];
+      attachmentIds?: string[];
+      modelName?: string;
       message: string;
       outputStyle?: string;
       deepThink: boolean;

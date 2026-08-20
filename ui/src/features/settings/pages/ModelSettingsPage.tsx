@@ -1,57 +1,112 @@
-import { memo, useEffect, useState } from 'react';
-import { Alert, Spin, Table, Typography } from 'antd';
+import { memo, useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Alert, Button, Spin } from 'antd';
 import type { Phase2ModelResponse } from '@/contracts/phase2';
-import { listModels } from '@/services/phase2/agents';
+import { listModels } from '@/services/phase2/models';
 import { phase2ErrorMessage } from '@/features/phase2/phase2UiError';
 
-const { Paragraph } = Typography;
+function modelKey(item: Phase2ModelResponse) {
+  return item.id || item.name;
+}
 
 const ModelSettingsPage: GenieType.FC = memo(() => {
+  const navigate = useNavigate();
   const [models, setModels] = useState<Phase2ModelResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const reload = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const items = (await listModels(signal)) ?? [];
+      setModels(items.filter((item) => item.name !== 'system-default'));
+    } catch (err: unknown) {
+      if (!signal?.aborted) {
+        setError(phase2ErrorMessage(err));
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    listModels(controller.signal)
-      .then((items) => {
-        setModels(items ?? []);
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(phase2ErrorMessage(err));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    void reload(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [reload]);
 
   return (
     <div data-testid="settings-models">
-      <Paragraph type="secondary" className="!mb-16">
-        这里只展示当前服务端已配置、可供会话使用的模型目录。供应商凭据由服务端管理，不会出现在浏览器里。
-      </Paragraph>
-      {error ? <Alert type="warning" showIcon className="mb-16" message={error} /> : null}
-      <Spin spinning={loading}>
-        <Table
-          rowKey="name"
-          pagination={false}
-          dataSource={models}
-          columns={[
-            { title: '模型', dataIndex: 'displayName', key: 'displayName' },
-            { title: '标识', dataIndex: 'name', key: 'name' },
-            {
-              title: '状态',
-              dataIndex: 'available',
-              key: 'available',
-              render: (available: boolean) => (available ? '可用' : '不可用'),
-            },
-          ]}
-          locale={{ emptyText: '当前没有可展示的模型' }}
+      <div className="mb-16 flex items-start justify-between gap-12">
+        <p className="m-0 text-[13px] leading-[20px] text-text-secondary">
+          在这里添加和编辑可用模型。API Key 只会写入服务端，详情里始终显示为圆点。
+        </p>
+        <Button
+          type="primary"
+          className="rounded-full"
+          data-testid="settings-models-new"
+          onClick={() => navigate('/app/settings/models/new')}
+        >
+          新建模型
+        </Button>
+      </div>
+      {error ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="mb-16"
+          message={error}
+          action={
+            <Button size="small" onClick={() => void reload()}>
+              重试
+            </Button>
+          }
         />
+      ) : null}
+      <Spin spinning={loading}>
+        {models.length === 0 && !loading ? (
+          <div className="rounded-xl bg-surface px-16 py-28 text-center text-[14px] text-text-tertiary shadow-xs">
+            还没有模型。点击右上角新建一个。
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl bg-surface shadow-xs">
+            {models.map((item, index) => (
+              <button
+                key={modelKey(item)}
+                type="button"
+                data-testid={`settings-model-row-${item.name}`}
+                className={[
+                  'flex w-full items-center justify-between gap-12 border-0 bg-transparent px-16 py-14 text-left transition-colors hover:bg-[#F5F5F7]',
+                  index === models.length - 1
+                    ? ''
+                    : 'border-b border-solid border-border',
+                ].join(' ')}
+                onClick={() =>
+                  navigate(
+                    `/app/settings/models/${encodeURIComponent(modelKey(item))}`,
+                  )
+                }
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[15px] text-text-primary">
+                    {item.displayName || item.name}
+                  </div>
+                  <div className="mt-2 truncate text-[12px] text-text-tertiary">
+                    {item.name}
+                    {item.isDefault ? ' · 默认' : ''}
+                    {item.available ? '' : ' · 未完成'}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[18px] text-text-tertiary" aria-hidden>
+                  ›
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </Spin>
     </div>
   );

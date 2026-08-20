@@ -2,6 +2,7 @@ package com.jd.genie.platform.phase2.configuration.model.api;
 
 import com.jd.genie.platform.contract.ApiResponse;
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.error.Phase2ErrorHttpStatus;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,11 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice(basePackages = "com.jd.genie.platform.phase2.configuration.model.api")
 public class ModelApiExceptionHandler {
+
+    @ExceptionHandler(Phase2ContractException.class)
+    ResponseEntity<ApiResponse<Void>> phase2Contract(Phase2ContractException exception) {
+        return error(exception.errorCode() == null ? MvpErrorCode.INTERNAL_ERROR : exception.errorCode());
+    }
 
     @ExceptionHandler({
         HttpMessageNotReadableException.class,

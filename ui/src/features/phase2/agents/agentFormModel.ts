@@ -5,7 +5,6 @@ import type {
 import type {
   AgentCreateRequest,
   AgentUpdateRequest,
-  PromptPreviewRequest,
 } from '@/services/phase2/internalTypes';
 
 export interface AgentFormState {
@@ -25,7 +24,7 @@ export function emptyAgentFormState(): AgentFormState {
   return {
     name: '',
     description: '',
-    promptMode: 'STRUCTURED',
+    promptMode: 'RAW',
     promptConfigText: '{\n  \n}',
     systemPrompt: '',
     modelName: null,
@@ -36,16 +35,30 @@ export function emptyAgentFormState(): AgentFormState {
   };
 }
 
+function instructionsFromAgent(agent: Phase2AgentResponse): string {
+  const existing = agent.systemPrompt?.trim();
+  if (existing) {
+    return agent.systemPrompt ?? '';
+  }
+  const role = agent.promptConfig && typeof agent.promptConfig === 'object'
+    ? (agent.promptConfig as Record<string, unknown>).role
+    : undefined;
+  if (typeof role === 'string' && role.trim()) {
+    return `你的角色是${role.trim()}。`;
+  }
+  return '';
+}
+
 export function agentToFormState(agent: Phase2AgentResponse): AgentFormState {
   return {
     name: agent.name,
     description: agent.description,
-    promptMode: agent.promptMode,
+    promptMode: 'RAW',
     promptConfigText:
       agent.promptConfig == null
         ? '{\n  \n}'
         : JSON.stringify(agent.promptConfig, null, 2),
-    systemPrompt: agent.systemPrompt ?? '',
+    systemPrompt: instructionsFromAgent(agent),
     modelName: agent.modelName,
     skillIds: [...agent.skillIds],
     capabilityKeys: [...agent.capabilityKeys],
@@ -101,16 +114,10 @@ export function parsePromptConfigText(
 
 export function validateAgentForm(state: AgentFormState): string | null {
   if (!state.name.trim()) {
-    return '请填写 Agent 名称';
+    return '请填写名称';
   }
-  if (state.promptMode === 'STRUCTURED') {
-    const parsed = parsePromptConfigText(state.promptConfigText, 'STRUCTURED');
-    if (!parsed.ok) {
-      return parsed.error;
-    }
-  }
-  if (state.promptMode === 'RAW' && !state.systemPrompt.trim()) {
-    return 'RAW 模式需要填写 systemPrompt';
+  if (!state.systemPrompt.trim()) {
+    return '请填写指令';
   }
   return null;
 }
@@ -120,18 +127,10 @@ function toPromptFields(state: AgentFormState): {
   promptConfig: Record<string, unknown> | null;
   systemPrompt: string;
 } {
-  if (state.promptMode === 'RAW') {
-    return {
-      promptMode: 'RAW',
-      promptConfig: null,
-      systemPrompt: state.systemPrompt,
-    };
-  }
-  const parsed = parsePromptConfigText(state.promptConfigText, 'STRUCTURED');
   return {
-    promptMode: 'STRUCTURED',
-    promptConfig: parsed.ok ? parsed.value : null,
-    systemPrompt: '',
+    promptMode: 'RAW',
+    promptConfig: null,
+    systemPrompt: state.systemPrompt,
   };
 }
 
@@ -143,7 +142,7 @@ export function formStateToCreateRequest(
     name: state.name.trim(),
     description: state.description.trim(),
     ...prompt,
-    modelName: state.modelName,
+    modelName: null,
     skillIds: [...state.skillIds],
     capabilityKeys: [...state.capabilityKeys],
   };
@@ -161,31 +160,15 @@ export function formStateToUpdateRequest(
   };
 }
 
-export function formStateToPreviewRequest(
-  state: AgentFormState,
-): PromptPreviewRequest {
-  const prompt = toPromptFields(state);
-  return {
-    name: state.name.trim() || undefined,
-    description: state.description.trim() || undefined,
-    ...prompt,
-    modelName: state.modelName,
-    skillIds: [...state.skillIds],
-  };
-}
-
-export function moveSkillId(
-  skillIds: string[],
-  index: number,
-  direction: 'up' | 'down',
-): string[] {
-  const next = [...skillIds];
-  const target = direction === 'up' ? index - 1 : index + 1;
-  if (index < 0 || index >= next.length || target < 0 || target >= next.length) {
-    return skillIds;
+export function agentStatusLabel(status: Phase2AgentResponse['status'] | null | undefined): string {
+  switch (status) {
+    case 'ONLINE':
+      return '已上线';
+    case 'OFFLINE':
+      return '已下线';
+    case 'DRAFT':
+      return '草稿';
+    default:
+      return '';
   }
-  const tmp = next[index]!;
-  next[index] = next[target]!;
-  next[target] = tmp;
-  return next;
 }

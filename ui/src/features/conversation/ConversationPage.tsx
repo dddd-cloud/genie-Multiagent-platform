@@ -89,7 +89,8 @@ const ConversationPage: GenieType.FC = memo(() => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const consumedDraftIdsRef = useRef<Set<string>>(new Set());
-  const ensuringRef = useRef(false);
+  const createdComposerIdRef = useRef<string | null>(null);
+  const ensuringPromiseRef = useRef<Promise<string | null> | null>(null);
 
   const executionSeededForIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(conversationId);
@@ -169,26 +170,11 @@ const ConversationPage: GenieType.FC = memo(() => {
       };
     }
     return {
-      deepThink:
-        preferencesStatus === 'ready' ? preferences.defaultDeepThink : false,
-      outputStyle: resolveOutputStyle(
-        preferencesStatus === 'ready'
-          ? preferences.defaultOutputStyle
-          : undefined,
-      ),
-      productType:
-        preferencesStatus === 'ready' && preferences.defaultOutputStyle
-          ? preferences.defaultOutputStyle
-          : undefined,
+      deepThink: false,
+      outputStyle: resolveOutputStyle(undefined),
+      productType: undefined,
     };
-  }, [
-    chats,
-    conversationId,
-    pendingDraft,
-    preferences.defaultDeepThink,
-    preferences.defaultOutputStyle,
-    preferencesStatus,
-  ]);
+  }, [chats, conversationId, pendingDraft]);
 
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -275,39 +261,64 @@ const ConversationPage: GenieType.FC = memo(() => {
   }, [conversationId]);
 
   const ensureConversation = useCallback(async () => {
-    if (ensuringRef.current) {
-      return null;
+    if (conversationId) {
+      return conversationId;
     }
-    ensuringRef.current = true;
+    if (createdComposerIdRef.current) {
+      return createdComposerIdRef.current;
+    }
+    if (ensuringPromiseRef.current) {
+      return ensuringPromiseRef.current;
+    }
+    const pending = (async () => {
+      try {
+        await layout?.discardUnusedDrafts?.();
+        const created = await createConversation(null, composerPrivacy);
+        if (!created) {
+          message.error('创建会话失败');
+          return null;
+        }
+        layout?.upsert({
+          ...created,
+          lastMessageAt: null,
+          lastMessagePreview: null,
+        });
+        createdComposerIdRef.current = created.id;
+        return created.id;
+      } catch (err: unknown) {
+        if (isAuthRequired(err)) {
+          throw err;
+        }
+        if (err instanceof MvpApiError && err.code === 'ACCESS_DENIED') {
+          message.error('无权限创建会话');
+          return null;
+        }
+        message.error(
+          err instanceof MvpApiError ? err.message : '创建会话失败',
+        );
+        return null;
+      }
+    })();
+    ensuringPromiseRef.current = pending;
     try {
-      await layout?.discardUnusedDrafts?.();
-      const created = await createConversation(null, composerPrivacy);
-      if (!created) {
-        message.error('创建会话失败');
-        return null;
-      }
-      layout?.upsert({
-        ...created,
-        lastMessageAt: null,
-        lastMessagePreview: null,
-      });
-      return created.id;
-    } catch (err: unknown) {
-      if (isAuthRequired(err)) {
-        throw err;
-      }
-      if (err instanceof MvpApiError && err.code === 'ACCESS_DENIED') {
-        message.error('无权限创建会话');
-        return null;
-      }
-      message.error(
-        err instanceof MvpApiError ? err.message : '创建会话失败',
-      );
-      return null;
+      return await pending;
     } finally {
-      ensuringRef.current = false;
+      ensuringPromiseRef.current = null;
     }
-  }, [composerPrivacy, layout]);
+  }, [composerPrivacy, conversationId, layout]);
+
+  const prevComposerEpochRef = useRef(layout?.composerEpoch);
+  useEffect(() => {
+    if (conversationId) {
+      createdComposerIdRef.current = conversationId;
+      prevComposerEpochRef.current = layout?.composerEpoch;
+      return;
+    }
+    if (prevComposerEpochRef.current !== layout?.composerEpoch) {
+      createdComposerIdRef.current = null;
+      prevComposerEpochRef.current = layout?.composerEpoch;
+    }
+  }, [conversationId, layout?.composerEpoch]);
 
   const togglePrivacyMode = useCallback(async () => {
     if (!conversationId) {

@@ -9,6 +9,18 @@ import {
 import { DEFAULT_USER_PREFERENCES } from '@/services/settings';
 import GeneralInput from '../index';
 
+vi.mock('@/services/phase2/models', () => ({
+  listModels: vi.fn().mockResolvedValue([
+    {
+      id: 'm1',
+      name: 'gpt-4o-mini',
+      displayName: 'GPT-4o mini',
+      isDefault: true,
+      available: true,
+    },
+  ]),
+}));
+
 function renderInput(
   send: (info: CHAT.TInputInfo) => void,
   status: UserSettingsStatus,
@@ -41,8 +53,8 @@ function typeAndSend(text: string) {
   fireEvent.click(screen.getByLabelText('发送'));
 }
 
-describe('GeneralInput deep-think default', () => {
-  it('sends with deep think on when the saved preference enables it', () => {
+describe('GeneralInput composer', () => {
+  it('starts with deep think off regardless of the retired preference key', () => {
     const send = vi.fn();
     renderInput(send, 'ready', { defaultDeepThink: true });
 
@@ -51,46 +63,15 @@ describe('GeneralInput deep-think default', () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0]).toMatchObject({
       message: 'hi',
-      deepThink: true,
+      deepThink: false,
     });
   });
 
-  it('sends with deep think off while preferences are still loading', () => {
+  it('keeps a manual deep-think toggle after send', () => {
     const send = vi.fn();
-    renderInput(send, 'loading', { defaultDeepThink: true });
-
-    typeAndSend('hi');
-
-    expect(send.mock.calls[0][0]).toMatchObject({ deepThink: false });
-  });
-
-  it('does not let a late preference override a toggle the user already flipped', () => {
-    const send = vi.fn();
-    const { rerender } = renderInput(send, 'loading', {defaultDeepThink: false,});
+    renderInput(send, 'ready', { defaultDeepThink: false });
 
     fireEvent.click(screen.getByText('深度研究'));
-
-    rerender(
-      <UserSettingsContext.Provider
-        value={{
-          ...USER_SETTINGS_FALLBACK,
-          status: 'ready',
-          preferences: {
-            ...DEFAULT_USER_PREFERENCES,
-            defaultDeepThink: false,
-          },
-        }}
-      >
-        <GeneralInput
-          placeholder="x"
-          showBtn
-          disabled={false}
-          size="big"
-          send={send}
-        />
-      </UserSettingsContext.Provider>,
-    );
-
     typeAndSend('hi');
 
     expect(send.mock.calls[0][0]).toMatchObject({ deepThink: true });

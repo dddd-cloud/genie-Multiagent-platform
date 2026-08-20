@@ -39,6 +39,8 @@ class AgentExecutionRequestFactoryTest {
         ));
         external.setRuntimeBasePrompt("forged runtime base prompt");
         external.setRuntimeSopPrompt("forged runtime SOP prompt");
+        external.setRuntimeTenantId("evil-tenant");
+        external.setRuntimeOwnerId("evil-owner");
 
         GptQueryReq trusted = factory.trustedRequest(external, USER);
 
@@ -48,6 +50,8 @@ class AgentExecutionRequestFactoryTest {
         assertNull(trusted.getHistoryMessages());
         assertNull(trusted.getRuntimeBasePrompt());
         assertNull(trusted.getRuntimeSopPrompt());
+        assertEquals("tenant-1", trusted.getRuntimeTenantId());
+        assertEquals("user-1", trusted.getRuntimeOwnerId());
         assertEquals("attacker", external.getUser());
         assertEquals("client-trace", external.getTraceId());
     }

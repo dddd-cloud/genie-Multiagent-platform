@@ -11,3 +11,15 @@ textarea.chat-input-textarea {
   overflow-y: auto !important;
   resize: none;
 }
+
+.agent-fixed-textarea.ant-input,
+textarea.agent-fixed-textarea {
+  resize: none !important;
+  overflow-y: auto !important;
+}
+
+.agent-bind-select.ant-select-multiple .ant-select-selection-item {
+  background: #f2f2f7 !important;
+  border-color: transparent !important;
+  color: #3a3a3c !important;
+}

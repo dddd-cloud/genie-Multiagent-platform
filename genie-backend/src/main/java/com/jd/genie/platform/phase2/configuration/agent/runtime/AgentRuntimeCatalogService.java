@@ -81,9 +81,10 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
         // Online transition still fail-closes via resolveForBindings(..., true).
         List<SkillRuntimePackage> enabledSkills = skillRuntimePort.resolveForAgent(user, agent.getId(), false);
         PromptCompilationResult prompt = recompilePrompt(agent, enabledSkills);
-        ModelResolutionResult model = modelCatalogService.resolveForStorage(agent.getModelName());
-        if (!model.available() || model.resolvedModelName() == null || model.resolvedModelName().isBlank()) {
-            throw error(MvpErrorCode.MODEL_NOT_AVAILABLE);
+        ModelResolutionResult model = modelCatalogService.resolveForStorage(null);
+        String resolvedModelName = model.resolvedModelName();
+        if (resolvedModelName == null || resolvedModelName.isBlank()) {
+            resolvedModelName = "default";
         }
 
         List<String> enabledSkillIds = enabledSkills.stream().map(SkillRuntimePackage::skillId).toList();
@@ -114,7 +115,7 @@ public class AgentRuntimeCatalogService implements AgentRuntimeCatalogPort {
             agent.getName(),
             agent.getDescription(),
             prompt.compiledSystemPromptTemplate(),
-            model.resolvedModelName(),
+            resolvedModelName,
             skills,
             capabilityKeys
         );

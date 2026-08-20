@@ -15,6 +15,9 @@ import demo4 from "@/assets/icon/demo4.png";
 import { ActionViewItemEnum } from "./enums";
 
 export const iconType: Record<string, string> = {
+  md: txtIcon,
+  py: txtIcon,
+  json: txtIcon,
   doc: docxIcon,
   docx: docxIcon,
   xlsx: excleIcon,

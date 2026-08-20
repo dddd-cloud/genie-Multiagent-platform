@@ -12,8 +12,6 @@ import com.jd.genie.platform.phase2.configuration.agent.exception.AgentConfigura
 import com.jd.genie.platform.phase2.configuration.agent.mapper.AgentDefinitionMapper;
 import com.jd.genie.platform.phase2.configuration.agent.model.AgentStatus;
 import com.jd.genie.platform.phase2.configuration.agent.model.PromptMode;
-import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
-import com.jd.genie.platform.phase2.configuration.model.ModelResolutionResult;
 import com.jd.genie.platform.phase2.configuration.prompt.AgentPromptCompiler;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationRequest;
 import com.jd.genie.platform.phase2.configuration.prompt.PromptCompilationResult;
@@ -54,7 +52,6 @@ public class AgentDefinitionService {
     private final SkillRuntimePort skillRuntimePort;
     private final ObjectProvider<ToolBindingPort> toolBindingPortProvider;
     private final AgentPromptCompiler promptCompiler;
-    private final ModelCatalogService modelCatalogService;
     private final Clock clock = Clock.systemUTC();
 
     @Transactional
@@ -66,7 +63,6 @@ public class AgentDefinitionService {
         List<String> capabilityKeys = normalizeCapabilityKeys(input.capabilityKeys());
         List<SkillRuntimePackage> skillPackages = resolveSkillPackages(user, skills, false);
         PromptCompilationResult compiled = compilePrompt(input, toPromptFragments(skillPackages));
-        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(input.modelName());
 
         Instant now = Instant.now(clock);
         AgentDefinitionEntity entity = new AgentDefinitionEntity();
@@ -78,7 +74,7 @@ public class AgentDefinitionService {
         entity.setPromptMode(compiled.promptMode());
         entity.setPromptConfig(persistedPromptConfig(compiled));
         entity.setSystemPrompt(persistedSystemPrompt(input, compiled));
-        entity.setModelName(model.storedModelName());
+        entity.setModelName(null);
         entity.setStatus(AgentStatus.DRAFT.name());
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -155,7 +151,6 @@ public class AgentDefinitionService {
         List<String> capabilityKeys = normalizeCapabilityKeys(input.capabilityKeys());
         List<SkillRuntimePackage> skillPackages = resolveSkillPackages(user, skills, false);
         PromptCompilationResult compiled = compilePrompt(input, toPromptFragments(skillPackages));
-        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(input.modelName());
 
         AgentDefinitionEntity update = new AgentDefinitionEntity();
         update.setId(agentId);
@@ -164,7 +159,7 @@ public class AgentDefinitionService {
         update.setPromptMode(compiled.promptMode());
         update.setPromptConfig(persistedPromptConfig(compiled));
         update.setSystemPrompt(persistedSystemPrompt(input, compiled));
-        update.setModelName(model.storedModelName());
+        update.setModelName(null);
 
         Instant now = Instant.now(clock);
         int updated = agentMapper.updateOwnedWithVersion(user.tenantId(), user.userId(), update, version, now);
@@ -182,10 +177,6 @@ public class AgentDefinitionService {
             throw error(MvpErrorCode.AGENT_INVALID_STATE);
         }
         List<SkillRuntimePackage> skillPackages = validateOnlineCandidate(user, entity);
-        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(entity.getModelName());
-        if (model.resolvedModelName() == null || model.resolvedModelName().isBlank()) {
-            throw error(MvpErrorCode.MODEL_NOT_AVAILABLE);
-        }
         recompileOnlinePrompt(entity, skillPackages);
         ToolBindingView view = toolBindingPort().resolveBindings(user, agentId, loadSkillIds(user, agentId));
         if (!view.invalidCapabilities().isEmpty()) {
@@ -217,10 +208,7 @@ public class AgentDefinitionService {
 
     @Transactional
     public void deleteAgent(CurrentUser user, String agentId, Long version) {
-        AgentDefinitionEntity entity = requireOwnedAgent(user, agentId);
-        if (AgentStatus.ONLINE.name().equals(entity.getStatus())) {
-            throw error(MvpErrorCode.AGENT_MUST_BE_OFFLINE);
-        }
+        requireOwnedAgent(user, agentId);
         int deleted = agentMapper.softDeleteOwnedWithVersion(user.tenantId(), user.userId(), agentId,
             requireVersion(version), Instant.now(clock));
         classifyZeroRow(user, agentId, deleted);

@@ -15,19 +15,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ModelCatalogServiceTest {
 
     @Test
-    void listsSystemDefaultAndSortedModelKeysOnly() {
+    void listsSortedModelKeysWithoutSystemDefault() {
         ModelCatalogService service = new ModelCatalogService(config("a-model", Map.of(
-            "z-model", LLMSettings.builder().model("secret-z").build(),
-            "a-model", LLMSettings.builder().model("secret-a").build()
+            "z-model", LLMSettings.builder().model("secret-z").apiKey("k").build(),
+            "a-model", LLMSettings.builder().model("secret-a").apiKey("k").build()
         )));
 
         List<ModelCatalogItem> models = service.listModels();
 
-        assertEquals("system-default", models.get(0).name());
+        assertEquals(2, models.size());
+        assertEquals("a-model", models.get(0).name());
         assertTrue(models.get(0).isDefault());
-        assertTrue(models.get(0).available());
-        assertEquals("a-model", models.get(1).name());
-        assertEquals("z-model", models.get(2).name());
+        assertEquals("z-model", models.get(1).name());
+        assertFalse(models.stream().anyMatch(item -> ModelCatalogService.SYSTEM_DEFAULT.equals(item.name())));
     }
 
     @Test

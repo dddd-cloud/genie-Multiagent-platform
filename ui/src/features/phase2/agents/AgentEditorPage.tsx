@@ -1,16 +1,12 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Button, Modal, Space, Spin, Typography, message } from 'antd';
-import type {
-  Phase2ModelResponse,
-  Phase2SkillResponse,
-} from '@/contracts/phase2';
+import { Alert, Button, Modal, Spin, message } from 'antd';
+import type { Phase2SkillResponse } from '@/contracts/phase2';
 import type { ToolCapabilityItem } from '@/services/phase2/internalTypes';
 import {
   createAgent,
   deleteAgent,
   getAgent,
-  listModels,
   listToolCapabilities,
   offlineAgent,
   onlineAgent,
@@ -18,13 +14,10 @@ import {
 } from '@/services/phase2/agents';
 import { listSkills } from '@/services/phase2/skills';
 import VersionConflictAlert from '../VersionConflictAlert';
-import {
-  isVersionConflict,
-  phase2ErrorMessage,
-} from '../phase2UiError';
+import { isVersionConflict, phase2ErrorMessage } from '../phase2UiError';
 import AgentForm from './AgentForm';
-import AgentTestModal from './AgentTestModal';
 import {
+  agentStatusLabel,
   agentToFormState,
   emptyAgentFormState,
   formStateToCreateRequest,
@@ -37,8 +30,6 @@ function isAgentDraft(value: unknown): value is AgentFormState {
   return Boolean(value && typeof value === 'object' && 'skillIds' in (value as object));
 }
 
-const { Title, Text } = Typography;
-
 const AgentEditorPage: GenieType.FC = memo(() => {
   const { agentId } = useParams<{ agentId?: string }>();
   const isNew = !agentId || agentId === 'new';
@@ -47,26 +38,22 @@ const AgentEditorPage: GenieType.FC = memo(() => {
   const locationDraft = (location.state as { draft?: unknown } | null)?.draft;
 
   const [form, setForm] = useState<AgentFormState>(emptyAgentFormState());
-  const [models, setModels] = useState<Phase2ModelResponse[]>([]);
   const [skills, setSkills] = useState<Phase2SkillResponse[]>([]);
   const [capabilities, setCapabilities] = useState<ToolCapabilityItem[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     version: number;
   } | null>(null);
 
   const loadMeta = useCallback(async (signal?: AbortSignal) => {
-    const [modelList, skillList, capList] = await Promise.all([
-      listModels(signal),
+    const [skillList, capList] = await Promise.all([
       listSkills(signal),
       listToolCapabilities(signal),
     ]);
-    setModels(modelList ?? []);
     setSkills(skillList ?? []);
     setCapabilities(capList ?? []);
   }, []);
@@ -83,7 +70,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
       try {
         const agent = await getAgent(agentId, signal);
         if (!agent) {
-          setError('Agent 不存在');
+          setError('找不到这个智能体');
           return;
         }
         setForm(agentToFormState(agent));
@@ -120,7 +107,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
       return;
     }
     if (versionConflict) {
-      message.warning('请先重新加载服务器版本');
+      message.warning('请先重新加载');
       return;
     }
     setSaving(true);
@@ -133,14 +120,11 @@ const AgentEditorPage: GenieType.FC = memo(() => {
           return;
         }
         message.success('已创建');
-        navigate(`/app/agents/${created.id}`, { replace: true });
+        navigate(`/app/settings/agents/${created.id}`, { replace: true });
         return;
       }
       if (!agentId) return;
-      const updated = await updateAgent(
-        agentId,
-        formStateToUpdateRequest(form),
-      );
+      const updated = await updateAgent(agentId, formStateToUpdateRequest(form));
       if (!updated) {
         message.error('保存失败');
         return;
@@ -165,7 +149,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
   ) => {
     if (!agentId || form.version == null) return;
     if (versionConflict) {
-      message.warning('请先重新加载服务器版本');
+      message.warning('请先重新加载');
       return;
     }
     setSaving(true);
@@ -189,20 +173,16 @@ const AgentEditorPage: GenieType.FC = memo(() => {
   };
 
   const handleDelete = () => {
-    if (form.status === 'ONLINE') {
-      message.warning('ONLINE 状态不可删除，请先下线');
-      return;
-    }
     if (versionConflict) {
-      message.warning('请先重新加载服务器版本');
+      message.warning('请先重新加载');
       return;
     }
     if (!agentId) {
-      setError('Agent 标识缺失，请返回列表后重新进入');
+      setError('无法删除，请返回列表后重新进入');
       return;
     }
     if (form.version == null) {
-      setError('Agent 详情尚未加载完成，请稍候重试');
+      setError('还没加载完成，请稍后再试');
       return;
     }
     setDeleteTarget({ id: agentId, version: form.version });
@@ -218,7 +198,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
       await deleteAgent(deleteTarget.id, { version: deleteTarget.version });
       setDeleteTarget(null);
       message.success('已删除');
-      navigate('/app/agents');
+      navigate('/app/settings/agents');
     } catch (err: unknown) {
       if (isVersionConflict(err)) {
         setVersionConflict(true);
@@ -232,24 +212,35 @@ const AgentEditorPage: GenieType.FC = memo(() => {
     }
   };
 
-  const isOnline = form.status === 'ONLINE';
+  const statusLabel = agentStatusLabel(form.status);
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="agent-editor-page">
-      <div className="flex items-center justify-between gap-12 mb-16">
-        <div>
-          <Title level={4} className="!mb-4">
-            {isNew ? '新建 Agent' : '编辑 Agent'}
-          </Title>
-          <Text type="secondary">
-            {isNew ? '创建后默认为 DRAFT' : `ID: ${agentId}`}
-          </Text>
+    <div data-testid="agent-editor-page">
+      <button
+        type="button"
+        className="mb-12 border-0 bg-transparent p-0 text-[13px] text-text-secondary hover:text-text-primary"
+        onClick={() => navigate('/app/settings/agents')}
+      >
+        ‹ 智能体
+      </button>
+      <div className="mb-16 flex items-start justify-between gap-12">
+        <div className="min-w-0">
+          <h2 className="m-0 text-[20px] font-semibold tracking-[-0.02em] text-text-primary">
+            {isNew ? '新建智能体' : form.name || '智能体'}
+          </h2>
+          {statusLabel ? (
+            <div className="mt-4 text-[13px] text-text-secondary">{statusLabel}</div>
+          ) : null}
         </div>
-        <Space wrap>
-          <Button onClick={() => navigate('/app/agents')}>返回列表</Button>
-          {!isNew && isOnline ? (
-            <Button onClick={() => setTestOpen(true)} data-testid="agent-test-open">
-              测试
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-8">
+          {!isNew ? (
+            <Button
+              danger
+              disabled={versionConflict || saving || form.version == null}
+              onClick={handleDelete}
+              data-testid="agent-delete"
+            >
+              删除
             </Button>
           ) : null}
           {!isNew && form.status !== 'ONLINE' ? (
@@ -270,6 +261,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
           ) : null}
           <Button
             type="primary"
+            className="rounded-full"
             loading={saving}
             disabled={versionConflict}
             onClick={() => void handleSave()}
@@ -277,25 +269,12 @@ const AgentEditorPage: GenieType.FC = memo(() => {
           >
             保存
           </Button>
-          {!isNew ? (
-            <Button
-              danger
-              disabled={isOnline || versionConflict || saving}
-              onClick={handleDelete}
-              data-testid="agent-delete"
-            >
-              删除
-            </Button>
-          ) : null}
-        </Space>
+        </div>
       </div>
 
       {versionConflict ? (
         <div className="mb-16">
-          <VersionConflictAlert
-            disabled={loading}
-            onReload={() => void loadAgent()}
-          />
+          <VersionConflictAlert disabled={loading} onReload={() => void loadAgent()} />
         </div>
       ) : null}
 
@@ -304,30 +283,18 @@ const AgentEditorPage: GenieType.FC = memo(() => {
       ) : null}
 
       <Spin spinning={loading}>
-        <div className="max-w-[720px]">
-          <AgentForm
-            value={form}
-            onChange={setForm}
-            models={models}
-            skills={skills}
-            capabilities={capabilities}
-            disabled={saving}
-            readOnly={versionConflict}
-          />
-        </div>
+        <AgentForm
+          value={form}
+          onChange={setForm}
+          skills={skills}
+          capabilities={capabilities}
+          disabled={saving}
+          readOnly={versionConflict}
+        />
       </Spin>
 
-      {!isNew && agentId ? (
-        <AgentTestModal
-          open={testOpen}
-          agentId={agentId}
-          agentName={form.name || agentId}
-          onClose={() => setTestOpen(false)}
-        />
-      ) : null}
-
       <Modal
-        title="确认删除该 Agent？"
+        title="删除这个智能体？"
         open={deleteTarget !== null}
         okText="删除"
         cancelText="取消"
@@ -342,7 +309,7 @@ const AgentEditorPage: GenieType.FC = memo(() => {
           }
         }}
       >
-        <Text>下线后的 Agent 将被删除，此操作不可恢复。</Text>
+        删除后无法恢复。
       </Modal>
     </div>
   );

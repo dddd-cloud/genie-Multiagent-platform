@@ -12,6 +12,7 @@ final class ConversationSchemaStatements {
         List<String> statements = new ArrayList<>();
         statements.addAll(split("db/migration/V003__conversation.sql"));
         statements.addAll(split("db/migration/V006__conversation_privacy.sql"));
+        statements.addAll(split("db/migration/V010__conversation_attachment.sql"));
         return statements;
     }
 

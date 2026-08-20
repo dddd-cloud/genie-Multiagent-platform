@@ -3,6 +3,13 @@ import { Input, Button, Tooltip } from "antd";
 import classNames from "classnames";
 import { TextAreaRef } from "antd/es/input/TextArea";
 import { useUserSettings } from "@/features/userSettings/useUserSettings";
+import ComposerAttachments from "@/features/chatAttachments/ComposerAttachments";
+import ComposerModelPicker from "@/features/chatModel/ComposerModelPicker";
+import {
+  COMPOSER_ATTACHMENT_ACCEPT,
+  COMPOSER_ATTACHMENT_MAX_FILES,
+} from "@/features/chatAttachments/constants";
+import { useComposerAttachments } from "@/features/chatAttachments/useComposerAttachments";
 
 const { TextArea } = Input;
 
@@ -18,6 +25,8 @@ type Props = {
   /** Live generation: replace send with a ChatGPT-style stop control. */
   running?: boolean;
   onStop?: () => void;
+  conversationId?: string;
+  ensureConversation?: () => Promise<string | null>;
 };
 
 const GeneralInput: GenieType.FC<Props> = (props) => {
@@ -31,12 +40,30 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     leftExtra,
     running,
     onStop,
+    conversationId,
+    ensureConversation,
   } = props;
-  const { preferences, status: preferencesStatus } = useUserSettings();
+  const { preferences, status: preferencesStatus, save } = useUserSettings();
   const [question, setQuestion] = useState<string>("");
   const [deepThink, setDeepThink] = useState<boolean>(false);
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const deepThinkTouchedRef = useRef(false);
   const textareaRef = useRef<TextAreaRef>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const fileDragCountRef = useRef(0);
+  const {
+    attachments,
+    addFiles,
+    removeAttachment,
+    clearAttachments,
+    uploading,
+    ready,
+    readyIds,
+  } = useComposerAttachments({
+    conversationId,
+    ensureConversation,
+  });
   const tempData = useRef<{
     cmdPress?: boolean;
     compositing?: boolean;
@@ -46,15 +73,11 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
     setQuestion(e.target.value);
   };
 
-  /**
-   * The saved default is applied only once preferences are known to be loaded, and never after the
-   * user has flipped the toggle — a late response must not undo their choice.
-   */
   useEffect(() => {
-    if (preferencesStatus === 'ready' && !deepThinkTouchedRef.current) {
-      setDeepThink(preferences.defaultDeepThink);
+    if (preferencesStatus === 'ready' && !selectedModel && preferences.preferredModelName) {
+      setSelectedModel(preferences.preferredModelName);
     }
-  }, [preferences.defaultDeepThink, preferencesStatus]);
+  }, [preferences.preferredModelName, preferencesStatus, selectedModel]);
 
   const changeThinkStatus = () => {
     deepThinkTouchedRef.current = true;
@@ -94,43 +117,135 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
       return;
     }
     event.preventDefault();
-    if (!question || disabled || running) {
+    if (disabled || running || uploading) {
       return;
     }
+    if (!question.trim() && readyIds.length === 0) {
+      return;
+    }
+    emitSend();
+  };
+
+  const toInputFiles = (): CHAT.TFile[] =>
+    ready.map((file) => ({
+      name: file.name,
+      url: '',
+      type: file.type,
+      size: file.size,
+    }));
+
+  const emitSend = () => {
+    const trimmed = question.trim();
     send({
-      message: question,
+      message: trimmed || (readyIds.length > 0 ? '请阅读并分析我上传的文件。' : ''),
       outputStyle: product?.type,
       deepThink,
+      files: toInputFiles(),
+      attachmentIds: readyIds,
+      modelName: selectedModel || undefined,
     });
-
-    setTimeout(() => {
-      setQuestion("");
-    });
+    setQuestion("");
+    clearAttachments();
   };
 
   const sendMessage = () => {
-    send({
-      message: question,
-      outputStyle: product?.type,
-      deepThink,
-    });
-    setQuestion("");
+    if (disabled || running || uploading) {
+      return;
+    }
+    if (!question.trim() && readyIds.length === 0) {
+      return;
+    }
+    emitSend();
   };
 
-  const canSend = Boolean(question) && !disabled;
+  const canSend =
+    !disabled &&
+    !running &&
+    !uploading &&
+    (Boolean(question.trim()) || readyIds.length > 0);
+  const canAttach = Boolean(conversationId || ensureConversation);
+  const atFileLimit = attachments.length >= COMPOSER_ATTACHMENT_MAX_FILES;
+  const allowFileDrop = canAttach && !disabled && !running;
+
+  const dataTransferHasFiles = (event: React.DragEvent) =>
+    Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+  const resetFileDrag = () => {
+    fileDragCountRef.current = 0;
+    setFileDragOver(false);
+  };
+
+  const onFileDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!allowFileDrop || !dataTransferHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    fileDragCountRef.current += 1;
+    setFileDragOver(true);
+  };
+
+  const onFileDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!allowFileDrop || !dataTransferHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = atFileLimit ? "none" : "copy";
+    }
+  };
+
+  const onFileDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!dataTransferHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    fileDragCountRef.current = Math.max(0, fileDragCountRef.current - 1);
+    if (fileDragCountRef.current === 0) {
+      setFileDragOver(false);
+    }
+  };
+
+  const onFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resetFileDrag();
+    if (!allowFileDrop) return;
+    const files = event.dataTransfer?.files;
+    if (files && files.length > 0) {
+      void addFiles(files);
+    }
+  };
 
   return (
     <div
-      className={classNames(
-        "rounded-[28px] border border-black/8 bg-white overflow-visible p-[14px] pb-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-        "transition-[border-color,box-shadow] duration-150",
-        "focus-within:border-black/15 focus-within:shadow-[0_8px_28px_rgba(0,0,0,0.06)]",
-      )}
+      data-testid="composer-dropzone"
+      onDragEnter={onFileDragEnter}
+      onDragOver={onFileDragOver}
+      onDragLeave={onFileDragLeave}
+      onDrop={onFileDrop}
+      className="relative w-full"
     >
+      <ComposerAttachments attachments={attachments} onRemove={removeAttachment} />
+      <div
+        data-testid="composer-shell"
+        className={classNames(
+          "relative rounded-[28px] border bg-white overflow-visible p-[14px] pb-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+          "transition-[border-color,box-shadow] duration-150",
+          fileDragOver && allowFileDrop
+            ? "border-[#1D1D1F]/35 shadow-[0_8px_28px_rgba(0,0,0,0.06)]"
+            : "border-black/8 focus-within:border-black/15 focus-within:shadow-[0_8px_28px_rgba(0,0,0,0.06)]",
+        )}
+      >
+      {fileDragOver && allowFileDrop ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[28px] border-2 border-dashed border-[#1D1D1F]/25 bg-white/88 text-[14px] text-text-secondary"
+          data-testid="composer-drop-overlay"
+        >
+          {atFileLimit ? `最多上传 ${COMPOSER_ATTACHMENT_MAX_FILES} 个文件` : "松开以上传文件"}
+        </div>
+      ) : null}
       <div className="relative">
         <TextArea
           ref={textareaRef}
           value={question}
+          placeholder={placeholder}
           aria-label={placeholder.trim() ? placeholder : '消息'}
           autoSize={{ minRows: 1, maxRows: 20 }}
           className={classNames(
@@ -189,7 +304,55 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
             </div>
           ) : null}
         </div>
-        <div className="flex items-center shrink-0">
+        <div className="flex items-center shrink-0 gap-8">
+          <ComposerModelPicker
+            value={selectedModel}
+            disabled={disabled || running}
+            onChange={(name) => {
+              setSelectedModel(name);
+              void save({ preferredModelName: name }).catch(() => undefined);
+            }}
+          />
+          {canAttach ? (
+            <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={COMPOSER_ATTACHMENT_ACCEPT}
+            className="hidden"
+            aria-hidden
+            tabIndex={-1}
+            onChange={(event) => {
+              const files = event.target.files;
+              if (files && files.length > 0) {
+                void addFiles(files);
+              }
+              event.target.value = '';
+            }}
+          />
+          <Tooltip title={atFileLimit ? `最多上传 ${COMPOSER_ATTACHMENT_MAX_FILES} 个文件` : "上传文件"}>
+            <button
+              type="button"
+              aria-label="上传文件"
+              data-testid="composer-attach-button"
+              disabled={disabled || running || atFileLimit}
+              className={classNames(
+                "size-28 rounded-full border-0 flex items-center justify-center transition-colors duration-150",
+                disabled || running || atFileLimit
+                  ? "cursor-not-allowed text-[#C7C7CC] bg-transparent"
+                  : "cursor-pointer text-text-secondary hover:bg-[#F2F2F7] hover:text-text-primary",
+              )}
+              onClick={() => {
+                if (disabled || running || atFileLimit) return;
+                fileInputRef.current?.click();
+              }}
+            >
+              <i className="font_family icon-fujian text-[16px] leading-none" />
+            </button>
+          </Tooltip>
+            </>
+          ) : null}
           {running ? (
             <Tooltip title="停止生成">
               <button
@@ -225,6 +388,7 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
             </Tooltip>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

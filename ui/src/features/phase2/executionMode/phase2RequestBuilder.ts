@@ -1,6 +1,7 @@
 import type { ExecutionMode, Phase2GptQueryRequest } from '@/contracts';
 import {
   ALLOWED_AGENTS_MAX,
+  ATTACHMENTS_MAX,
   LOCAL_CONTEXT_MAX_CODE_POINTS,
   LTM_MAX_CODE_POINTS,
   QUERY_MAX_CODE_POINTS,
@@ -25,6 +26,8 @@ export interface BuildPhase2RequestInput {
   longTermMemory: string;
   conversationSummary: string;
   teamId?: string | null;
+  attachmentIds?: readonly string[];
+  modelName?: string | null;
 }
 
 export type BuildPhase2RequestResult =
@@ -158,6 +161,36 @@ export function buildPhase2GptQueryRequest(
     }
   }
 
+  const rawAttachmentIds = input.attachmentIds ?? [];
+  const attachmentIds: string[] = [];
+  const seenAttachments = new Set<string>();
+  for (const id of rawAttachmentIds) {
+    if (typeof id !== 'string' || !isUuidString(id)) {
+      return validationError(
+        'INVALID_ATTACHMENT_IDS',
+        'attachmentIds must be UUIDs',
+      );
+    }
+    if (seenAttachments.has(id)) continue;
+    seenAttachments.add(id);
+    attachmentIds.push(id);
+  }
+  if (attachmentIds.length > ATTACHMENTS_MAX) {
+    return validationError(
+      'TOO_MANY_ATTACHMENTS',
+      `attachmentIds must be <= ${ATTACHMENTS_MAX}`,
+    );
+  }
+
+  const modelName =
+    typeof input.modelName === 'string' ? input.modelName.trim() : '';
+  if (modelName.length > 128) {
+    return validationError(
+      'INVALID_MODEL_NAME',
+      'modelName must contain at most 128 characters',
+    );
+  }
+
   const request: Phase2GptQueryRequest = {
     sessionId: input.sessionId,
     requestId: input.requestId,
@@ -172,6 +205,8 @@ export function buildPhase2GptQueryRequest(
       conversationSummary,
     },
     ...(teamId === null ? {} : { teamId }),
+    ...(attachmentIds.length === 0 ? {} : { attachmentIds }),
+    ...(modelName ? { modelName } : {}),
   };
 
   return {

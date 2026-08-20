@@ -47,6 +47,11 @@ class SystemResourceBuilderTest {
         assertFalse(SystemResourceBuilder.requiresResourceCreation(
                 "Compare REST and GraphQL; do not create an agent or team"));
         assertTrue(SystemResourceBuilder.requiresResourceCreation("不要创建 Agent，只创建 Team"));
+        String resumeBody = "分析简历"
+                + "\n\n<user_uploaded_files>\n"
+                + "曾组建数据分析团队并生成周报，代理过项目经理\n"
+                + "</user_uploaded_files>";
+        assertFalse(SystemResourceBuilder.requiresResourceCreation(resumeBody));
     }
 
     @Test

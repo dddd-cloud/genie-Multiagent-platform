@@ -29,4 +29,13 @@ public class GptQueryReq {
     private String runtimeBasePrompt;
     @JsonIgnore
     private String runtimeSopPrompt;
+    private List<String> attachmentIds;
+    /**
+     * Catalog name of the model selected in the composer. All agents in this request use it.
+     */
+    private String modelName;
+    @JsonIgnore
+    private String runtimeTenantId;
+    @JsonIgnore
+    private String runtimeOwnerId;
 }

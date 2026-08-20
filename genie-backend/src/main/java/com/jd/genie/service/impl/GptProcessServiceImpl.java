@@ -12,9 +12,12 @@ import com.jd.genie.platform.agentbridge.StreamPersistenceObserver;
 import com.jd.genie.platform.contract.ConversationExecutionCommand;
 import com.jd.genie.platform.contract.ConversationExecutionPort;
 import com.jd.genie.platform.contract.ConversationExecutionResult;
+import com.jd.genie.platform.conversation.attachment.ChatAttachmentPrompt;
+import com.jd.genie.platform.conversation.service.ConversationAttachmentService;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.CurrentUserProvider;
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequest;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator;
 import com.jd.genie.platform.phase2.runtime.request.Phase2GptQueryRequestValidator.LocalContextSnapshot;
@@ -31,6 +34,7 @@ import com.jd.genie.platform.phase2contract.dto.TeamRuntimeSelection;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.TeamRuntimeCatalogPort;
+import com.jd.genie.agent.llm.RequestScopedLlmSettings;
 import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.service.IGptProcessService;
 import com.jd.genie.service.IMultiAgentService;
@@ -66,6 +70,10 @@ public class GptProcessServiceImpl implements IGptProcessService {
     private final int historyMaxTurns;
     private final int historyMaxCharacters;
     private final ConversationStreamCoordinator conversationStreamCoordinator;
+    private ObjectProvider<ConversationAttachmentService> attachmentServiceProvider =
+            new StaticListableBeanFactory().getBeanProvider(ConversationAttachmentService.class);
+    private ObjectProvider<ModelCatalogService> modelCatalogServiceProvider =
+            new StaticListableBeanFactory().getBeanProvider(ModelCatalogService.class);
 
     public GptProcessServiceImpl(
             IMultiAgentService multiAgentService,
@@ -158,6 +166,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                 orchestrationRuntimeProvider,
                 memoryDocumentServiceProvider,
                 new StaticListableBeanFactory().getBeanProvider(TeamRuntimeCatalogPort.class),
+                new StaticListableBeanFactory().getBeanProvider(ConversationAttachmentService.class),
+                new StaticListableBeanFactory().getBeanProvider(ModelCatalogService.class),
                 sseTimeoutMillis,
                 maxSnapshotBytes,
                 historyMaxTurns,
@@ -174,6 +184,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
             ObjectProvider<Phase2OrchestrationRuntime> orchestrationRuntimeProvider,
             ObjectProvider<MemoryDocumentService> memoryDocumentServiceProvider,
             ObjectProvider<TeamRuntimeCatalogPort> teamRuntimeCatalogPortProvider,
+            ObjectProvider<ConversationAttachmentService> attachmentServiceProvider,
+            ObjectProvider<ModelCatalogService> modelCatalogServiceProvider,
             @Value("${GENIE_SSE_TIMEOUT_MILLIS:3600000}") long sseTimeoutMillis,
             @Value("${GENIE_STREAM_SNAPSHOT_MAX_BYTES:8388608}") long maxSnapshotBytes,
             @Value("${GENIE_HISTORY_MAX_TURNS:6}") int historyMaxTurns,
@@ -188,6 +200,12 @@ public class GptProcessServiceImpl implements IGptProcessService {
         this.orchestrationRuntimeProvider = orchestrationRuntimeProvider;
         this.memoryDocumentServiceProvider = memoryDocumentServiceProvider;
         this.teamRuntimeCatalogPortProvider = teamRuntimeCatalogPortProvider;
+        this.attachmentServiceProvider = attachmentServiceProvider == null
+                ? new StaticListableBeanFactory().getBeanProvider(ConversationAttachmentService.class)
+                : attachmentServiceProvider;
+        this.modelCatalogServiceProvider = modelCatalogServiceProvider == null
+                ? new StaticListableBeanFactory().getBeanProvider(ModelCatalogService.class)
+                : modelCatalogServiceProvider;
         this.phase2RequestValidator = new Phase2GptQueryRequestValidator(requestFactory);
         this.sseTimeoutMillis = requirePositive(sseTimeoutMillis, "sseTimeoutMillis");
         this.maxSnapshotBytes = requirePositive(maxSnapshotBytes, "maxSnapshotBytes");
@@ -221,6 +239,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
 
     private SseEmitter executeTrustedRequest(CurrentUser currentUser, GptQueryReq request) {
         return executePreparedRequest(currentUser, request, (observer, cancellableCall) -> {
+            applySelectedModel(currentUser, request);
+            applyChatAttachments(currentUser, request);
             startAgent(request, observer, cancellableCall);
             log.info(
                     "Agent execution started, conversationId: {}, requestId: {}, traceId: {}, status: STREAMING",
@@ -240,6 +260,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
         MasterPersona masterPersona = targets.masterPersona();
         GptQueryReq trustedRequest = withDirectRuntimeContext(currentUser, request);
         return executePreparedRequest(currentUser, trustedRequest, (observer, cancellableCall) -> {
+            applySelectedModel(currentUser, trustedRequest);
+            ChatAttachmentPrompt.Prompts attachmentPrompts = attachmentPrompts(currentUser, trustedRequest);
             Phase2OrchestrationRuntime runtime = orchestrationRuntimeProvider.getIfAvailable();
             if (runtime == null) {
                 throw new AgentBridgeException(
@@ -251,24 +273,26 @@ public class GptProcessServiceImpl implements IGptProcessService {
             LocalContextSnapshot localContext = effectiveLocalContext(currentUser, request);
             RouteDecision route = runtime.selectRoute(
                     request.executionMode(),
-                    trustedRequest.getQuery(),
+                    attachmentPrompts.routingQuery(),
                     localContext.conversationSummary(),
                     conversationHistory,
                     candidates,
                     masterPersona
             );
             if (route.route() == RouteDecision.Route.DIRECT) {
-                startAgent(withDirectRuntimeContext(currentUser, request), observer, cancellableCall);
+                trustedRequest.setQuery(attachmentPrompts.specialistQuery());
+                startAgent(trustedRequest, observer, cancellableCall);
                 return;
             }
             // Return SseEmitter first; sync execute() would buffer all SSE until the request thread finishes.
             ThreadUtil.execute(() -> {
                 try {
+                    applySelectedModel(currentUser, trustedRequest);
                     runtime.execute(
                             currentUser,
                             trustedRequest.getRequestId(),
                             UUID.randomUUID().toString(),
-                            trustedRequest.getQuery(),
+                            attachmentPrompts.routingQuery(),
                             localContext.conversationSummary(),
                             localContext.longTermMemory(),
                             conversationHistory,
@@ -276,12 +300,15 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             route,
                             observer,
                             masterPersona,
-                            request.teamId()
+                            request.teamId(),
+                            attachmentPrompts.specialistQuery()
                     );
                 } catch (Throwable error) {
                     if (!observer.isTerminal()) {
                         observer.onError(error);
                     }
+                } finally {
+                    RequestScopedLlmSettings.clear();
                 }
             });
         });
@@ -407,6 +434,67 @@ public class GptProcessServiceImpl implements IGptProcessService {
         } catch (RuntimeException error) {
             throw AgentBridgeErrorMapper.asAgentBridgeException(error, MvpErrorCode.INTERNAL_ERROR);
         }
+    }
+
+    private void applySelectedModel(CurrentUser currentUser, GptQueryReq request) {
+        ModelCatalogService catalog = modelCatalogServiceProvider.getIfAvailable();
+        if (catalog == null || currentUser == null || request == null) {
+            return;
+        }
+        try {
+            String resolvedName = catalog.resolveRuntimeName(
+                    currentUser.tenantId(),
+                    currentUser.userId(),
+                    request.getModelName()
+            );
+            var settings = catalog.resolveRuntimeSettings(
+                    currentUser.tenantId(),
+                    currentUser.userId(),
+                    request.getModelName()
+            );
+            request.setModelName(resolvedName);
+            request.setRuntimeTenantId(currentUser.tenantId());
+            request.setRuntimeOwnerId(currentUser.userId());
+            RequestScopedLlmSettings.set(settings);
+        } catch (Phase2ContractException error) {
+            throw new AgentBridgeException(error.errorCode(), error.getMessage(), error);
+        }
+    }
+
+    private ChatAttachmentPrompt.Prompts attachmentPrompts(CurrentUser currentUser, GptQueryReq request) {
+        List<String> attachmentIds = request.getAttachmentIds();
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            String query = request.getQuery();
+            return new ChatAttachmentPrompt.Prompts(query, query);
+        }
+        ConversationAttachmentService service = attachmentServiceProvider.getIfAvailable();
+        if (service == null) {
+            String query = request.getQuery();
+            return new ChatAttachmentPrompt.Prompts(query, query);
+        }
+        return service.preparePrompts(
+                currentUser,
+                request.getSessionId(),
+                attachmentIds,
+                request.getQuery()
+        );
+    }
+
+    private void applyChatAttachments(CurrentUser currentUser, GptQueryReq request) {
+        List<String> attachmentIds = request.getAttachmentIds();
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return;
+        }
+        ConversationAttachmentService service = attachmentServiceProvider.getIfAvailable();
+        if (service == null) {
+            return;
+        }
+        request.setQuery(service.enrichQuery(
+                currentUser,
+                request.getSessionId(),
+                attachmentIds,
+                request.getQuery()
+        ));
     }
 
     private ConversationExecutionResult prepareExecution(

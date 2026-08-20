@@ -53,7 +53,7 @@ public class PromptPreviewService {
                 pkg.outputRequirement()
             ))
             .toList();
-        ModelResolutionResult model = modelCatalogService.requireAvailableForStorage(request.modelName());
+        ModelResolutionResult model = modelCatalogService.resolveForStorage(null);
         PromptCompilationResult compiled = promptCompiler.compile(new PromptCompilationRequest(
             request.promptMode(),
             request.promptConfig(),

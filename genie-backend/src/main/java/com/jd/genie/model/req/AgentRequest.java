@@ -27,6 +27,10 @@ public class AgentRequest {
     private Boolean isStream;
     private List<Message> messages;
     private String outputStyle; // 交付物产出格式：html(网页模式）， docs(文档模式）， table(表格模式）
+    /** Catalog key for the user-selected model. Used only on the internal AutoAgent hop. */
+    private String runtimeModelName;
+    private String runtimeTenantId;
+    private String runtimeOwnerId;
 
     @Data
     @Builder

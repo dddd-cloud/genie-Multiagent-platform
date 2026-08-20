@@ -72,6 +72,11 @@ public abstract class Phase2AMySqlTestSupport {
         jdbcTemplate.update("DELETE FROM agent_skill_binding");
         jdbcTemplate.update("DELETE FROM agent_definition");
         jdbcTemplate.update("DELETE FROM skill_definition");
+        try {
+            jdbcTemplate.update("DELETE FROM user_llm_model");
+        } catch (RuntimeException ignored) {
+            // Table exists only after V011.
+        }
         fakeToolBindingPort.reset();
     }
 

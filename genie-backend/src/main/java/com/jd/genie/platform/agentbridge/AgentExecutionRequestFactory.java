@@ -45,6 +45,10 @@ public final class AgentExecutionRequestFactory {
                 .deepThink(deepThink)
                 .outputStyle(outputStyle)
                 .user(currentUser.username())
+                .attachmentIds(externalRequest.getAttachmentIds())
+                .modelName(normalizedModelName(externalRequest.getModelName()))
+                .runtimeTenantId(currentUser.tenantId())
+                .runtimeOwnerId(currentUser.userId())
                 .build();
         trusted.setTraceId(ChateiUtils.getRequestId(trusted));
         return trusted;
@@ -97,6 +101,17 @@ public final class AgentExecutionRequestFactory {
             throw validationError("deepThink must be 0 or 1");
         }
         return deepThink;
+    }
+
+    private String normalizedModelName(String value) {
+        String trimmed = trim(value);
+        if (!hasText(trimmed)) {
+            return null;
+        }
+        if (trimmed.length() > 128) {
+            throw validationError("modelName must contain at most 128 characters");
+        }
+        return trimmed;
     }
 
     private AgentBridgeException validationError(String message) {

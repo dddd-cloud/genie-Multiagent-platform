@@ -10,7 +10,6 @@ vi.mock('@/services/phase2/agents', () => ({
   createAgent: vi.fn(),
   deleteAgent: vi.fn(),
   getAgent: vi.fn(),
-  listModels: vi.fn(),
   listToolCapabilities: vi.fn(),
   offlineAgent: vi.fn(),
   onlineAgent: vi.fn(),
@@ -23,10 +22,6 @@ vi.mock('@/services/phase2/skills', () => ({
 
 vi.mock('../AgentForm', () => ({
   default: () => <div data-testid="agent-form" />,
-}));
-
-vi.mock('../AgentTestModal', () => ({
-  default: () => null,
 }));
 
 Object.defineProperty(window, 'matchMedia', {
@@ -61,10 +56,10 @@ const agent: Phase2AgentResponse = {
 
 function renderEditor() {
   return render(
-    <MemoryRouter initialEntries={['/app/agents/agent-a']}>
+    <MemoryRouter initialEntries={['/app/settings/agents/agent-a']}>
       <Routes>
-        <Route path="/app/agents/:agentId" element={<AgentEditorPage />} />
-        <Route path="/app/agents" element={<div>Agent 列表</div>} />
+        <Route path="/app/settings/agents/:agentId" element={<AgentEditorPage />} />
+        <Route path="/app/settings/agents" element={<div>智能体列表</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -73,27 +68,40 @@ function renderEditor() {
 describe('AgentEditorPage deletion', () => {
   beforeEach(() => {
     vi.mocked(agentService.getAgent).mockResolvedValue(agent);
-    vi.mocked(agentService.listModels).mockResolvedValue([]);
     vi.mocked(agentService.listToolCapabilities).mockResolvedValue([]);
     vi.mocked(skillService.listSkills).mockResolvedValue([]);
     vi.mocked(agentService.deleteAgent).mockResolvedValue(null);
   });
 
+  it('opens a visible confirmation for an ONLINE agent', async () => {
+    vi.mocked(agentService.getAgent).mockResolvedValue({
+      ...agent,
+      status: 'ONLINE',
+    });
+    renderEditor();
+
+    expect(await screen.findByText('已上线')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('agent-delete'));
+
+    expect(screen.getByText('删除后无法恢复。')).toBeInTheDocument();
+    expect(agentService.deleteAgent).not.toHaveBeenCalled();
+  });
+
   it('opens a visible confirmation for an OFFLINE agent', async () => {
     renderEditor();
 
-    fireEvent.click(await screen.findByTestId('agent-delete'));
+    expect(await screen.findByText('已下线')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('agent-delete'));
 
-    expect(
-      await screen.findByText('下线后的 Agent 将被删除，此操作不可恢复。'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('删除后无法恢复。')).toBeInTheDocument();
     expect(agentService.deleteAgent).not.toHaveBeenCalled();
   });
 
   it('deletes with the loaded version only after confirmation', async () => {
     renderEditor();
 
-    fireEvent.click(await screen.findByTestId('agent-delete'));
+    expect(await screen.findByText('已下线')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('agent-delete'));
     const deleteButtons = await screen.findAllByRole('button', {
       name: /删\s*除/,
     });

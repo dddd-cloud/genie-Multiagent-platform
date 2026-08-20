@@ -16,6 +16,9 @@ export const PHASE2_REQUEST_ERROR_CODES = [
   'INVALID_TEAM_ID',
   'DIRECT_TEAM_FORBIDDEN',
   'TEAM_AND_ALLOWED_AGENTS_EXCLUSIVE',
+  'TOO_MANY_ATTACHMENTS',
+  'INVALID_ATTACHMENT_IDS',
+  'INVALID_MODEL_NAME',
 ] as const;
 
 export type Phase2RequestErrorCode =
@@ -27,6 +30,7 @@ export const SUMMARY_MAX_CODE_POINTS = 20_000;
 export const LOCAL_CONTEXT_MAX_CODE_POINTS = 30_000;
 export const REQUEST_ID_MAX_LENGTH = 64;
 export const ALLOWED_AGENTS_MAX = 20;
+export const ATTACHMENTS_MAX = 10;
 
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;

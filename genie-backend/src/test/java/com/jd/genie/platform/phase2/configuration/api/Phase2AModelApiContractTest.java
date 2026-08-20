@@ -20,19 +20,17 @@ class Phase2AModelApiContractTest extends Phase2AApiTestSupport {
     void listsOnlySafeModelCatalogFieldsInStableEnvelope() throws Exception {
         ModelCatalogService service = mock(ModelCatalogService.class);
         when(service.listModels()).thenReturn(List.of(
-            new ModelCatalogItem("system-default", "system-default", true, true),
-            new ModelCatalogItem("qwen-plus", "qwen-plus", false, true)
+            new ModelCatalogItem("qwen-plus", "qwen-plus", true, true)
         ));
         var mvc = mvc(new Phase2ModelController(service, currentUserProvider));
 
         mvc.perform(get("/api/v2/models"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("OK"))
-            .andExpect(jsonPath("$.data[0].name").value("system-default"))
+            .andExpect(jsonPath("$.data[0].name").value("qwen-plus"))
             .andExpect(jsonPath("$.data[0].isDefault").value(true))
-            .andExpect(jsonPath("$.data[1].available").value(true))
+            .andExpect(jsonPath("$.data[0].available").value(true))
             .andExpect(jsonPath("$.data[0].apiKey").doesNotExist())
-            .andExpect(jsonPath("$.data[0].baseUrl").doesNotExist())
             .andExpect(jsonPath("$.data[0].headers").doesNotExist())
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("SECRET"))));
     }

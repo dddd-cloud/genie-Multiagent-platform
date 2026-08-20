@@ -22,6 +22,8 @@ export interface Phase2GptQueryRequest {
   allowedAgentIds: string[];
   localContext: Phase2LocalContext;
   teamId?: string;
+  attachmentIds?: string[];
+  modelName?: string;
 }
 
 export interface AgentCapabilitySummary {

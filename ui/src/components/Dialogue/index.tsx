@@ -236,16 +236,16 @@ const Dialogue: FC<Props> = (props) => {
 
   return (
     <div className="h-full text-[14px] font-normal flex flex-col text-text-primary">
-      {(chat.files || []).length ? (
-        <div className="w-full mt-[24px] justify-end">
-          <AttachmentList files={chat.files} preview={false} />
-        </div>
-      ) : null}
-      {chat.query ? (
-        <div className="w-full mt-[24px] flex justify-end">
-          <div className="max-w-[80%] bg-[#E8E8ED] text-text-primary px-14 py-10 rounded-[18px] rounded-br-[6px]">
-            {chat.query}
-          </div>
+      {(chat.files || []).length || chat.query ? (
+        <div className="w-full mt-[24px] flex flex-col items-end gap-8" data-testid="user-turn">
+          {(chat.files || []).length ? (
+            <AttachmentList files={chat.files} preview={false} />
+          ) : null}
+          {chat.query ? (
+            <div className="max-w-[80%] bg-[#E8E8ED] text-text-primary px-14 py-10 rounded-[18px] rounded-br-[6px]">
+              {chat.query}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {chat.tip ? (

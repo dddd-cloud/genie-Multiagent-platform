@@ -74,18 +74,25 @@ const GeneralInput: GenieType.FC<Props> = (props) => {
             {formatSize(f.size)}
           </div>
         </div>
-        {!preview ? (
-          <i
-            className="font_family icon-jia-1 absolute top-[10px] right-[8px] cursor-pointer hidden group-hover:block"
-            onClick={() => removeFile(index)}
-          ></i>
+        {!preview && remove ? (
+          <button
+            type="button"
+            aria-label={`移除 ${f.name}`}
+            className="absolute top-[10px] right-[8px] flex size-18 items-center justify-center rounded-full border-0 bg-[#8E8E93] text-white cursor-pointer"
+            onClick={(event) => {
+              event.stopPropagation();
+              removeFile(index);
+            }}
+          >
+            <span className="block text-[12px] leading-none">×</span>
+          </button>
         ) : null}
       </div>
     );
   };
 
   return (
-    <div className="w-full flex gap-8 flex-wrap">
+    <div className={preview ? "w-full flex gap-8 flex-wrap" : "flex gap-8 flex-wrap justify-end"}>
       {files.map((f, index) => renderFile(f, index))}
     </div>
   );

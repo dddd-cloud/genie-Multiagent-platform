@@ -40,6 +40,8 @@ public final class Phase2GptQueryRequestValidator {
         LocalContextSnapshot localContext = normalizedLocalContext(request.getLocalContext());
         List<String> allowedAgentIds = normalizedAllowedAgentIds(request.getAllowedAgentIds(), executionMode);
         String teamId = normalizedTeamId(request.getTeamId(), executionMode, allowedAgentIds);
+        List<String> attachmentIds = normalizedAttachmentIds(request.getAttachmentIds());
+        String modelName = normalizedModelName(request.getModelName());
         GptQueryReq trustedRequest = requestFactory.trustedRequest(
                 GptQueryReq.builder()
                         .sessionId(request.getSessionId())
@@ -47,10 +49,21 @@ public final class Phase2GptQueryRequestValidator {
                         .query(request.getQuery())
                         .deepThink(request.getDeepThink())
                         .outputStyle(request.getOutputStyle())
+                        .attachmentIds(attachmentIds)
+                        .modelName(modelName)
                         .build(),
                 currentUser
         );
-        return new ValidatedPhase2Request(trustedRequest, executionMode, allowedAgentIds, teamId, localContext);
+        trustedRequest.setAttachmentIds(attachmentIds);
+        trustedRequest.setModelName(modelName);
+        return new ValidatedPhase2Request(
+                trustedRequest,
+                executionMode,
+                allowedAgentIds,
+                teamId,
+                localContext,
+                attachmentIds
+        );
     }
 
     private String normalizedExecutionMode(String value) {
@@ -115,6 +128,37 @@ public final class Phase2GptQueryRequestValidator {
         return teamId;
     }
 
+    private List<String> normalizedAttachmentIds(List<String> value) {
+        if (value == null || value.isEmpty()) {
+            return List.of();
+        }
+        if (value.size() > 10) {
+            throw validationError("attachmentIds must contain at most 10 values");
+        }
+        List<String> normalized = value.stream().map(this::trim).toList();
+        if (normalized.stream().anyMatch(item -> item == null || item.isBlank())
+                || normalized.stream().distinct().count() != normalized.size()) {
+            throw validationError("attachmentIds must contain unique non-blank values");
+        }
+        for (String id : normalized) {
+            if (!TEAM_ID_PATTERN.matcher(id).matches()) {
+                throw validationError("attachmentIds must be UUIDs");
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private String normalizedModelName(String value) {
+        String modelName = trim(value);
+        if (modelName == null || modelName.isEmpty()) {
+            return null;
+        }
+        if (modelName.length() > 128) {
+            throw validationError("modelName must contain at most 128 characters");
+        }
+        return modelName;
+    }
+
     private AgentBridgeException validationError(String message) {
         return new AgentBridgeException(MvpErrorCode.VALIDATION_ERROR, message);
     }
@@ -136,7 +180,8 @@ public final class Phase2GptQueryRequestValidator {
             String executionMode,
             List<String> allowedAgentIds,
             String teamId,
-            LocalContextSnapshot localContext
+            LocalContextSnapshot localContext,
+            List<String> attachmentIds
     ) {
         public ValidatedPhase2Request(
                 GptQueryReq trustedRequest,
@@ -144,7 +189,11 @@ public final class Phase2GptQueryRequestValidator {
                 List<String> allowedAgentIds,
                 LocalContextSnapshot localContext
         ) {
-            this(trustedRequest, executionMode, allowedAgentIds, null, localContext);
+            this(trustedRequest, executionMode, allowedAgentIds, null, localContext, List.of());
+        }
+
+        public ValidatedPhase2Request {
+            attachmentIds = attachmentIds == null ? List.of() : List.copyOf(attachmentIds);
         }
     }
 

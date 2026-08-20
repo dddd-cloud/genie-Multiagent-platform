@@ -16,6 +16,7 @@ import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionS
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamResponse;
 import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
+import com.jd.genie.platform.conversation.attachment.ChatAttachmentPrompt;
 import com.jd.genie.platform.phase2.tooling.McpServerService;
 import com.jd.genie.platform.phase2.tooling.McpToolResponse;
 import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
@@ -64,7 +65,7 @@ public class SystemResourceBuilder {
     }
 
     public static boolean requiresResourceCreation(String query) {
-        String text = stripNegatedCreationClauses(normalize(query));
+        String text = stripNegatedCreationClauses(normalize(ChatAttachmentPrompt.withoutUploadedFileBodies(query)));
         if (text.isBlank()) return false;
         if (containsAny(text, "现有团队", "当前团队", "existing team", "current team")) return false;
         boolean create = containsAny(text, "创建", "新建", "生成", "组建", "搭建", "帮我建", "一键建", "create ", "build ");

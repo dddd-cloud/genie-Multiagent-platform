@@ -734,6 +734,8 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           teamId: teamIdRef.current,
           longTermMemory: '',
           conversationSummary: '',
+          attachmentIds: inputInfo.attachmentIds ?? [],
+          modelName: inputInfo.modelName ?? undefined,
         });
 
         if (!built.ok) {
@@ -773,6 +775,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           query,
           deepThink: deepThink ? 1 : 0,
           outputStyle,
+          ...(inputInfo.attachmentIds && inputInfo.attachmentIds.length > 0
+            ? { attachmentIds: inputInfo.attachmentIds }
+            : {}),
+          ...(inputInfo.modelName ? { modelName: inputInfo.modelName } : {}),
         };
 
       const commitWorkingChat = (working: PersistedChatItem) => {
@@ -1247,6 +1253,8 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                   ) : null
                 }
                 send={(info) => void sendMessage(info)}
+                conversationId={conversationId}
+                ensureConversation={onEnsureConversation}
               />
             </div>
           </div>
@@ -1397,6 +1405,8 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                       : info,
                   )
                 }
+                conversationId={conversationId}
+                ensureConversation={onEnsureConversation}
               />
           </div>
         </div>

@@ -203,4 +203,34 @@ describe('Phase2RequestBuilderTest', () => {
     if (result.ok) return;
     expect(result.code).toBe('TEAM_AND_ALLOWED_AGENTS_EXCLUSIVE');
   });
+
+  it('includes attachmentIds when provided', () => {
+    const ids = [
+      'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      '11111111-2222-3333-4444-555555555555',
+    ];
+    const result = buildPhase2GptQueryRequest(baseInput({ attachmentIds: ids }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.request.attachmentIds).toEqual(ids);
+  });
+
+  it('includes modelName when provided', () => {
+    const result = buildPhase2GptQueryRequest(
+      baseInput({ modelName: 'gpt-4o-mini' }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.request.modelName).toBe('gpt-4o-mini');
+  });
+
+  it('rejects more than 10 attachmentIds', () => {
+    const ids = Array.from({ length: 11 }, (_, index) =>
+      `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeee${String(index).padStart(2, '0')}`,
+    );
+    const result = buildPhase2GptQueryRequest(baseInput({ attachmentIds: ids }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('TOO_MANY_ATTACHMENTS');
+  });
 });

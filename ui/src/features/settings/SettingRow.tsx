@@ -5,18 +5,21 @@ type SettingRowProps = {
   label: string;
   hint?: string;
   last?: boolean;
+  stacked?: boolean;
   children: ReactNode;
 };
 
-function SettingRow({ label, hint, last, children }: SettingRowProps) {
+function SettingRow({ label, hint, last, stacked, children }: SettingRowProps) {
   return (
     <div
       className={classNames(
-        'flex flex-wrap items-center justify-between gap-12 px-16 py-14',
+        stacked
+          ? 'flex flex-col gap-8 px-16 py-14'
+          : 'flex flex-wrap items-center justify-between gap-12 px-16 py-14',
         last ? '' : 'border-0 border-b border-solid border-border',
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div className="text-[15px] text-text-primary">{label}</div>
         {hint ? (
           <div className="mt-2 text-[13px] leading-[20px] text-text-secondary">
@@ -24,7 +27,7 @@ function SettingRow({ label, hint, last, children }: SettingRowProps) {
           </div>
         ) : null}
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className={stacked ? 'w-full' : 'shrink-0'}>{children}</div>
     </div>
   );
 }

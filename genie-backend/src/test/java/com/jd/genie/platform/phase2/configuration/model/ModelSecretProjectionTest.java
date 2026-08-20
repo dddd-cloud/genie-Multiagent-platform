@@ -27,9 +27,10 @@ class ModelSecretProjectionTest {
         String json = new ObjectMapper().writeValueAsString(service.listModels());
 
         assertTrue(json.contains("safe-model"));
+        assertTrue(json.contains(ModelCatalogItem.MASKED_API_KEY));
         assertFalse(json.contains("SECRET_MARKER"));
-        assertFalse(json.contains("secret.example"));
-        assertFalse(json.contains("interfaceUrl"));
+        assertFalse(json.contains("\"apiKey\""));
         assertFalse(json.contains("extParams"));
+        assertFalse(json.contains("hidden"));
     }
 }

@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import AgentForm from '../../agents/AgentForm';
-import {
-  emptyAgentFormState,
-  moveSkillId,
-  type AgentFormState,
-} from '../../agents/agentFormModel';
+import { emptyAgentFormState, type AgentFormState } from '../../agents/agentFormModel';
 import type { Phase2SkillResponse } from '@/contracts/phase2';
 
 const skills: Phase2SkillResponse[] = [
@@ -48,53 +44,33 @@ const skills: Phase2SkillResponse[] = [
   },
 ];
 
-function SkillOrderHarness() {
+function SkillBindHarness() {
   const [value, setValue] = useState<AgentFormState>({
     ...emptyAgentFormState(),
-    name: 'Ordered',
-    skillIds: ['skill-a', 'skill-b', 'skill-c'],
+    name: 'Bound',
+    skillIds: ['skill-a', 'skill-b'],
   });
   return (
     <div>
-      <div data-testid="order">{value.skillIds.join(',')}</div>
-      <AgentForm
-        value={value}
-        onChange={setValue}
-        models={[]}
-        skills={skills}
-        capabilities={[]}
-      />
+      <div data-testid="selected">{value.skillIds.join(',')}</div>
+      <AgentForm value={value} onChange={setValue} skills={skills} capabilities={[]} />
     </div>
   );
 }
 
 describe('SkillOrderingTest', () => {
-  it('moves skillIds up and down in AgentForm without drag-drop', () => {
-    expect(moveSkillId(['a', 'b', 'c'], 2, 'up')).toEqual(['a', 'c', 'b']);
-    expect(moveSkillId(['a', 'b', 'c'], 0, 'down')).toEqual(['b', 'a', 'c']);
-    expect(moveSkillId(['a', 'b'], 0, 'up')).toEqual(['a', 'b']);
-
-    render(<SkillOrderHarness />);
-    expect(screen.getByTestId('order').textContent).toBe(
-      'skill-a,skill-b,skill-c',
-    );
-
-    fireEvent.click(screen.getByTestId('agent-skill-up-skill-c'));
-    expect(screen.getByTestId('order').textContent).toBe(
-      'skill-a,skill-c,skill-b',
-    );
-
-    fireEvent.click(screen.getByTestId('agent-skill-down-skill-a'));
-    expect(screen.getByTestId('order').textContent).toBe(
-      'skill-c,skill-a,skill-b',
-    );
+  it('binds skills without exposing order controls', () => {
+    render(<SkillBindHarness />);
+    expect(screen.getByTestId('selected').textContent).toBe('skill-a,skill-b');
+    expect(screen.getByTestId('agent-skills')).toBeTruthy();
+    expect(screen.queryByTestId('agent-skill-up-skill-a')).toBeNull();
+    expect(screen.queryByTestId('agent-skill-down-skill-a')).toBeNull();
+    expect(screen.queryByText('Skill（有序）')).toBeNull();
   });
 
-  it('lists skills for enable/disable display (status tags via names)', () => {
-    render(<SkillOrderHarness />);
+  it('lists enabled skill names for selection', () => {
+    render(<SkillBindHarness />);
     expect(screen.getByText('Skill A')).toBeTruthy();
     expect(screen.getByText('Skill B')).toBeTruthy();
-    expect(screen.getByText('Skill C')).toBeTruthy();
-    expect(screen.getByTestId('agent-skill-list')).toBeTruthy();
   });
 });

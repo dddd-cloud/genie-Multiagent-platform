@@ -1,4 +1,3 @@
-import type { AgentPromptMode } from '@/contracts/phase2';
 import type { AgentFormState } from '@/features/phase2/agents/agentFormModel';
 import { emptyAgentFormState } from '@/features/phase2/agents/agentFormModel';
 import type { TeamFormState } from '@/features/phase2/teams/teamFormModel';
@@ -26,14 +25,6 @@ function resolveMarketplaceModelName(value: unknown): string | null {
 
 export function mapDraftToAgentForm(draft: Record<string, unknown>): AgentFormState {
   const base = emptyAgentFormState();
-  const promptMode: AgentPromptMode =
-    draft.promptMode === 'RAW' || draft.promptMode === 'STRUCTURED'
-      ? draft.promptMode
-      : base.promptMode;
-  const promptConfigText =
-    draft.promptConfig && typeof draft.promptConfig === 'object'
-      ? JSON.stringify(draft.promptConfig, null, 2)
-      : base.promptConfigText;
   const skillIds = stringList(draft.skillIds).length
     ? stringList(draft.skillIds)
     : stringList(draft.skills);
@@ -41,8 +32,8 @@ export function mapDraftToAgentForm(draft: Record<string, unknown>): AgentFormSt
     ...base,
     name: stringValue(draft.name) ?? base.name,
     description: stringValue(draft.description) ?? base.description,
-    promptMode,
-    promptConfigText,
+    promptMode: 'RAW',
+    promptConfigText: base.promptConfigText,
     systemPrompt: stringValue(draft.systemPrompt) ?? base.systemPrompt,
     modelName: resolveMarketplaceModelName(draft.modelName),
     skillIds,

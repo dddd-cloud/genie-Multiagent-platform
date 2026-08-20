@@ -27,6 +27,25 @@ class Phase2RequestValidatorTest {
         assertEquals("AUTO", actual.executionMode());
         assertEquals(20_000, actual.trustedRequest().getQuery().codePointCount(0, actual.trustedRequest().getQuery().length()));
         assertEquals(List.of("agent-1"), actual.allowedAgentIds());
+        assertEquals(List.of(), actual.attachmentIds());
+    }
+
+    @Test
+    void acceptsUpToTenAttachmentIdsAndRejectsInvalidOnes() {
+        Phase2GptQueryRequest request = request("AUTO", 0, List.of());
+        request.setAttachmentIds(java.util.Collections.nCopies(10, "123e4567-e89b-12d3-a456-426614174000")
+            .stream()
+            .map(id -> java.util.UUID.randomUUID().toString())
+            .toList());
+        assertEquals(10, validator.validate(request, USER).attachmentIds().size());
+
+        Phase2GptQueryRequest tooMany = request("AUTO", 0, List.of());
+        tooMany.setAttachmentIds(java.util.Collections.nCopies(11, "123e4567-e89b-12d3-a456-426614174000"));
+        assertError(MvpErrorCode.VALIDATION_ERROR, () -> validator.validate(tooMany, USER));
+
+        Phase2GptQueryRequest bad = request("AUTO", 0, List.of());
+        bad.setAttachmentIds(List.of("not-a-uuid"));
+        assertError(MvpErrorCode.VALIDATION_ERROR, () -> validator.validate(bad, USER));
     }
 
     @Test

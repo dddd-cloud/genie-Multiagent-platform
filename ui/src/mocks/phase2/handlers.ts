@@ -8,6 +8,7 @@ import type {
   Phase2AgentResponse,
   Phase2McpServerResponse,
   Phase2McpToolResponse,
+  Phase2ModelResponse,
   Phase2SkillResponse,
   Phase2TeamResponse,
 } from '@/contracts/phase2';
@@ -507,12 +508,6 @@ export const phase2Handlers: HttpHandler[] = [
         { status: 404 },
       );
     }
-    if (existing.status === 'ONLINE') {
-      return HttpResponse.json(
-        errorBody('AGENT_MUST_BE_OFFLINE', 'Agent must be offline'),
-        { status: 409 },
-      );
-    }
     const versionError = checkVersion(existing.version, body.version);
     if (versionError) return versionError;
 
@@ -672,6 +667,122 @@ export const phase2Handlers: HttpHandler[] = [
     const authError = requireAuth();
     if (authError) return authError;
     return HttpResponse.json(ok(getPhase2State().models));
+  }),
+
+  http.get('/api/v2/models/:id', ({ params }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const id = String(params.id);
+    const model = getPhase2State().models.find(
+      (item) => item.id === id || item.name === id,
+    );
+    if (!model) {
+      return HttpResponse.json(
+        errorBody('RESOURCE_NOT_FOUND', 'Model not found'),
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json(ok(model));
+  }),
+
+  http.post('/api/v2/models', async ({ request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const forbidden = assertNoForbiddenRequestFields(body);
+    if (forbidden) return forbiddenFieldsResponse(forbidden);
+    const name = String(body.name ?? '').trim();
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+    if (!name || !String(body.model ?? '').trim() || !apiKey) {
+      return HttpResponse.json(
+        errorBody('VALIDATION_ERROR', 'Invalid model'),
+        { status: 400 },
+      );
+    }
+    const created: Phase2ModelResponse = {
+      id: `model-${crypto.randomUUID()}`,
+      name,
+      displayName: String(body.displayName ?? name),
+      model: String(body.model ?? ''),
+      baseUrl: String(body.baseUrl ?? ''),
+      interfaceUrl: String(body.interfaceUrl ?? '/v1/chat/completions'),
+      maxTokens: Number(body.maxTokens ?? 16384),
+      temperature: Number(body.temperature ?? 0),
+      maxInputTokens: Number(body.maxInputTokens ?? 100000),
+      apiKeyConfigured: true,
+      apiKeyMasked: '••••••••',
+      isDefault: getPhase2State().models.length === 0,
+      available: true,
+      source: 'user',
+    };
+    getPhase2State().models.push(created);
+    const response = ok(created);
+    const leaked = assertNoCredentialEcho(response, apiKey);
+    if (leaked) {
+      return HttpResponse.json(errorBody('INTERNAL_ERROR', leaked), { status: 500 });
+    }
+    return HttpResponse.json(response);
+  }),
+
+  http.put('/api/v2/models/:id', async ({ params, request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const id = String(params.id);
+    const models = getPhase2State().models;
+    const index = models.findIndex((item) => item.id === id || item.name === id);
+    if (index < 0) {
+      return HttpResponse.json(
+        errorBody('RESOURCE_NOT_FOUND', 'Model not found'),
+        { status: 404 },
+      );
+    }
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const forbidden = assertNoForbiddenRequestFields(body);
+    if (forbidden) return forbiddenFieldsResponse(forbidden);
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+    const current = models[index];
+    const updated: Phase2ModelResponse = {
+      ...current,
+      name: String(body.name ?? current.name),
+      displayName: String(body.displayName ?? current.displayName),
+      model: String(body.model ?? current.model ?? ''),
+      baseUrl: String(body.baseUrl ?? current.baseUrl ?? ''),
+      interfaceUrl: String(body.interfaceUrl ?? current.interfaceUrl ?? ''),
+      maxTokens: Number(body.maxTokens ?? current.maxTokens ?? 16384),
+      temperature: Number(body.temperature ?? current.temperature ?? 0),
+      maxInputTokens: Number(body.maxInputTokens ?? current.maxInputTokens ?? 100000),
+      apiKeyConfigured: current.apiKeyConfigured || Boolean(apiKey),
+      apiKeyMasked: current.apiKeyConfigured || apiKey ? '••••••••' : null,
+    };
+    models[index] = updated;
+    const response = ok(updated);
+    const leaked = assertNoCredentialEcho(response, apiKey);
+    if (leaked) {
+      return HttpResponse.json(errorBody('INTERNAL_ERROR', leaked), { status: 500 });
+    }
+    return HttpResponse.json(response);
+  }),
+
+  http.delete('/api/v2/models/:id', ({ params, request }) => {
+    const authError = requireAuth();
+    if (authError) return authError;
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const id = String(params.id);
+    const models = getPhase2State().models;
+    const index = models.findIndex((item) => item.id === id || item.name === id);
+    if (index < 0) {
+      return HttpResponse.json(
+        errorBody('RESOURCE_NOT_FOUND', 'Model not found'),
+        { status: 404 },
+      );
+    }
+    models.splice(index, 1);
+    return HttpResponse.json(ok(null));
   }),
 
   http.get('/api/v2/tool-capabilities', () => {

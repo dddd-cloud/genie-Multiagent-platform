@@ -62,10 +62,20 @@ export interface Phase2SkillResponse {
 }
 
 export interface Phase2ModelResponse {
+  id?: string;
   name: string;
   displayName: string;
   isDefault: boolean;
   available: boolean;
+  model?: string | null;
+  baseUrl?: string | null;
+  interfaceUrl?: string | null;
+  maxTokens?: number | null;
+  temperature?: number | null;
+  maxInputTokens?: number | null;
+  apiKeyConfigured?: boolean;
+  apiKeyMasked?: string | null;
+  source?: 'user' | 'env';
 }
 
 export interface Phase2McpServerResponse {

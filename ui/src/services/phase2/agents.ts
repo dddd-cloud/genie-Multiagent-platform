@@ -2,7 +2,6 @@ import type { PageResponse } from '@/contracts';
 import type {
   Phase2AgentResponse,
   Phase2McpToolResponse,
-  Phase2ModelResponse,
 } from '@/contracts/phase2';
 import {
   phase2Delete,
@@ -77,27 +76,27 @@ function toPromptPreviewWire(
 const BUILTIN_CAPABILITIES: ToolCapabilityItem[] = [
   {
     key: 'builtin:code_interpreter',
-    displayName: 'builtin:code_interpreter',
+    displayName: '代码解释器',
     available: true,
   },
   {
     key: 'builtin:data_analysis',
-    displayName: 'builtin:data_analysis',
+    displayName: '数据分析',
     available: true,
   },
   {
     key: 'builtin:deep_search',
-    displayName: 'builtin:deep_search',
+    displayName: '深度搜索',
     available: true,
   },
   {
     key: 'builtin:file',
-    displayName: 'builtin:file',
+    displayName: '文件',
     available: true,
   },
   {
     key: 'builtin:report',
-    displayName: 'builtin:report',
+    displayName: '报告',
     available: true,
   },
 ];
@@ -107,7 +106,7 @@ function mapToolCapability(tool: Phase2McpToolResponse): ToolCapabilityItem {
   const toolId = tool.id?.trim();
   return {
     key: toolId ? `mcp:${toolId}` : '',
-    displayName: tool.toolName ? `MCP · ${tool.toolName}` : `MCP · ${toolId}`,
+    displayName: tool.toolName?.trim() || 'MCP 工具',
     available: Boolean(tool.available && toolId),
   };
 }
@@ -215,9 +214,7 @@ export async function previewPrompt(
   };
 }
 
-export function listModels(signal?: AbortSignal) {
-  return phase2Get<Phase2ModelResponse[]>('/api/v2/models', undefined, signal);
-}
+export { listModels } from './models';
 
 export async function listToolCapabilities(signal?: AbortSignal) {
   const tools = await phase2Get<Phase2McpToolResponse[]>(
