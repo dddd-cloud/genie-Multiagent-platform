@@ -64,8 +64,7 @@ export default function ExecutionModeSelector({
   const online = agents.filter((agent) => agent.status === 'ONLINE');
   const onlineIds = online.map((agent) => agent.id).slice(0, ALLOWED_AGENTS_MAX);
   const onlineKey = onlineIds.join(',');
-  const selectedIds =
-    value === 'DIRECT' ? [] : dedupeAllowedAgentIds(allowedAgentIds);
+  const selectedIds = dedupeAllowedAgentIds(allowedAgentIds);
   const allSelected =
     onlineIds.length > 0 && onlineIds.every((id) => selectedIds.includes(id));
   /** With teams available the second pill picks a team; 自定义 falls back to agents. */
@@ -118,8 +117,10 @@ export default function ExecutionModeSelector({
     if (value !== 'ORCHESTRATED') {
       autoFilledRef.current = false;
       setCleared(false);
-      setAgentOpen(false);
       setCustomMode(false);
+      if (value !== 'DIRECT') {
+        setAgentOpen(false);
+      }
       return;
     }
     if (!teamsLoaded || teamBranch) {
@@ -190,6 +191,15 @@ export default function ExecutionModeSelector({
     setCleared(false);
     setCustomMode(false);
     onAllowedAgentIdsChange?.([]);
+    onTeamIdChange?.(null);
+    setAgentOpen(false);
+  };
+
+  const selectSoloAgent = (id: string) => {
+    if (disabled) {
+      return;
+    }
+    onAllowedAgentIdsChange?.([id]);
     onTeamIdChange?.(null);
     setAgentOpen(false);
   };
@@ -269,9 +279,14 @@ export default function ExecutionModeSelector({
     return String(selectedIds.length);
   };
 
+  const soloSelected = online.find((agent) => agent.id === selectedIds[0]) ?? null;
+  const soloLabel = soloSelected?.name ?? '选择智能体';
+
   const secondPillLabel = teamBranch
     ? (selectedTeam?.name ?? '选择团队')
     : agentTriggerLabel();
+
+  const pickerScrollClass = 'max-h-[216px] overflow-y-auto overscroll-contain';
 
   return (
     <div ref={rootRef} className="flex items-center min-w-0">
@@ -372,7 +387,7 @@ export default function ExecutionModeSelector({
               className={classNames(menuClassName, 'w-[220px]')}
               data-testid="team-menu"
             >
-              <div className="max-h-[220px] overflow-y-auto">
+              <div className="max-h-[216px] overflow-y-auto overscroll-contain">
                 {teams.map((team) => {
                   const active = team.id === teamId;
                   return (
@@ -453,7 +468,7 @@ export default function ExecutionModeSelector({
                 ) : null}
               </button>
               <div className="my-4 border-t border-black/6" />
-              <div className="max-h-[220px] overflow-y-auto">
+              <div className="max-h-[216px] overflow-y-auto overscroll-contain">
                 {online.length === 0 ? (
                   <div className="px-14 py-6 text-[12px] text-text-tertiary">
                     暂无 ONLINE Agent
@@ -482,6 +497,75 @@ export default function ExecutionModeSelector({
                           ✓
                         </span>
                         <span className="truncate">{agent.name}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {value === 'DIRECT' ? (
+        <div className="relative">
+          <button
+            type="button"
+            disabled={disabled}
+            aria-expanded={agentOpen}
+            aria-haspopup="listbox"
+            data-testid="solo-agent-selector"
+            className={pillClassName(disabled)}
+            onClick={() => {
+              if (disabled) {
+                return;
+              }
+              setAgentOpen((prev) => !prev);
+              setModeOpen(false);
+            }}
+          >
+            <span className="max-w-[120px] truncate font-medium">{soloLabel}</span>
+            <span aria-hidden className="inline-flex">
+              <DownOutlined
+                className={classNames(
+                  'text-[10px] transition-transform duration-150',
+                  agentOpen ? 'rotate-180' : 'rotate-0',
+                )}
+              />
+            </span>
+          </button>
+          {agentOpen ? (
+            <div
+              role="listbox"
+              className={classNames(menuClassName, 'w-[220px]')}
+              data-testid="solo-agent-menu"
+            >
+              <div className={pickerScrollClass}>
+                {online.length === 0 ? (
+                  <div className="px-14 py-6 text-[12px] text-text-tertiary">
+                    暂无 ONLINE Agent
+                  </div>
+                ) : (
+                  online.map((agent) => {
+                    const active = agent.id === soloSelected?.id;
+                    return (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        data-testid={`solo-agent-option-${agent.id}`}
+                        className={classNames(
+                          rowClassName,
+                          'justify-between',
+                          active ? 'text-text-primary' : 'text-text-secondary',
+                        )}
+                        onClick={() => selectSoloAgent(agent.id)}
+                      >
+                        <span className="truncate">{agent.name}</span>
+                        {active ? (
+                          <span aria-hidden className="text-[12px]">
+                            ✓
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })

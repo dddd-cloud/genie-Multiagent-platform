@@ -169,12 +169,38 @@ public final class AgentTaskResultParser {
                 trimmed = trimmed.substring(firstNl + 1, lastFence).trim();
             }
         }
-        int start = trimmed.indexOf('{');
+        int contract = lastContractObjectStart(trimmed);
         int end = trimmed.lastIndexOf('}');
+        if (contract >= 0 && end > contract) {
+            return trimmed.substring(contract, end + 1);
+        }
+        int start = trimmed.indexOf('{');
         if (start >= 0 && end > start) {
             return trimmed.substring(start, end + 1);
         }
         return trimmed;
+    }
+
+    /**
+     * Prefer the last SUCCESS/FAILURE envelope so leading markdown or tool dumps
+     * do not steal the first '{'.
+     */
+    static int lastContractObjectStart(String text) {
+        if (text == null || text.isEmpty()) {
+            return -1;
+        }
+        int success = text.lastIndexOf("\"status\"");
+        while (success >= 0) {
+            int brace = text.lastIndexOf('{', success);
+            if (brace >= 0) {
+                String slice = text.substring(brace, Math.min(text.length(), success + 40));
+                if (slice.contains("SUCCESS") || slice.contains("FAILURE")) {
+                    return brace;
+                }
+            }
+            success = text.lastIndexOf("\"status\"", success - 1);
+        }
+        return -1;
     }
 
     /**

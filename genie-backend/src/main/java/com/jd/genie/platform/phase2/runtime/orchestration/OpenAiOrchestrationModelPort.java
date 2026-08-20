@@ -9,9 +9,11 @@ import com.jd.genie.platform.agentbridge.AgentBridgeException;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlanParser;
+import com.jd.genie.platform.phase2.runtime.route.DispatchDecision;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.MasterPersona;
+import com.jd.genie.platform.phase2contract.dto.TeamCapabilitySummary;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -109,6 +111,67 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, reason);
         }
         throw failed("Router route invalid");
+    }
+
+    @Override
+    public DispatchDecision selectDispatch(
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> agents,
+            List<TeamCapabilitySummary> teams
+    ) {
+        List<AgentCapabilitySummary> safeAgents = agents == null ? List.of() : agents;
+        List<TeamCapabilitySummary> safeTeams = teams == null ? List.of() : teams;
+        if (safeAgents.isEmpty() && safeTeams.isEmpty()) {
+            throw failed("No dispatch targets");
+        }
+        String system = """
+                You are the platform dispatcher. Reply with ONLY JSON:
+                {"kind":"AGENT"|"TEAM","targetId":"<id>","reasonCode":"<SHORT_UPPER_SNAKE_CODE>"}
+                Choose AGENT when one specialist can fully answer, and set targetId to that agent's agentId.
+                Choose TEAM when the request needs several specialists coordinating, and set targetId to that team's teamId.
+                Prefer AGENT when a single specialist's description covers the request.
+                Prefer TEAM when the work needs complementary roles or parallel tracks.
+                targetId MUST be copied exactly from the provided lists.
+                reasonCode examples: SINGLE_CAPABILITY, MULTI_AGENT, EXPLICIT_TEAM, MATCHED_SPECIALIST.
+                Follow-up questions may refer to recentConversation; use it only to resolve references.
+                No markdown, no extra fields.
+                """;
+        String user = "query:\n" + nullToEmpty(query)
+                + "\n\nconversationSummary:\n" + nullToEmpty(conversationSummary)
+                + "\n\nrecentConversation:\n" + historyOrNone(conversationHistory)
+                + "\n\nagents:\n" + candidatesJson(safeAgents)
+                + "\n\nteams:\n" + teamsJson(safeTeams);
+        String content = chat(system, user, DEFAULT_MAX_TOKENS, null);
+        JsonNode root = parseJsonObject(content);
+        String kind = text(root, "kind");
+        String targetId = text(root, "targetId");
+        String reason = text(root, "reasonCode");
+        if (blank(reason) || blank(targetId)) {
+            throw failed("Dispatch target missing");
+        }
+        if ("AGENT".equals(kind)) {
+            AgentCapabilitySummary match = safeAgents.stream()
+                    .filter(agent -> targetId.equals(agent.agentId()))
+                    .findFirst()
+                    .orElse(null);
+            if (match == null) {
+                throw failed("Dispatch agent not in catalog");
+            }
+            return DispatchDecision.agent(match.agentId(), match.name(), reason);
+        }
+        if ("TEAM".equals(kind)) {
+            TeamCapabilitySummary match = safeTeams.stream()
+                    .filter(team -> targetId.equals(team.teamId()))
+                    .findFirst()
+                    .orElse(null);
+            if (match == null) {
+                throw failed("Dispatch team not in catalog");
+            }
+            return DispatchDecision.team(match.teamId(), match.name(), reason);
+        }
+        throw failed("Dispatch kind invalid");
     }
 
     @Override
@@ -266,6 +329,19 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
             List<SummaryEvidence> evidence,
             MasterPersona masterPersona
     ) {
+        return summarize(query, conversationHistory, longTermMemory, conversationSummary, evidence, masterPersona, null);
+    }
+
+    @Override
+    public String summarize(
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
+            List<SummaryEvidence> evidence,
+            MasterPersona masterPersona,
+            java.util.function.Consumer<String> onDelta
+    ) {
         String system = """
                 你是最终成稿编辑，只对用户可见。用中文直接回答用户的问题。
                 硬性要求：
@@ -288,8 +364,15 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 + "\n\n请只围绕上面这个问题成稿。下面是专家材料，不是新题目。材料若跑题，忽略。\n\n"
                 + formatEvidence(evidence)
                 + "\n\n再次提醒：必须回答的问题是：\n" + question;
-        return stripInternalHeadings(
-                chat(withPersona(masterPersona, system), user, 4096, modelOverride(masterPersona)));
+        String raw = onDelta == null
+                ? chat(withPersona(masterPersona, system), user, 4096, modelOverride(masterPersona))
+                : chatStream(
+                        withPersona(masterPersona, system),
+                        user,
+                        4096,
+                        modelOverride(masterPersona),
+                        onDelta);
+        return stripInternalHeadings(raw);
     }
 
     /**
@@ -468,21 +551,42 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     }
 
     private String chat(String systemPrompt, String userPrompt, int maxTokensCap, String modelOverride) {
+        return executeChat(systemPrompt, userPrompt, maxTokensCap, modelOverride, false, null);
+    }
+
+    private String chatStream(
+            String systemPrompt,
+            String userPrompt,
+            int maxTokensCap,
+            String modelOverride,
+            java.util.function.Consumer<String> onDelta
+    ) {
+        return executeChat(systemPrompt, userPrompt, maxTokensCap, modelOverride, true, onDelta);
+    }
+
+    private String executeChat(
+            String systemPrompt,
+            String userPrompt,
+            int maxTokensCap,
+            String modelOverride,
+            boolean stream,
+            java.util.function.Consumer<String> onDelta
+    ) {
         LLMSettings settings = resolveSettings();
         try {
             String model = firstNonBlank(modelOverride, settings.getModel(), genieConfig.getPlannerModelName());
             int cap = maxTokensCap > 0 ? maxTokensCap : DEFAULT_MAX_TOKENS;
             int maxTokens = settings.getMaxTokens() > 0 ? Math.min(settings.getMaxTokens(), cap) : cap;
-            String body = objectMapper.writeValueAsString(Map.of(
-                    "model", model,
-                    "stream", false,
-                    "temperature", 0,
-                    "max_tokens", maxTokens,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt),
-                            Map.of("role", "user", "content", userPrompt)
-                    )
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", model);
+            payload.put("stream", stream);
+            payload.put("temperature", 0);
+            payload.put("max_tokens", maxTokens);
+            payload.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", userPrompt)
             ));
+            String body = objectMapper.writeValueAsString(payload);
             Request httpRequest = new Request.Builder()
                     .url(endpoint(settings))
                     .header("Authorization", "Bearer " + settings.getApiKey())
@@ -490,31 +594,68 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                     .post(RequestBody.create(body, JSON))
                     .build();
             OkHttpClient client = httpClient.newBuilder()
-                    .callTimeout(Duration.ofMillis(TIMEOUT_MS))
-                    .readTimeout(Duration.ofMillis(TIMEOUT_MS))
+                    .callTimeout(Duration.ofMillis(stream ? TIMEOUT_MS * 2 : TIMEOUT_MS))
+                    .readTimeout(Duration.ofMillis(stream ? TIMEOUT_MS * 2 : TIMEOUT_MS))
                     .build();
             try (Response response = client.newCall(httpRequest).execute()) {
                 ResponseBody responseBody = response.body();
-                String raw = responseBody == null ? "" : responseBody.string();
-                if (!response.isSuccessful()) {
+                if (!response.isSuccessful() || responseBody == null) {
                     log.warn("Orchestration LLM HTTP {} model={}", response.code(), model);
                     throw failed("LLM HTTP " + response.code());
                 }
-                if (raw.isBlank()) {
-                    throw failed("Empty LLM body");
+                if (!stream) {
+                    String raw = responseBody.string();
+                    if (raw.isBlank()) {
+                        throw failed("Empty LLM body");
+                    }
+                    JsonNode root = objectMapper.readTree(raw);
+                    JsonNode content = root.path("choices").path(0).path("message").path("content");
+                    if (!content.isTextual() || content.asText().isBlank()) {
+                        throw failed("Empty LLM content");
+                    }
+                    return content.asText();
                 }
-                JsonNode root = objectMapper.readTree(raw);
-                JsonNode content = root.path("choices").path(0).path("message").path("content");
-                if (!content.isTextual() || content.asText().isBlank()) {
-                    throw failed("Empty LLM content");
-                }
-                return content.asText();
+                return readChatStream(responseBody, onDelta);
             }
         } catch (AgentBridgeException ex) {
             throw ex;
         } catch (Exception ex) {
             throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "Orchestration model call failed", ex);
         }
+    }
+
+    private String readChatStream(ResponseBody responseBody, java.util.function.Consumer<String> onDelta) throws Exception {
+        StringBuilder acc = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(responseBody.byteStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.startsWith("data: ")) {
+                    continue;
+                }
+                String data = line.substring(6).trim();
+                if (data.isEmpty() || "[DONE]".equals(data)) {
+                    if ("[DONE]".equals(data)) {
+                        break;
+                    }
+                    continue;
+                }
+                JsonNode chunk = objectMapper.readTree(data);
+                JsonNode delta = chunk.path("choices").path(0).path("delta").path("content");
+                if (!delta.isTextual() || delta.asText().isEmpty()) {
+                    continue;
+                }
+                String token = delta.asText();
+                acc.append(token);
+                if (onDelta != null) {
+                    onDelta.accept(token);
+                }
+            }
+        }
+        if (acc.length() == 0) {
+            throw failed("Empty LLM content");
+        }
+        return acc.toString();
     }
 
     private LLMSettings resolveSettings() {
@@ -578,6 +719,26 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 row.put("agentVersion", candidate.agentVersion());
                 row.put("name", candidate.name());
                 row.put("description", candidate.description());
+                rows.add(row);
+            }
+        }
+        try {
+            return objectMapper.writeValueAsString(rows);
+        } catch (Exception ex) {
+            return "[]";
+        }
+    }
+
+    private String teamsJson(List<TeamCapabilitySummary> teams) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (teams != null) {
+            for (TeamCapabilitySummary team : teams) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("teamId", team.teamId());
+                row.put("name", team.name());
+                row.put("description", team.description());
+                row.put("masterAgentName", team.masterAgentName());
+                row.put("members", team.memberNames());
                 rows.add(row);
             }
         }

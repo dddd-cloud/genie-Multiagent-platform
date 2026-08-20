@@ -13,12 +13,14 @@ import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
 import com.jd.genie.platform.conversation.attachment.ChatAttachmentPrompt;
 import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
+import com.jd.genie.platform.phase2.runtime.route.DispatchDecision;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.MasterPersona;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationPlanStepView;
 import com.jd.genie.platform.phase2contract.dto.OrchestrationSubTaskView;
+import com.jd.genie.platform.phase2contract.dto.TeamCapabilitySummary;
 import com.jd.genie.platform.phase2contract.enums.StepMode;
 import lombok.extern.slf4j.Slf4j;
 
@@ -76,6 +78,32 @@ public final class Phase2OrchestrationRuntime {
             MasterPersona masterPersona
     ) {
         return selectRouteDecision(mode, query, conversationSummary, conversationHistory, candidates, masterPersona);
+    }
+
+    public DispatchDecision selectDispatch(
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> agents,
+            List<TeamCapabilitySummary> teams
+    ) {
+        List<AgentCapabilitySummary> safeAgents = agents == null ? List.of() : agents;
+        List<TeamCapabilitySummary> safeTeams = teams == null ? List.of() : teams;
+        try {
+            DispatchDecision decision = modelPort.selectDispatch(
+                    ChatAttachmentPrompt.withoutUploadedFileBodies(query),
+                    conversationSummary,
+                    conversationHistory,
+                    safeAgents,
+                    safeTeams
+            );
+            if (decision != null && decision.targetId() != null && !decision.targetId().isBlank()) {
+                return decision;
+            }
+        } catch (RuntimeException error) {
+            log.warn("Dispatch call failed, using local fallback: {}", error.getMessage(), error);
+        }
+        return fallbackDispatch(safeAgents, safeTeams);
     }
 
     /**
@@ -171,8 +199,7 @@ public final class Phase2OrchestrationRuntime {
             routeDetails.put("reasonCode", route.reasonCode());
             putTeamContext(routeDetails, persona, teamId);
             emit(observer, requestId, runId, sequence, "ROUTE_SELECTED", routeDetails, List.of());
-            traces.emitMain(OrchestrationTraceChannel.KIND_STATUS,
-                    "路由决策：" + route.route().name() + "（" + route.reasonCode() + "）", false);
+            traces.emitMain(OrchestrationTraceChannel.KIND_STATUS, humanDispatchStatus(route, persona, teamId), false);
             if (route.route() != RouteDecision.Route.ORCHESTRATED) {
                 throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "DIRECT route must use the existing V1 execution path");
             }
@@ -191,7 +218,7 @@ public final class Phase2OrchestrationRuntime {
             planDetails.put("attemptNo", 1);
             putTeamContext(planDetails, persona, teamId);
             emit(observer, requestId, runId, sequence, "PLAN_CREATED", planDetails, steps);
-            traces.emitMain(1, OrchestrationTraceChannel.KIND_OUTPUT, formatPlanTrace(steps), false);
+            traces.emitMain(1, OrchestrationTraceChannel.KIND_STATUS, humanPlanStatus(steps), false);
             java.util.concurrent.atomic.AtomicBoolean degraded = new java.util.concurrent.atomic.AtomicBoolean(false);
             // acceptDeliverables is invoked from PARALLEL_AGENTS worker threads.
             java.util.List<com.jd.genie.agent.dto.File> deliverableFiles =
@@ -245,6 +272,101 @@ public final class Phase2OrchestrationRuntime {
             );
         } catch (RuntimeException error) {
             log.warn("Orchestration failed: {}", error.getMessage(), error);
+            if (!observer.isTerminal()) {
+                observer.onError(controlledFailure(error));
+            }
+        }
+    }
+
+    public void executeSolo(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
+            String conversationHistory,
+            AgentCapabilitySummary agent,
+            RouteDecision route,
+            ConversationStreamObserver observer,
+            String specialistQuery
+    ) {
+        if (agent == null || agent.agentId() == null || agent.agentId().isBlank()) {
+            throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
+        }
+        MasterPersona persona = MasterPersona.none();
+        AtomicLong sequence = new AtomicLong();
+        OrchestrationTraceChannel traces = new OrchestrationTraceChannel(
+                observer, requestId, runId, sequence, persona.displayName());
+        String planningQuery = ChatAttachmentPrompt.withoutUploadedFileBodies(query);
+        String agentQuery = specialistQuery == null || specialistQuery.isBlank() ? query : specialistQuery;
+        RouteDecision effective = route == null
+                ? new RouteDecision(RouteDecision.Route.ORCHESTRATED, "SOLO_AGENT")
+                : route;
+        try {
+            Map<String, Object> routeDetails = new LinkedHashMap<>();
+            routeDetails.put("route", RouteDecision.Route.ORCHESTRATED.name());
+            routeDetails.put("reasonCode", effective.reasonCode());
+            routeDetails.put("agentId", agent.agentId());
+            routeDetails.put("agentName", agent.name());
+            emit(observer, requestId, runId, sequence, "ROUTE_SELECTED", routeDetails, List.of());
+            traces.emitMain(OrchestrationTraceChannel.KIND_STATUS, humanSoloHandoff(agent, effective), false);
+
+            OrchestrationStep step = new OrchestrationStep("solo-1", agent.agentId(), planningQuery, List.of());
+            OrchestrationPlan plan = planValidator.validate(new OrchestrationPlan(List.of(step)), List.of(agent));
+            List<OrchestrationPlanStepView> steps = plan.steps().stream()
+                    .map(item -> stepView(item, List.of(agent)))
+                    .toList();
+            Map<String, Object> planDetails = new LinkedHashMap<>();
+            planDetails.put("attemptNo", 1);
+            emit(observer, requestId, runId, sequence, "PLAN_CREATED", planDetails, steps);
+
+            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles =
+                    java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+            Map<String, AgentTaskResult> results = serialService.execute(
+                    user,
+                    agentQuery,
+                    conversationHistory,
+                    UntrustedLocalContext.body(longTermMemory, conversationSummary),
+                    plan.steps(),
+                    new OrchestrationEventSink() {
+                        @Override
+                        public void emit(String eventType, OrchestrationStep current, AgentTaskResult result, Map<String, Object> details) {
+                            emitStep(
+                                    observer, requestId, runId, sequence, eventType, 1, current, result, details, steps
+                            );
+                        }
+
+                        @Override
+                        public void acceptDeliverables(java.util.List<com.jd.genie.agent.dto.File> files) {
+                            if (files != null) {
+                                deliverableFiles.addAll(files);
+                            }
+                        }
+                    },
+                    observer::isTerminal,
+                    new LinkedHashMap<>(),
+                    traces,
+                    1,
+                    observer
+            );
+            Map<String, String> successes = new LinkedHashMap<>();
+            Map<String, String> failures = new LinkedHashMap<>();
+            collectResults(results, successes, failures);
+            completeSolo(
+                    observer,
+                    requestId,
+                    runId,
+                    sequence,
+                    results,
+                    successes,
+                    failures,
+                    traces,
+                    deliverableFiles,
+                    agent
+            );
+        } catch (RuntimeException error) {
+            log.warn("Solo agent run failed: {}", error.getMessage(), error);
             if (!observer.isTerminal()) {
                 observer.onError(controlledFailure(error));
             }
@@ -359,9 +481,21 @@ public final class Phase2OrchestrationRuntime {
         String fallback = fallbackAnswer(query, evidence);
         String answer;
         try {
+            StringBuilder streamed = new StringBuilder();
             String overview = modelPort.summarize(
-                    query, conversationHistory, longTermMemory, conversationSummary, evidence, masterPersona);
-            answer = overview == null || overview.isBlank() ? fallback : overview.trim();
+                    query, conversationHistory, longTermMemory, conversationSummary, evidence, masterPersona,
+                    delta -> {
+                        if (delta == null || delta.isEmpty() || observer.isTerminal()) {
+                            return;
+                        }
+                        boolean append = streamed.length() > 0;
+                        streamed.append(delta);
+                        traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_OUTPUT, delta, append);
+                        observer.onEventBestEffort(eventMapper.answerProgress(streamed.toString()));
+                    });
+            answer = overview == null || overview.isBlank()
+                    ? (streamed.length() > 0 ? streamed.toString().trim() : fallback)
+                    : overview.trim();
             emit(observer, requestId, runId, sequence, "SUMMARY_COMPLETED", Map.of("attemptNo", attemptNo), List.of());
             traces.emitMain(attemptNo, OrchestrationTraceChannel.KIND_STATUS, "汇总完成", false);
         } catch (RuntimeException error) {
@@ -386,18 +520,119 @@ public final class Phase2OrchestrationRuntime {
         observer.onCompleted();
     }
 
-    private String formatPlanTrace(List<OrchestrationPlanStepView> steps) {
-        if (steps == null || steps.isEmpty()) {
-            return "计划为空";
+    private void completeSolo(
+            ConversationStreamObserver observer,
+            String requestId,
+            String runId,
+            AtomicLong sequence,
+            Map<String, AgentTaskResult> results,
+            Map<String, String> successes,
+            Map<String, String> failures,
+            OrchestrationTraceChannel traces,
+            java.util.List<com.jd.genie.agent.dto.File> deliverableFiles,
+            AgentCapabilitySummary agent
+    ) {
+        String raw = successes.values().stream().findFirst().orElse("");
+        if (raw == null || raw.isBlank()) {
+            String error = failures.values().stream().findFirst().orElse("EXECUTION_ERROR");
+            raw = agent.name() + " 这次没能形成可用结论（" + error + "）";
         }
-        return steps.stream()
-                .map(step -> {
-                    String name = step.agentName() == null || step.agentName().isBlank()
-                            ? step.agentId()
-                            : step.agentName();
-                    return "- [" + step.stepId() + "] " + name + "：" + step.objective();
-                })
-                .collect(Collectors.joining("\n", "任务安排：\n", ""));
+        String answer = DeliverableFiles.appendDownloadLinks(raw, deliverableFiles);
+        traces.emitMain(1, OrchestrationTraceChannel.KIND_STATUS, agent.name() + " 开始回复你", false);
+        observer.onEventBestEffort(eventMapper.answerProgress(answer));
+        String status = failures.isEmpty() ? "SUCCESS" : "PARTIAL";
+        GptProcessResult finalResponse = eventMapper.finalResponse(
+                requestId,
+                runId,
+                sequence.incrementAndGet(),
+                answer,
+                status,
+                DeliverableFiles.toFileList(deliverableFiles)
+        );
+        observer.onEvent(finalResponse);
+        observer.onCompleted();
+    }
+
+    private DispatchDecision fallbackDispatch(
+            List<AgentCapabilitySummary> agents,
+            List<TeamCapabilitySummary> teams
+    ) {
+        if (agents.size() == 1 && teams.isEmpty()) {
+            AgentCapabilitySummary agent = agents.get(0);
+            return DispatchDecision.agent(agent.agentId(), agent.name(), "ONLY_ONE_CANDIDATE");
+        }
+        if (teams.size() == 1 && agents.isEmpty()) {
+            TeamCapabilitySummary team = teams.get(0);
+            return DispatchDecision.team(team.teamId(), team.name(), "ONLY_ONE_TEAM");
+        }
+        throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "Unable to dispatch this request");
+    }
+
+    private String humanSoloHandoff(AgentCapabilitySummary agent, RouteDecision route) {
+        String name = agent == null || agent.name() == null || agent.name().isBlank() ? "专家" : agent.name();
+        String reason = route == null || route.reasonCode() == null ? "" : route.reasonCode();
+        if ("AUTO_SINGLE_AGENT".equals(reason) || "SINGLE_CAPABILITY".equals(reason)
+                || "MATCHED_SPECIALIST".equals(reason) || "ONLY_ONE_CANDIDATE".equals(reason)) {
+            return "一位专家就能完成。已把对话交给「" + name + "」，主规划退出";
+        }
+        return "已把对话交给「" + name + "」";
+    }
+
+    private String humanDispatchStatus(RouteDecision route, MasterPersona persona, String teamId) {
+        String reason = route == null || route.reasonCode() == null ? "" : route.reasonCode();
+        if ("AUTO_TEAM".equals(reason) || "ONLY_ONE_TEAM".equals(reason) || "EXPLICIT_TEAM".equals(reason)
+                || "MULTI_AGENT".equals(reason) || "MULTI_AGENT_DETECTED".equals(reason)) {
+            if (teamId != null && !teamId.isBlank()) {
+                String master = persona != null ? persona.displayName() : "团队主规划";
+                return "需要团队协作。已把对话交给「" + master + "」接手，系统主规划退出";
+            }
+        }
+        return humanRouteStatus(route);
+    }
+
+    private String humanRouteStatus(RouteDecision route) {
+        if (route == null || route.route() == null) {
+            return "已选择编排执行";
+        }
+        if (route.route() != RouteDecision.Route.ORCHESTRATED) {
+            return "由主规划直接作答";
+        }
+        String reason = route.reasonCode() == null ? "" : route.reasonCode();
+        return switch (reason) {
+            case "RESOURCE_CREATION_REQUEST" -> "已选择编排执行，正在创建所需资源";
+            case "FORCED_BY_REQUEST" -> "已选择编排执行，按你选择的协作模式推进";
+            case "MULTI_STEP", "MULTI_AGENT", "MULTI_AGENT_DETECTED", "EXPLICIT_TEAM" ->
+                    "这个问题需要多位专家一起完成";
+            case "AUTO_TEAM", "ONLY_ONE_TEAM" -> "需要团队协作。已把对话交给所选团队的主规划，系统主规划退出";
+            case "SOLO_AGENT" -> "已把对话交给所选专家";
+            case "AUTO_SINGLE_AGENT", "SINGLE_CAPABILITY", "MATCHED_SPECIALIST", "ONLY_ONE_CANDIDATE" ->
+                    "一位专家就能完成，主规划已退出";
+            default -> "已选择编排执行";
+        };
+    }
+
+    private String humanPlanStatus(List<OrchestrationPlanStepView> steps) {
+        if (steps == null || steps.isEmpty()) {
+            return "主规划正在安排任务";
+        }
+        if (steps.size() == 1) {
+            String name = displayStepName(steps.get(0));
+            return "主规划已安排 1 步，交给 " + name;
+        }
+        return "主规划已安排 " + steps.size() + " 步，将依次邀请专家协作";
+    }
+
+    private String displayStepName(OrchestrationPlanStepView step) {
+        if (step == null) {
+            return "专家";
+        }
+        if (step.agentName() != null && !step.agentName().isBlank()) {
+            return step.agentName();
+        }
+        if (step.agentId() != null && !step.agentId().isBlank()) {
+            return step.agentId();
+        }
+        return "专家";
     }
 
     private void emit(

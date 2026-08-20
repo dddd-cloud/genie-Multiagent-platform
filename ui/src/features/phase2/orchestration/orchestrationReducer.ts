@@ -419,8 +419,9 @@ function applyPlanCreated(
   }
 
   const steps: Record<string, StepUiState> = {};
+  const reveal = state.terminalStatus === 'RUNNING' && Object.keys(existing?.steps ?? {}).length === 0;
   for (const step of event.steps) {
-    steps[step.stepId] = planStepToUi(step, state.masterOpen);
+    steps[step.stepId] = planStepToUi(step, reveal || state.masterOpen);
   }
 
   attempts[attemptNo] = {
@@ -430,6 +431,11 @@ function applyPlanCreated(
   return {
     ...acknowledgeEvent(state, event),
     attempts,
+    masterOpen: reveal ? true : state.masterOpen,
+    main: {
+      ...state.main,
+      open: reveal ? true : state.main.open,
+    },
   };
 }
 
@@ -492,14 +498,15 @@ function applyStepStarted(
     );
   }
 
+  const agentName = preferReadableAgentName(
+    event.agentName,
+    step.agentName,
+    step.agentId,
+  );
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: 'RUNNING',
     agentId: event.agentId ?? step.agentId,
-    agentName: preferReadableAgentName(
-      event.agentName,
-      step.agentName,
-      step.agentId,
-    ),
+    agentName,
     stepMode: resolveStepMode(step, event),
     retryNo: event.retryNo ?? step.retryNo ?? 0,
     reviewing: false,
@@ -555,14 +562,15 @@ function applyStepTerminal(
     );
   }
 
+  const agentName = preferReadableAgentName(
+    event.agentName,
+    step.agentName,
+    step.agentId,
+  );
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: nextStatus,
     agentId: event.agentId ?? step.agentId,
-    agentName: preferReadableAgentName(
-      event.agentName,
-      step.agentName,
-      step.agentId,
-    ),
+    agentName,
     errorCode: nextStatus === 'FAILED' ? event.errorCode : step.errorCode,
     reviewing: false,
     fallbackActive: nextStatus === 'DEGRADED' ? false : step.fallbackActive,
@@ -847,8 +855,10 @@ function applySubTaskTerminal(
     errorCode: nextStatus === 'FAILED' ? event.errorCode : existing.errorCode,
     retryNo: event.retryNo ?? existing.retryNo,
   };
-  const next = updateStepStatus(state, attemptNo, stepId, { subTasks });
-  return acknowledgeEvent(next, event);
+  return acknowledgeEvent(
+    updateStepStatus(state, attemptNo, stepId, { subTasks }),
+    event,
+  );
 }
 
 function applyStepReviewStarted(
@@ -1027,6 +1037,39 @@ export function reduceOrchestrationEvent(
 }
 
 /**
+ * Live thoughts from parallel workers used to land on the parent STEP.
+ * Route them onto the matching subtask, or drop them so the parent card
+ * does not flicker between expert names.
+ */
+function rerouteParallelParentTrace(
+  trace: OrchestrationTrace,
+  step: StepUiState,
+): OrchestrationTrace | 'drop' | null {
+  if (trace.scope !== 'STEP') {
+    return null;
+  }
+  const subTasks = step.subTasks ?? emptySubTasks();
+  const ids = Object.keys(subTasks);
+  if (ids.length === 0) {
+    return null;
+  }
+  const byId =
+    trace.subTaskId && subTasks[trace.subTaskId] ? trace.subTaskId : null;
+  const agentMatches = trace.agentId
+    ? ids.filter((id) => subTasks[id].agentId === trace.agentId)
+    : [];
+  const targetId = byId ?? (agentMatches.length === 1 ? agentMatches[0] : null);
+  if (targetId) {
+    return {
+      ...trace,
+      scope: 'SUBTASK',
+      subTaskId: targetId,
+    };
+  }
+  return 'drop';
+}
+
+/**
  * Reduce a parallel orchestration_trace packet into UI work-panel state.
  * Does not write answer body; fold defaults stay collapsed.
  */
@@ -1081,6 +1124,17 @@ export function reduceOrchestrationTrace(
     open: state.masterOpen,
     subTasks: emptySubTasks(),
   };
+
+  const parallelTrace = rerouteParallelParentTrace(trace, step);
+  if (parallelTrace === 'drop') {
+    return {
+      ...state,
+      lastTraceSequence: trace.sequence,
+    };
+  }
+  if (parallelTrace) {
+    trace = parallelTrace;
+  }
 
   if (trace.scope === 'SUBTASK' && trace.subTaskId) {
     const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
@@ -1288,6 +1342,14 @@ export function markOrchestrationInterrupted(
  * Keep user fold choices when SSE reapplies orchestration from a stale working copy.
  * New steps keep their incoming default (collapsed).
  */
+function countSteps(state: OrchestrationUiState): number {
+  let count = 0;
+  for (const attempt of Object.values(state.attempts)) {
+    count += Object.keys(attempt.steps).length;
+  }
+  return count;
+}
+
 export function preserveOrchestrationFold(
   incoming: OrchestrationUiState,
   existing: OrchestrationUiState | undefined,
@@ -1295,6 +1357,12 @@ export function preserveOrchestrationFold(
   if (!existing) {
     return incoming;
   }
+  // First plan/work should stay visible so users can follow the collaboration.
+  const autoRevealed =
+    incoming.masterOpen &&
+    !existing.masterOpen &&
+    countSteps(existing) === 0 &&
+    countSteps(incoming) > 0;
   const attempts = cloneAttempts(incoming.attempts);
   for (const key of Object.keys(attempts)) {
     const attemptNo = Number(key);
@@ -1315,7 +1383,7 @@ export function preserveOrchestrationFold(
               ...subTasks[subId],
               open: existingSub.open
             };
-          } else if (existing.masterOpen) {
+          } else if (existing.masterOpen || autoRevealed) {
             subTasks[subId] = {
               ...subTasks[subId],
               open: true,
@@ -1324,10 +1392,10 @@ export function preserveOrchestrationFold(
         }
         steps[stepId] = {
           ...steps[stepId],
-          open: existingStep.open,
+          open: existingStep.open || autoRevealed,
           subTasks,
         };
-      } else if (existing.masterOpen) {
+      } else if (existing.masterOpen || autoRevealed) {
         const subTasks = cloneSubTasks(steps[stepId].subTasks ?? emptySubTasks());
         for (const subId of Object.keys(subTasks)) {
           subTasks[subId] = {
@@ -1349,10 +1417,10 @@ export function preserveOrchestrationFold(
   }
   return {
     ...incoming,
-    masterOpen: existing.masterOpen,
+    masterOpen: autoRevealed ? true : existing.masterOpen,
     main: {
       ...incoming.main,
-      open: existing.main.open
+      open: autoRevealed ? true : existing.main.open
     },
     attempts,
   };

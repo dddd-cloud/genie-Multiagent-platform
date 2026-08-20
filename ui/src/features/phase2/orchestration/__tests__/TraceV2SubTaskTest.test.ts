@@ -133,4 +133,85 @@ describe('TraceV2SubTaskTest', () => {
     ]);
     expect(state.lastTraceSequence).toBe(4);
   });
+
+  it('reroutes leftover parent STEP traces onto the matching subtask', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        attemptNo: null,
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        steps: [
+          {
+            stepId: 's1',
+            agentId: null,
+            agentName: null,
+            objective: 'Parallel',
+            inputRefs: [],
+            mode: 'PARALLEL_AGENTS',
+            subTasks: [
+              {
+                subTaskId: 'st-a',
+                agentId: 'agent-a',
+                agentName: '前端',
+                objective: 'A work',
+              },
+              {
+                subTaskId: 'st-b',
+                agentId: 'agent-b',
+                agentName: '后端',
+                objective: 'B work',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    state = reduceOrchestrationTrace(
+      state,
+      trace({
+        sequence: 3,
+        scope: 'STEP',
+        stepId: 's1',
+        agentId: 'agent-a',
+        agentName: '前端',
+        kind: 'THOUGHT',
+        text: 'parent leak A',
+      }),
+    );
+    state = reduceOrchestrationTrace(
+      state,
+      trace({
+        sequence: 4,
+        scope: 'STEP',
+        stepId: 's1',
+        agentId: null,
+        agentName: '前端',
+        kind: 'THOUGHT',
+        text: 'unroutable ghost',
+      }),
+    );
+
+    const step = state.attempts[1].steps.s1;
+    expect(step.lines).toEqual([]);
+    expect(step.agentName).toBe('');
+    expect(step.subTasks['st-a'].lines.map((l) => l.text)).toEqual([
+      'parent leak A',
+    ]);
+    expect(step.subTasks['st-b'].lines).toEqual([]);
+    expect(state.lastTraceSequence).toBe(4);
+  });
 });

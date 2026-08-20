@@ -138,26 +138,35 @@ describe('Phase2RequestBuilderTest', () => {
     expect(deduped.request.allowedAgentIds).toEqual(['a1', 'a2']);
   });
 
-  it('forces DIRECT allowedAgentIds to be empty', () => {
-    const bad = buildPhase2GptQueryRequest(
+  it('requires exactly one agent in DIRECT mode', () => {
+    const missing = buildPhase2GptQueryRequest(
       baseInput({
         executionMode: 'DIRECT',
-        allowedAgentIds: ['agent-1'],
+        allowedAgentIds: [],
       }),
     );
-    expect(bad.ok).toBe(false);
-    if (!bad.ok) expect(bad.code).toBe('DIRECT_ALLOWED_AGENTS_FORBIDDEN');
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.code).toBe('DIRECT_SINGLE_AGENT_REQUIRED');
+
+    const tooMany = buildPhase2GptQueryRequest(
+      baseInput({
+        executionMode: 'DIRECT',
+        allowedAgentIds: ['agent-1', 'agent-2'],
+      }),
+    );
+    expect(tooMany.ok).toBe(false);
+    if (!tooMany.ok) expect(tooMany.code).toBe('DIRECT_SINGLE_AGENT_REQUIRED');
 
     const ok = buildPhase2GptQueryRequest(
       baseInput({
         executionMode: 'DIRECT',
         deepThink: 1,
-        allowedAgentIds: [],
+        allowedAgentIds: ['agent-1'],
       }),
     );
     expect(ok.ok).toBe(true);
     if (!ok.ok) return;
-    expect(ok.request.allowedAgentIds).toEqual([]);
+    expect(ok.request.allowedAgentIds).toEqual(['agent-1']);
     expect(ok.request.deepThink).toBe(1);
   });
 
@@ -184,7 +193,11 @@ describe('Phase2RequestBuilderTest', () => {
 
   it('rejects teamId in DIRECT mode', () => {
     const result = buildPhase2GptQueryRequest(
-      baseInput({ executionMode: 'DIRECT', teamId: TEAM }),
+      baseInput({
+        executionMode: 'DIRECT',
+        allowedAgentIds: ['agent-1'],
+        teamId: TEAM,
+      }),
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;

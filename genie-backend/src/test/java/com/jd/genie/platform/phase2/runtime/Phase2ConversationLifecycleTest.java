@@ -16,9 +16,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class Phase2ConversationLifecycleTest {
     private static final CurrentUser USER = new CurrentUser(
@@ -42,37 +41,34 @@ class Phase2ConversationLifecycleTest {
     }
 
     @Test
-    void directRequestUsesSharedPrepareHistoryStreamingAndAgentStates() {
+    void directWithoutAgentDoesNotCreateMessageOrCallLegacyAgent() {
         FakeConversationExecutionPort executionPort = preparedPort();
         IMultiAgentService agent = mock(IMultiAgentService.class);
         GptProcessServiceImpl service = service(executionPort, agent);
 
-        service.queryPhase2AgentStreamIncr(request());
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryPhase2AgentStreamIncr(request(List.of()))
+        );
 
-        assertEquals(List.of(
-                FakeConversationExecutionPort.CallType.PREPARE_EXECUTION,
-                FakeConversationExecutionPort.CallType.LOAD_COMPLETED_HISTORY,
-                FakeConversationExecutionPort.CallType.MARK_STREAMING
-        ), executionPort.getCalls().stream().map(FakeConversationExecutionPort.CallRecord::type).toList());
-        org.mockito.Mockito.verify(agent).searchForAgentRequest(any(), any(), any());
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, error.getErrorCode());
+        assertEquals(List.of(), executionPort.getCalls());
+        verifyNoInteractions(agent);
     }
 
     @Test
-    void synchronousAgentFailureHasOneControlledFailureTerminal() {
+    void directWithAgentDoesNotCallLegacyAgentWhenCatalogMissing() {
         FakeConversationExecutionPort executionPort = preparedPort();
         IMultiAgentService agent = mock(IMultiAgentService.class);
-        doThrow(new IllegalStateException("agent unavailable"))
-                .when(agent).searchForAgentRequest(any(), any(), any());
         GptProcessServiceImpl service = service(executionPort, agent);
 
-        assertThrows(AgentBridgeException.class, () -> service.queryPhase2AgentStreamIncr(request()));
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryPhase2AgentStreamIncr(request(List.of("agent-1")))
+        );
 
-        assertEquals(1, executionPort.getCalls().stream()
-                .filter(call -> call.type() == FakeConversationExecutionPort.CallType.FAIL)
-                .count());
-        assertEquals(0, executionPort.getCalls().stream()
-                .filter(call -> call.type() == FakeConversationExecutionPort.CallType.COMPLETE)
-                .count());
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, error.getErrorCode());
+        verifyNoInteractions(agent);
     }
 
     private GptProcessServiceImpl service(
@@ -103,6 +99,10 @@ class Phase2ConversationLifecycleTest {
     }
 
     private Phase2GptQueryRequest request() {
+        return request(List.of());
+    }
+
+    private Phase2GptQueryRequest request(List<String> allowedAgentIds) {
         return Phase2GptQueryRequest.builder()
                 .sessionId("123e4567-e89b-12d3-a456-426614174000")
                 .requestId("request-1")
@@ -110,7 +110,7 @@ class Phase2ConversationLifecycleTest {
                 .executionMode("DIRECT")
                 .deepThink(0)
                 .outputStyle("docs")
-                .allowedAgentIds(List.of())
+                .allowedAgentIds(allowedAgentIds)
                 .localContext(Phase2GptQueryRequest.LocalContext.builder()
                         .schemaVersion(1)
                         .longTermMemory("")

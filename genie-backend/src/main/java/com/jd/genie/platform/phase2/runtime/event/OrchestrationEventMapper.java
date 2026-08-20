@@ -108,4 +108,20 @@ public final class OrchestrationEventMapper {
                 .resultMap(resultMap)
                 .build();
     }
+
+    /**
+     * Incremental final-answer snapshot. Not terminal; UI replaces the visible answer
+     * with {@code responseAll} until {@link #finalResponse} arrives.
+     */
+    public GptProcessResult answerProgress(String cumulative) {
+        String text = cumulative == null ? "" : cumulative;
+        return GptProcessResult.builder()
+                .status("running")
+                .response("")
+                .responseAll(text)
+                .finished(false)
+                .packageType("answer_progress")
+                .resultMap(Map.of())
+                .build();
+    }
 }

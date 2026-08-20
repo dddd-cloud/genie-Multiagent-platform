@@ -646,7 +646,8 @@ public final class SerialOrchestrationService {
             AgentRuntimeProfile profile = catalogPort.loadOnlineProfile(user, agentId);
             String agentName = profile.name() == null || profile.name().isBlank() ? agentId : profile.name();
             printer = new ConfiguredAgentPrinter(
-                    traceChannel, observer, attemptNo, step.stepId(), agentId, agentName);
+                    traceChannel, observer, attemptNo, step.stepId(), agentId, agentName,
+                    subTask ? executionId : null);
             String signature = resultSignature(agentId, objective, inputs, profile.agentVersion(), longTermMemory);
             AgentTaskResult reused = reusableResults.get(signature);
             if (reused != null) {
@@ -685,7 +686,7 @@ public final class SerialOrchestrationService {
                     .dateInfo(DateUtil.CurrentDateInfo())
                     .productFiles(productFiles)
                     .taskProductFiles(taskProductFiles)
-                    .isStream(false)
+                    .isStream(true)
                     .templateType("empty")
                     .build();
             List<BaseTool> skillTools = skillRuntimePort == null
@@ -742,6 +743,22 @@ public final class SerialOrchestrationService {
         } catch (AgentBridgeException error) {
             if (error.getErrorCode() == MvpErrorCode.CLIENT_DISCONNECTED) {
                 throw error;
+            }
+            String recovered = printer.recoveredOutput();
+            if (error.getErrorCode() == MvpErrorCode.AGENT_INVALID_RESULT
+                    && recovered != null && !recovered.isBlank()) {
+                log.warn("Recovered markdown agent output after invalid envelope agentId={} stepId={} executionId={}",
+                        agentId, step.stepId(), executionId);
+                AgentTaskResult recoveredResult = AgentTaskResult.success(recovered);
+                String recoveredName = agentNameOf(agentId);
+                emitExecutionEvent(
+                        events, "COMPLETED", step, executionId, agentId, recoveredName, recoveredResult,
+                        Map.of("agentName", recoveredName, "reasonCode", "RECOVERED_OUTPUT"), subTask);
+                if (traceChannel != null) {
+                    emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, agentId, recoveredName,
+                            OrchestrationTraceChannel.KIND_OUTPUT, recovered, false, subTask);
+                }
+                return recoveredResult;
             }
             log.warn("Orchestration execution failed agentId={} stepId={} executionId={} code={}",
                     agentId, step.stepId(), executionId, error.getErrorCode(), error);

@@ -80,6 +80,28 @@ describe('ExecutionModeSelectorTest', () => {
     expect(onChange).toHaveBeenCalledWith('DIRECT');
   });
 
+  it('opens a scrollable single-agent picker in Solo', async () => {
+    const onAgents = vi.fn();
+    render(
+      <ExecutionModeSelector
+        value="DIRECT"
+        onAllowedAgentIdsChange={onAgents}
+      />,
+    );
+    expect(screen.getByTestId('solo-agent-selector')).toHaveTextContent(
+      '选择智能体',
+    );
+    fireEvent.click(screen.getByTestId('solo-agent-selector'));
+    await waitFor(() => {
+      expect(screen.getByTestId('solo-agent-menu')).toBeTruthy();
+    });
+    expect(screen.getByTestId('solo-agent-menu').firstElementChild).toHaveClass(
+      'max-h-[216px]',
+    );
+    fireEvent.click(screen.getByTestId('solo-agent-option-a1'));
+    expect(onAgents).toHaveBeenCalledWith(['a1']);
+  });
+
   it('selects all ONLINE agents after choosing ORCHESTRATED without listing them in the mode menu', async () => {
     const onAgents = vi.fn();
     const Harness = () => {

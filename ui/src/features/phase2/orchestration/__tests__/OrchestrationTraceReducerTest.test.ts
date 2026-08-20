@@ -138,12 +138,15 @@ describe('OrchestrationTraceReducerTest', () => {
       }),
     );
 
-    expect(state.masterOpen).toBe(false);
+    expect(state.masterOpen).toBe(true);
+    expect(state.main.open).toBe(true);
     expect(state.main.lines.some((l) => l.text.includes('规划中'))).toBe(true);
     expect(state.attempts[1].steps.s1.lines[0].text).toBe('thinking… more');
     expect(state.attempts[1].steps.s1.output).toBe('done');
-    expect(state.attempts[1].steps.s1.open).toBe(false);
+    expect(state.attempts[1].steps.s1.open).toBe(true);
 
+    state = toggleMasterOpen(state);
+    expect(state.masterOpen).toBe(false);
     state = toggleMasterOpen(state);
     expect(state.masterOpen).toBe(true);
     expect(state.main.open).toBe(true);
@@ -240,7 +243,7 @@ describe('OrchestrationTraceReducerTest', () => {
         ],
       }),
     );
-    state = toggleMasterOpen(state);
+    expect(state.masterOpen).toBe(true);
     expect(state.attempts[1].steps.s1.open).toBe(true);
     state = toggleStepOpen(state, 1, 's1');
     expect(state.masterOpen).toBe(true);
@@ -300,7 +303,7 @@ describe('OrchestrationTraceReducerTest', () => {
         agentName: 'Agent A',
       }),
     );
-    expect(stale.masterOpen).toBe(false);
+    expect(stale.masterOpen).toBe(true);
 
     const merged = preserveOrchestrationFold(stale, state);
     expect(merged.masterOpen).toBe(true);
@@ -346,7 +349,6 @@ describe('OrchestrationTraceReducerTest', () => {
         ],
       }),
     );
-    state = toggleMasterOpen(state);
     expect(state.masterOpen).toBe(true);
     expect(state.main.open).toBe(true);
     expect(state.attempts[1].steps.s1.open).toBe(true);
