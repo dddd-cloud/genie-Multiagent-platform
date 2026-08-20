@@ -16,7 +16,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,12 +24,14 @@ import org.springframework.stereotype.Service;
 /** Read-only adapters for public registries. Packages still enter through the normal validated import path. */
 @Service
 public class ExternalMarketplaceService {
-    private static final int SEARCH_LIMIT = 30;
+    static final int DEFAULT_PAGE_SIZE = 12;
+    static final int MAX_PAGE_SIZE = 50;
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
     private final ObjectMapper mapper;
     private final SkillPackageImportService skillImport;
     private final HttpClient http;
     private final String skillHubApi;
+    private final String skillHubListApi;
     private final String mcpRegistryApi;
 
     @Autowired
@@ -46,13 +47,18 @@ public class ExternalMarketplaceService {
         this.mapper = mapper;
         this.skillImport = skillImport;
         this.skillHubApi = trimSlash(skillHubApi);
+        this.skillHubListApi = skillHubCatalogUrl(this.skillHubApi);
         this.mcpRegistryApi = trimSlash(mcpRegistryApi);
         this.http = http;
     }
 
-    public List<ExternalMarketplaceResource> search(ExternalMarketplaceSource source, String query, String sort) {
+    public ExternalMarketplacePage search(ExternalMarketplaceSource source, String query, String sort,
+            Integer limit, String cursor) {
         if (source == null) throw invalid("external source required");
-        return source == ExternalMarketplaceSource.SKILLHUB ? searchSkillHub(query, sort) : searchMcpRegistry(query, sort);
+        int pageSize = clampLimit(limit);
+        return source == ExternalMarketplaceSource.SKILLHUB
+            ? searchSkillHub(query, sort, pageSize, cursor)
+            : searchMcpRegistry(query, pageSize, cursor);
     }
 
     public SkillResponse installSkillHub(CurrentUser user, ExternalMarketplaceInstallRequest request) {
@@ -62,9 +68,16 @@ public class ExternalMarketplaceService {
         return skillImport.importPackage(user, archive, null);
     }
 
-    private List<ExternalMarketplaceResource> searchSkillHub(String query, String sort) {
-        String url = skillHubApi + "/search?q=" + encode(query == null ? "" : query) + "&limit=" + SEARCH_LIMIT;
-        JsonNode results = getJson(url).path("results");
+    private ExternalMarketplacePage searchSkillHub(String query, String sort, int pageSize, String cursor) {
+        int page = parsePage(cursor);
+        String url = skillHubListApi + "?page=" + page + "&pageSize=" + pageSize;
+        if (!blank(query)) url += "&keyword=" + encode(query);
+        if (!blank(sort)) url += "&sort=" + encode(sort);
+        JsonNode root = getJson(url);
+        JsonNode data = root.path("data");
+        JsonNode results = data.path("skills");
+        if (!results.isArray()) results = root.path("results");
+        if (!results.isArray()) results = root.path("items");
         if (!results.isArray()) throw unavailable("SkillHub response invalid");
         List<ExternalMarketplaceResource> out = new ArrayList<>();
         for (JsonNode item : results) {
@@ -82,15 +95,18 @@ public class ExternalMarketplaceService {
                 slug, version, name, description, category, tags, item.path("stars").asLong(), item.path("downloads").asLong(),
                 sourceUrl, "", "", "SKILL.md", needsKey, "导入后按 JoyAgent Skill 包校验"));
         }
-        // The upstream search order carries its relevance score.  Applying the
-        // marketplace popularity sort to a non-empty query hides exact matches
-        // behind unrelated but popular Skills (for example "JSON Toolkit").
-        return blank(query) ? sort(out, sort) : List.copyOf(out);
+        int total = data.path("total").asInt(-1);
+        if (total < 0) total = root.path("total").asInt(-1);
+        int offset = (page - 1) * pageSize;
+        boolean hasMore = total >= 0 ? offset + out.size() < total : out.size() >= pageSize;
+        return new ExternalMarketplacePage(out, hasMore, hasMore ? String.valueOf(page + 1) : null);
     }
 
-    private List<ExternalMarketplaceResource> searchMcpRegistry(String query, String sort) {
-        String url = mcpRegistryApi + "/servers?search=" + encode(query == null ? "" : query) + "&limit=" + SEARCH_LIMIT;
-        JsonNode servers = getJson(url).path("servers");
+    private ExternalMarketplacePage searchMcpRegistry(String query, int pageSize, String cursor) {
+        String url = mcpRegistryApi + "/servers?search=" + encode(query == null ? "" : query) + "&limit=" + pageSize;
+        if (!blank(cursor)) url += "&cursor=" + encode(cursor);
+        JsonNode root = getJson(url);
+        JsonNode servers = root.path("servers");
         if (!servers.isArray()) throw unavailable("MCP Registry response invalid");
         List<ExternalMarketplaceResource> out = new ArrayList<>();
         for (JsonNode envelope : servers) {
@@ -107,20 +123,40 @@ public class ExternalMarketplaceService {
       || authHint.contains("requires authentication") || authHint.contains("signup");
       needsCredential = needsCredential || authHint.contains("pay per run") || authHint.contains("x402") || authHint.contains("paid") || authHint.contains("payment");
             String compatibility = "streamable-http".equalsIgnoreCase(transport)
-                ? "需要 Streamable HTTP 运行时适配" : (remoteUrl.isBlank() ? "仅提供本地安装包" : "可在 MCP 设置中检测并启用");
+                ? "需要 Streamable HTTP 运行时适配" : (remoteUrl.isBlank() ? "仅提供本地安装包" : "可在连接器中检测并启用");
             out.add(new ExternalMarketplaceResource(ExternalMarketplaceSource.MCP_REGISTRY, MarketplaceResourceType.MCP,
                 name, first(text(server, "version"), "latest"), name, description, "官方 MCP Registry",
                 List.of(transport), 0, 0, "https://registry.modelcontextprotocol.io", text(server.path("repository"), "url"),
                 remoteUrl, transport, needsCredential, compatibility));
         }
-        return sort(out, sort);
+        String nextCursor = first(text(root.path("metadata"), "nextCursor"), text(root.path("metadata"), "next_cursor"));
+        boolean hasMore = !blank(nextCursor);
+        return new ExternalMarketplacePage(out, hasMore, hasMore ? nextCursor : null);
     }
 
-    private List<ExternalMarketplaceResource> sort(List<ExternalMarketplaceResource> values, String sort) {
-        Comparator<ExternalMarketplaceResource> comparator = "downloads".equalsIgnoreCase(sort)
-            ? Comparator.comparingLong(ExternalMarketplaceResource::downloads).reversed()
-            : Comparator.comparingLong(ExternalMarketplaceResource::stars).reversed();
-        return values.stream().sorted(comparator.thenComparing(ExternalMarketplaceResource::name, String.CASE_INSENSITIVE_ORDER)).toList();
+    private static int clampLimit(Integer limit) {
+        if (limit == null || limit < 1) return DEFAULT_PAGE_SIZE;
+        return Math.min(limit, MAX_PAGE_SIZE);
+    }
+
+    private static int parsePage(String cursor) {
+        if (blank(cursor)) return 1;
+        try {
+            return Math.max(1, Integer.parseInt(cursor.trim()));
+        } catch (NumberFormatException ex) {
+            return 1;
+        }
+    }
+
+    /** Public catalog lives at /api/skills; install/download stay on the /api/v1 compatibility API. */
+    private static String skillHubCatalogUrl(String skillHubApi) {
+        if (skillHubApi.endsWith("/api/v1")) {
+            return skillHubApi.substring(0, skillHubApi.length() - "/v1".length()) + "/skills";
+        }
+        if (skillHubApi.endsWith("/v1")) {
+            return skillHubApi.substring(0, skillHubApi.length() - 3) + "/skills";
+        }
+        return skillHubApi + "/skills";
     }
 
     private JsonNode getJson(String url) {

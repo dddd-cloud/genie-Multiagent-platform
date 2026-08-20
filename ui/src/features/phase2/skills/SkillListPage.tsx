@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Alert, Button, Space, Spin, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Phase2SkillResponse } from '@/contracts/phase2';
+import { SKILLS_LIBRARY_PATH } from '@/features/marketplace/paths';
 import {
   disableSkill,
   enableSkill,
@@ -72,7 +73,7 @@ const SkillListPage: GenieType.FC = memo(() => {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, row) => (
-        <Link to={`/app/skills/${row.id}`}>{name}</Link>
+        <Link to={`${SKILLS_LIBRARY_PATH}/${row.id}`}>{name}</Link>
       ),
     },
     {
@@ -108,7 +109,7 @@ const SkillListPage: GenieType.FC = memo(() => {
           <Button
             type="link"
             size="small"
-            onClick={() => navigate(`/app/skills/${row.id}`)}
+            onClick={() => navigate(`${SKILLS_LIBRARY_PATH}/${row.id}`)}
           >
             编辑
           </Button>
@@ -118,16 +119,16 @@ const SkillListPage: GenieType.FC = memo(() => {
   ];
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="skill-list-page">
+    <div className="h-full w-full overflow-auto" data-testid="skill-list-page">
       <div className="flex items-center justify-between gap-12 mb-16">
         <div>
           <Title level={4} className="!mb-4">
-            Skill
+            我的技能
           </Title>
-          <Text type="secondary">管理 Skill；排序仅在 Agent 编辑页</Text>
+          <Text type="secondary">管理已导入的技能</Text>
         </div>
         <Space>
-          <Button onClick={() => navigate('/app/skills/new')}>新建 Skill</Button>
+          <Button onClick={() => navigate(`${SKILLS_LIBRARY_PATH}/new`)}>新建</Button>
           <Button
             type="primary"
             onClick={() => setImportOpen(true)}
@@ -156,7 +157,7 @@ const SkillListPage: GenieType.FC = memo(() => {
           columns={columns}
           dataSource={items}
           pagination={false}
-          locale={{ emptyText: '暂无 Skill' }}
+          locale={{ emptyText: '还没有技能' }}
         />
       </Spin>
       <SkillImportModal
@@ -164,7 +165,7 @@ const SkillListPage: GenieType.FC = memo(() => {
         onClose={() => setImportOpen(false)}
         onImported={(skill) => {
           setImportOpen(false);
-          navigate(`/app/skills/${skill.id}`);
+          navigate(`${SKILLS_LIBRARY_PATH}/${skill.id}`);
         }}
       />
     </div>

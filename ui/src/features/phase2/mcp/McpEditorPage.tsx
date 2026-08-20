@@ -17,6 +17,7 @@ import {
   testMcpServer,
   updateMcpServer,
 } from '@/services/phase2/mcp';
+import { MCP_LIBRARY_PATH } from '@/features/marketplace/paths';
 import VersionConflictAlert from '../VersionConflictAlert';
 import {
   isVersionConflict,
@@ -167,7 +168,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
           return;
         }
         message.success('已创建');
-        navigate(`/app/mcp/${created.id}`, { replace: true });
+        navigate(`${MCP_LIBRARY_PATH}/${created.id}`, { replace: true });
         return;
       }
       if (!serverId) return;
@@ -295,7 +296,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
       clearCredential();
       setDeleteTarget(null);
       message.success('已删除');
-      navigate('/app/mcp');
+      navigate(MCP_LIBRARY_PATH);
     } catch (err: unknown) {
       if (isVersionConflict(err)) {
         setVersionConflict(true);
@@ -310,7 +311,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
   };
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="mcp-editor-page">
+    <div className="h-full w-full overflow-auto" data-testid="mcp-editor-page">
       <div className="flex items-center justify-between gap-12 mb-16">
         <div>
           <Title level={4} className="!mb-4">
@@ -321,7 +322,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
           </Text>
         </div>
         <Space wrap>
-          <Button onClick={() => navigate('/app/mcp')}>返回列表</Button>
+          <Button onClick={() => navigate(MCP_LIBRARY_PATH)}>返回列表</Button>
           {!isNew ? (
             <Button
               disabled={versionConflict || saving}

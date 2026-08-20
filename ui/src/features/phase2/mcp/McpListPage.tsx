@@ -4,6 +4,7 @@ import { Alert, Button, Spin, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Phase2McpServerResponse } from '@/contracts/phase2';
 import { listMcpServers } from '@/services/phase2/mcp';
+import { MCP_LIBRARY_PATH } from '@/features/marketplace/paths';
 import { phase2ErrorMessage } from '../phase2UiError';
 
 const { Title, Text } = Typography;
@@ -37,7 +38,7 @@ const McpListPage: GenieType.FC = memo(() => {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, row) => (
-        <Link to={`/app/mcp/${row.id}`}>{name}</Link>
+        <Link to={`${MCP_LIBRARY_PATH}/${row.id}`}>{name}</Link>
       ),
     },
     {
@@ -78,7 +79,7 @@ const McpListPage: GenieType.FC = memo(() => {
         <Button
           type="link"
           size="small"
-          onClick={() => navigate(`/app/mcp/${row.id}`)}
+          onClick={() => navigate(`${MCP_LIBRARY_PATH}/${row.id}`)}
         >
           编辑
         </Button>
@@ -87,16 +88,16 @@ const McpListPage: GenieType.FC = memo(() => {
   ];
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="mcp-list-page">
+    <div className="h-full w-full overflow-auto" data-testid="mcp-list-page">
       <div className="flex items-center justify-between gap-12 mb-16">
         <div>
           <Title level={4} className="!mb-4">
-            MCP
+            我的连接器
           </Title>
-          <Text type="secondary">管理 MCP Server；凭据永不回显</Text>
+          <Text type="secondary">管理已配置的连接器；凭据不会回传到浏览器</Text>
         </div>
-        <Button type="primary" onClick={() => navigate('/app/mcp/new')}>
-          新建 MCP
+        <Button type="primary" className="rounded-full" onClick={() => navigate(`${MCP_LIBRARY_PATH}/new`)}>
+          新建
         </Button>
       </div>
       {error ? (
@@ -118,7 +119,7 @@ const McpListPage: GenieType.FC = memo(() => {
           columns={columns}
           dataSource={items}
           pagination={false}
-          locale={{ emptyText: '暂无 MCP Server' }}
+          locale={{ emptyText: '还没有连接器' }}
         />
       </Spin>
     </div>

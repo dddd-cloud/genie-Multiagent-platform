@@ -19,18 +19,6 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
     phase2Only: true,
   },
   {
-    to: '/app/settings/skills',
-    label: '技能',
-    hint: '给智能体用的技能',
-    phase2Only: true,
-  },
-  {
-    to: '/app/settings/mcp',
-    label: 'MCP',
-    hint: 'MCP 服务器与凭据',
-    phase2Only: true,
-  },
-  {
     to: '/app/settings/memory',
     label: '本地记忆',
     hint: '只保存在这台电脑上的长期记忆',

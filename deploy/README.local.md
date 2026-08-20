@@ -78,6 +78,26 @@ docker compose --env-file .env `
 
 Open <http://localhost:3000> after the UI production build completes.
 
+## Faster day-to-day reload
+
+Do **not** `--force-recreate` the backend for ordinary Java edits. Recreating
+the container is what made compile+start feel like several minutes: javac was
+writing hundreds of class files through the Windows bind mount, then Spring
+Boot still needed ~50s.
+
+After the local override is applied once (`up -d --no-deps genie-backend`):
+
+- **Java change (fast):** `.\deploy\reload-backend.ps1`  
+  Compiles only the changed files (javac + Lombok) and Spring DevTools reloads
+  the app in a few seconds. Do not recreate the container.
+- **Java change (cold):** `docker restart joyagent-mvp-genie-backend-1`  
+  Use this if DevTools reload fails, or after a large refactor. Compile is
+  skipped when sources are unchanged.
+- **Frontend change:** `docker exec joyagent-mvp-ui-1 bash -lc "cd /workspace/ui && pnpm build"`  
+  Then Ctrl+F5. Do not restart the backend.
+- **pom.xml / new Maven dependency:** set `GENIE_BACKEND_REPACKAGE=1` and
+  recreate `genie-backend` once (full `mvn package`).
+
 ## Useful commands
 
 ```powershell

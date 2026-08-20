@@ -2,7 +2,6 @@ import { memo, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Input } from 'antd';
 import {
-  ApiOutlined,
   BookOutlined,
   CloseOutlined,
   ClusterOutlined,
@@ -10,7 +9,6 @@ import {
   IdcardOutlined,
   RobotOutlined,
   SearchOutlined,
-  ToolOutlined,
 } from '@ant-design/icons';
 import classNames from 'classnames';
 import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
@@ -20,8 +18,6 @@ import { useSettingsModal } from './SettingsModalContext';
 const SETTINGS_ICONS: Record<string, ReactNode> = {
   '/app/settings/models': <ClusterOutlined />,
   '/app/settings/agents': <RobotOutlined />,
-  '/app/settings/skills': <ToolOutlined />,
-  '/app/settings/mcp': <ApiOutlined />,
   '/app/settings/memory': <BookOutlined />,
   '/app/settings/preferences': <ControlOutlined />,
   '/app/settings/account': <IdcardOutlined />,

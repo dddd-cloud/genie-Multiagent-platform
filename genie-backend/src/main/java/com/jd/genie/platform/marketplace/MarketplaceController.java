@@ -50,12 +50,14 @@ public class MarketplaceController {
     }
 
     @GetMapping("/external/resources")
-    public ApiResponse<List<ExternalMarketplaceResource>> externalResources(
+    public ApiResponse<ExternalMarketplacePage> externalResources(
         @RequestParam ExternalMarketplaceSource source,
         @RequestParam(required = false) String q,
-        @RequestParam(defaultValue = "stars") String sort
+        @RequestParam(defaultValue = "stars") String sort,
+        @RequestParam(defaultValue = "12") Integer limit,
+        @RequestParam(required = false) String cursor
     ) {
-        return success(externalResources.search(source, q, sort));
+        return success(externalResources.search(source, q, sort, limit, cursor));
     }
 
     @PostMapping("/external/skillhub/install")

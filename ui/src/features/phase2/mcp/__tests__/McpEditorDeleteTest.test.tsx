@@ -54,10 +54,10 @@ const server: Phase2McpServerResponse = {
 
 function renderEditor() {
   return render(
-    <MemoryRouter initialEntries={['/app/mcp/mcp-a']}>
+    <MemoryRouter initialEntries={['/app/marketplace/mcp/mcp-a']}>
       <Routes>
-        <Route path="/app/mcp/:serverId" element={<McpEditorPage />} />
-        <Route path="/app/mcp" element={<div>MCP 列表</div>} />
+        <Route path="/app/marketplace/mcp/:serverId" element={<McpEditorPage />} />
+        <Route path="/app/marketplace/mcp" element={<div>MCP 列表</div>} />
       </Routes>
     </MemoryRouter>,
   );

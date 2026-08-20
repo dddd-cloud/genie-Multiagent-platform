@@ -86,7 +86,20 @@ const router = createBrowserRouter([
               },
               {
                 path: 'marketplace',
-                element: Page(<MarketplaceMount />),
+                children: [
+                  {
+                    index: true,
+                    element: Page(<MarketplaceMount />),
+                  },
+                  {
+                    path: 'skills/*',
+                    element: <Navigate to="/app/marketplace" replace />,
+                  },
+                  {
+                    path: 'mcp/*',
+                    element: <Navigate to="/app/marketplace?tab=connectors" replace />,
+                  },
+                ],
               },
               {
                 path: 'agents',
@@ -113,28 +126,12 @@ const router = createBrowserRouter([
                 element: Page(<TeamEditorPage />),
               },
               {
-                path: 'skills',
-                element: <Navigate to="/app/settings/skills" replace />,
+                path: 'skills/*',
+                element: <Navigate to="/app/marketplace" replace />,
               },
               {
-                path: 'skills/new',
-                element: <Navigate to="/app/settings/skills/new" replace />,
-              },
-              {
-                path: 'skills/:skillId',
-                element: <RedirectTo to="/app/settings/skills/:skillId" />,
-              },
-              {
-                path: 'mcp',
-                element: <Navigate to="/app/settings/mcp" replace />,
-              },
-              {
-                path: 'mcp/new',
-                element: <Navigate to="/app/settings/mcp/new" replace />,
-              },
-              {
-                path: 'mcp/:serverId',
-                element: <RedirectTo to="/app/settings/mcp/:serverId" />,
+                path: 'mcp/*',
+                element: <Navigate to="/app/marketplace?tab=connectors" replace />,
               },
               {
                 path: 'settings/*',

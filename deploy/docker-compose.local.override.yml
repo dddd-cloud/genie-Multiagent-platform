@@ -9,23 +9,52 @@
 
 services:
   genie-backend:
-    # Fast local loop: incremental `mvn compile` + existing unpacked libs.
-    # Full `package` (the ~10min Windows bind-mount copy) only runs when lib/ is
-    # missing, or when GENIE_BACKEND_REPACKAGE=1 (after pom.xml dependency changes).
+    # Fast local loop: `mvn compile` + existing unpacked libs.
+    # Full `package` only when lib/ is missing or GENIE_BACKEND_REPACKAGE=1.
+    # class files live on a Linux named volume so javac is not going through the
+    # Windows bind mount (that path is why a 1-file change recompiled 500+ classes).
+    volumes:
+      - mvp_backend_classes:/workspace/genie-backend/target/classes
+      - mvp_backend_maven_status:/workspace/genie-backend/target/maven-status
     command:
       - bash
       - -lc
       - |
         set -euo pipefail
+        stamp=target/classes/.compile-ok
+        mkdir -p target/devtools target/classes
+        if ! ls target/devtools/spring-boot-devtools-*.jar >/dev/null 2>&1; then
+          echo "genie-backend: fetching spring-boot-devtools"
+          mvn -s aliyun-settings.xml -q org.apache.maven.plugins:maven-dependency-plugin:3.6.1:copy \
+            -Dartifact=org.springframework.boot:spring-boot-devtools:3.2.2 \
+            -DoutputDirectory=target/devtools
+        fi
+        sources_newer() {
+          [ ! -f "$$stamp" ] && return 0
+          [ -n "$$(find src/main/java src/main/resources -type f \( -name '*.java' -o -name '*.xml' -o -name '*.yml' -o -name '*.yaml' -o -name '*.sql' -o -name '*.json' \) -newer "$$stamp" -print -quit 2>/dev/null || true)" ]
+        }
         if [ ! -d target/genie-backend/lib ] || [ "$${GENIE_BACKEND_REPACKAGE:-}" = "1" ]; then
           echo "genie-backend: full package (runtime libs missing or GENIE_BACKEND_REPACKAGE=1)"
           mvn -Dmaven.test.skip=true -Djacoco.skip=true -s aliyun-settings.xml package
+          touch "$$stamp"
+        elif sources_newer; then
+          bash scripts/fast-compile.sh
         else
-          echo "genie-backend: fast compile, reusing target/genie-backend/lib"
-          mvn -Dmaven.test.skip=true -Djacoco.skip=true -s aliyun-settings.xml compile
+          echo "genie-backend: classes up to date, skip compile"
         fi
+        [ -f target/classes/.reloadtrigger ] || touch target/classes/.reloadtrigger
+        app_cp="target/devtools/*:target/classes:target/genie-backend/conf"
+        for j in target/genie-backend/lib/*.jar; do
+          case "$$j" in
+            */genie-backend-*.jar) continue ;;
+          esac
+          app_cp="$$app_cp:$$j"
+        done
         exec java \
-          -classpath "target/classes:target/genie-backend/conf/:target/genie-backend/lib/*" \
+          -Dspring.devtools.restart.enabled=true \
+          -Dspring.devtools.restart.trigger-file=.reloadtrigger \
+          -Dspring.devtools.livereload.enabled=false \
+          -classpath "$$app_cp" \
           -Dbasedir=target/genie-backend \
           -Dfile.encoding=UTF-8 \
           com.jd.genie.GenieApplication
@@ -53,6 +82,9 @@ services:
       AUTOBOTS_AUTOAGENT_DATA_ANALYSIS_URL: http://genie-tool:1601
       AUTOBOTS_AUTOAGENT_MCP_CLIENT_URL: http://genie-client:8188
       GENIE_MEMORY_DIR: /var/lib/joyagent/memory
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+      SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: ".reloadtrigger"
+      SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "false"
 
   genie-tool:
     ports:
@@ -86,3 +118,5 @@ volumes:
   mvp_ui_node_modules:
   mvp_tool_venv:
   mvp_client_venv:
+  mvp_backend_classes:
+  mvp_backend_maven_status:

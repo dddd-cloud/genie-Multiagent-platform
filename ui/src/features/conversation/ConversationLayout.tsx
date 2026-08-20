@@ -461,7 +461,9 @@ const ConversationLayout: GenieType.FC = memo(() => {
               <ConversationPage />
             </Suspense>
           ) : (
-            <Outlet />
+            <div className="h-full min-h-0 [&>*]:h-full">
+              <Outlet />
+            </div>
           )}
         </div>
       </div>

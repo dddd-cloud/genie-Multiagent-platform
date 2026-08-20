@@ -4,6 +4,7 @@ import { Alert, Button, Modal, Space, Spin, Typography, message } from 'antd';
 import type { Phase2AgentResponse } from '@/contracts/phase2';
 import type { ToolCapabilityItem } from '@/services/phase2/internalTypes';
 import { listAgents, listToolCapabilities } from '@/services/phase2/agents';
+import { SKILLS_LIBRARY_PATH } from '@/features/marketplace/paths';
 import {
   createSkill,
   deleteSkill,
@@ -122,7 +123,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
           return;
         }
         message.success('已创建');
-        navigate(`/app/skills/${created.id}`, { replace: true });
+        navigate(`${SKILLS_LIBRARY_PATH}/${created.id}`, { replace: true });
         return;
       }
       if (!skillId || form.version == null) return;
@@ -208,7 +209,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
       await deleteSkill(deleteTarget.id, { version: deleteTarget.version });
       setDeleteTarget(null);
       message.success('已删除');
-      navigate('/app/skills');
+      navigate(SKILLS_LIBRARY_PATH);
     } catch (err: unknown) {
       if (isSkillInUse(err)) {
         setError(phase2ErrorMessage(err));
@@ -228,7 +229,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
   };
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="skill-editor-page">
+    <div className="h-full w-full overflow-auto" data-testid="skill-editor-page">
       <div className="flex items-center justify-between gap-12 mb-16">
         <div>
           <Title level={4} className="!mb-4">
@@ -239,7 +240,7 @@ const SkillEditorPage: GenieType.FC = memo(() => {
           </Text>
         </div>
         <Space wrap>
-          <Button onClick={() => navigate('/app/skills')}>返回列表</Button>
+          <Button onClick={() => navigate(SKILLS_LIBRARY_PATH)}>返回列表</Button>
           {!isNew && form.status === 'ENABLED' ? (
             <Button
               disabled={versionConflict || saving}

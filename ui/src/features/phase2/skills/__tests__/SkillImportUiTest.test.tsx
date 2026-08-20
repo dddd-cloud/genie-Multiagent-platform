@@ -43,10 +43,10 @@ const skill: Phase2SkillResponse = {
 
 function renderList() {
   return render(
-    <MemoryRouter initialEntries={['/app/skills']}>
+    <MemoryRouter initialEntries={['/app/marketplace/skills']}>
       <Routes>
-        <Route path="/app/skills" element={<SkillListPage />} />
-        <Route path="/app/skills/:skillId" element={<div>编辑页</div>} />
+        <Route path="/app/marketplace/skills" element={<SkillListPage />} />
+        <Route path="/app/marketplace/skills/:skillId" element={<div>编辑页</div>} />
       </Routes>
     </MemoryRouter>,
   );

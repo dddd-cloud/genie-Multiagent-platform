@@ -1,6 +1,12 @@
 export type MarketplaceResourceType = 'AGENT' | 'TEAM' | 'SKILL' | 'MCP';
 export type ExternalMarketplaceSource = 'SKILLHUB' | 'MCP_REGISTRY';
 
+export interface ExternalMarketplacePage {
+  items: ExternalMarketplaceResource[];
+  hasMore: boolean;
+  nextCursor?: string | null;
+}
+
 export interface ExternalMarketplaceResource {
   source: ExternalMarketplaceSource;
   type: Extract<MarketplaceResourceType, 'SKILL' | 'MCP'>;
