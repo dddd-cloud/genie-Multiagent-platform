@@ -38,30 +38,19 @@ import type {
   MarketplaceResourceType,
 } from '@/services/marketplace';
 
-type MarketplaceSource = 'LOCAL' | ExternalMarketplaceSource;
+type MarketplaceSource = 'EXPERTS' | 'TEAMS' | ExternalMarketplaceSource;
 
-const TYPE_OPTIONS: Array<{ label: string; value: MarketplaceResourceType | 'ALL' }> = [
-  {
-    label: '全部',
-    value: 'ALL'
-  },
-  {
-    label: 'Agent',
-    value: 'AGENT'
-  },
-  {
-    label: 'Team',
-    value: 'TEAM'
-  },
-  {
-    label: 'Skill',
-    value: 'SKILL'
-  },
-  {
-    label: 'MCP',
-    value: 'MCP'
-  },
-];
+function isCuratedSource(source: MarketplaceSource): source is 'EXPERTS' | 'TEAMS' {
+  return source === 'EXPERTS' || source === 'TEAMS';
+}
+
+function curatedType(source: 'EXPERTS' | 'TEAMS'): MarketplaceResourceType {
+  return source === 'EXPERTS' ? 'AGENT' : 'TEAM';
+}
+
+function resourceTypeLabel(type: MarketplaceResourceType): string {
+  return type === 'AGENT' ? '专家' : type === 'TEAM' ? '专家团队' : type;
+}
 
 function canInstall(resource: MarketplaceResource): boolean {
   return resource.installMode === 'INSTALL';
@@ -75,8 +64,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
   const { openSettings } = useSettingsModal();
   const [resources, setResources] = useState<MarketplaceResource[]>([]);
   const [externalResources, setExternalResources] = useState<ExternalMarketplaceResource[]>([]);
-  const [source, setSource] = useState<MarketplaceSource>('SKILLHUB');
-  const [selectedType, setSelectedType] = useState<MarketplaceResourceType | 'ALL'>('ALL');
+  const [source, setSource] = useState<MarketplaceSource>('EXPERTS');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>();
   const [categories, setCategories] = useState<string[]>([]);
@@ -114,13 +102,13 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
     };
     async function loadResources() {
       setLoading(true);
-      const request = source === 'LOCAL'
-        ? listMarketplaceResources({ type: selectedType === 'ALL' ? undefined : selectedType, category, query: query || undefined })
+      const request = isCuratedSource(source)
+        ? listMarketplaceResources({ type: curatedType(source), category, query: query || undefined })
         : searchExternalMarketplace(source, query || undefined);
       request
         .then((items) => {
           if (!cancelled) {
-            if (source === 'LOCAL') setResources(items as MarketplaceResource[]);
+            if (isCuratedSource(source)) setResources(items as MarketplaceResource[]);
             else setExternalResources(items as ExternalMarketplaceResource[]);
             setError(undefined);
           }
@@ -132,7 +120,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
           if (!cancelled) setLoading(false);
         });
     }
-  }, [selectedType, category, query, source]);
+  }, [category, query, source]);
 
   async function copyDraft(resource: MarketplaceResource) {
     setDraftLoading(true);
@@ -217,7 +205,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
             资源广场
           </Typography.Title>
           <Typography.Text type="secondary">
-            从 SkillHub 和官方 MCP Registry 搜索并安装可用能力。
+            从精选专家、专家团队、SkillHub 和官方 MCP Registry 搜索并安装可用能力。
           </Typography.Text>
         </div>
         <Space direction="vertical" align="end">
@@ -231,24 +219,22 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
       </div>
       <div className="mb-20 flex flex-wrap items-center gap-12">
         <Segmented
-          options={[{ label: 'SkillHub', value: 'SKILLHUB' }, { label: '官方 MCP', value: 'MCP_REGISTRY' }]}
+          options={[
+            { label: '专家', value: 'EXPERTS' },
+            { label: '专家团队', value: 'TEAMS' },
+            { label: 'SkillHub', value: 'SKILLHUB' },
+            { label: '官方 MCP', value: 'MCP_REGISTRY' },
+          ]}
           value={source}
           onChange={(value) => {
             const next = value as MarketplaceSource;
             setSource(next);
-            setSelectedType(next === 'SKILLHUB' ? 'SKILL' : next === 'MCP_REGISTRY' ? 'MCP' : 'ALL');
             setCategory(undefined);
             setSelected(undefined);
           }}
         />
-        <Segmented
-          disabled={source !== 'LOCAL'}
-          options={TYPE_OPTIONS}
-          value={selectedType}
-          onChange={(value) => setSelectedType(value as MarketplaceResourceType | 'ALL')}
-        />
         <Select
-          disabled={source !== 'LOCAL'}
+          disabled={!isCuratedSource(source)}
           allowClear
           placeholder="按分类筛选"
           value={category}
@@ -262,7 +248,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
         <Input
           allowClear
           prefix={<SearchOutlined />}
-          placeholder={source === 'SKILLHUB' ? '搜索 SkillHub Skills' : source === 'MCP_REGISTRY' ? '搜索官方 MCP Server' : '搜索名称、标签或能力'}
+          placeholder={source === 'SKILLHUB' ? '搜索 SkillHub Skills' : source === 'MCP_REGISTRY' ? '搜索官方 MCP Server' : source === 'EXPERTS' ? '搜索专家、专长或能力' : '搜索专家团队、场景或能力'}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="w-[280px]"
@@ -273,11 +259,11 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
         <div className="flex justify-center py-64">
           <Spin />
         </div>
-      ) : (source === 'LOCAL' ? resources.length : externalResources.length) === 0 ? (
+      ) : (isCuratedSource(source) ? resources.length : externalResources.length) === 0 ? (
         <Empty description="没有匹配的模板" />
       ) : (
         <div className="grid grid-cols-1 gap-16 md:grid-cols-2 xl:grid-cols-3">
-          {source === 'LOCAL' && resources.map((resource) => (
+          {isCuratedSource(source) && resources.map((resource) => (
             <Card
               key={resource.id}
               hoverable
@@ -289,7 +275,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
               title={
                 <div className="flex items-center justify-between gap-8">
                   <span>{resource.name}</span>
-                  <Tag>{resource.type}</Tag>
+                  <Tag>{resourceTypeLabel(resource.type)}</Tag>
                 </div>
               }
             >
@@ -313,7 +299,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                       void addResource(resource);
                     }}
                   >
-                    添加并启用
+                    {resource.type === 'AGENT' ? '添加专家' : '添加团队'}
                   </Button>
                 ) : (
                   <Button
@@ -330,7 +316,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
               </div>
             </Card>
           ))}
-          {source !== 'LOCAL' && externalResources.map((resource) => (
+          {!isCuratedSource(source) && externalResources.map((resource) => (
             <Card key={`${resource.source}-${resource.slug}`} hoverable onClick={() => setSelected(undefined)} className="h-full"
               title={<div className="flex items-center justify-between gap-8"><span>{resource.name}</span><Tag>{resource.type}</Tag></div>}>
               <Typography.Paragraph ellipsis={{ rows: 2 }} className="!mb-12">{resource.description || '暂无描述'}</Typography.Paragraph>
@@ -395,7 +381,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                 data-testid="marketplace-add-agent-confirm"
                 onClick={() => void addResource(selected)}
               >
-                添加并启用
+                {selected.type === 'AGENT' ? '添加专家' : selected.type === 'TEAM' ? '添加团队' : '添加并启用'}
               </Button>
             ) : (
               <Button

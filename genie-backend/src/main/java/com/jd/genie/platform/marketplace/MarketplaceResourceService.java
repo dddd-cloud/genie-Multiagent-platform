@@ -10,7 +10,10 @@ import com.jd.genie.platform.phase2.configuration.agent.dto.AgentSkillBindingReq
 import com.jd.genie.platform.phase2.configuration.agent.service.AgentDefinitionService;
 import com.jd.genie.platform.phase2.configuration.model.ModelCatalogService;
 import com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse;
+import com.jd.genie.platform.phase2.configuration.skill.service.SkillDefinitionService;
 import com.jd.genie.platform.phase2.configuration.skill.service.SkillPackageImportService;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageArchiveReader;
+import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageHasher;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamCreateRequest;
 import com.jd.genie.platform.phase2.configuration.team.dto.TeamResponse;
 import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
@@ -21,6 +24,7 @@ import com.jd.genie.platform.phase2.tooling.McpServerService;
 import com.jd.genie.platform.phase2.tooling.McpServerStatus;
 import com.jd.genie.platform.phase2.tooling.McpToolResponse;
 import com.jd.genie.platform.phase2.tooling.UpdateToolEnabledRequest;
+import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +55,9 @@ public class MarketplaceResourceService {
     private final AgentTeamService agentTeamService;
     private final MarketplacePackageArchiveService packageArchiveService;
     private final McpServerService mcpServerService;
+    private final SkillDefinitionService skillDefinitionService;
+    private final SkillPackageArchiveReader skillPackageArchiveReader;
+    private final SkillPackageHasher skillPackageHasher;
 
     @Autowired
     public MarketplaceResourceService(
@@ -59,7 +66,10 @@ public class MarketplaceResourceService {
         AgentDefinitionService agentDefinitionService,
         AgentTeamService agentTeamService,
         MarketplacePackageArchiveService packageArchiveService,
-        McpServerService mcpServerService
+        McpServerService mcpServerService,
+        SkillDefinitionService skillDefinitionService,
+        SkillPackageArchiveReader skillPackageArchiveReader,
+        SkillPackageHasher skillPackageHasher
     ) {
         this.objectMapper = objectMapper;
         this.skillPackageImportService = skillPackageImportService;
@@ -67,6 +77,9 @@ public class MarketplaceResourceService {
         this.agentTeamService = agentTeamService;
         this.packageArchiveService = packageArchiveService;
         this.mcpServerService = mcpServerService;
+        this.skillDefinitionService = skillDefinitionService;
+        this.skillPackageArchiveReader = skillPackageArchiveReader;
+        this.skillPackageHasher = skillPackageHasher;
         this.catalog = loadCatalog();
     }
 
@@ -79,7 +92,20 @@ public class MarketplaceResourceService {
         MarketplacePackageArchiveService packageArchiveService
     ) {
         this(objectMapper, skillPackageImportService, agentDefinitionService, agentTeamService,
-            packageArchiveService, null);
+            packageArchiveService, null, null, null, null);
+    }
+
+    /** Backward-compatible constructor for MCP-focused tests. */
+    public MarketplaceResourceService(
+        ObjectMapper objectMapper,
+        SkillPackageImportService skillPackageImportService,
+        AgentDefinitionService agentDefinitionService,
+        AgentTeamService agentTeamService,
+        MarketplacePackageArchiveService packageArchiveService,
+        McpServerService mcpServerService
+    ) {
+        this(objectMapper, skillPackageImportService, agentDefinitionService, agentTeamService,
+            packageArchiveService, mcpServerService, null, null, null);
     }
 
     /** Public test seam for catalog-only behavior; no installation services are available. */
@@ -90,6 +116,9 @@ public class MarketplaceResourceService {
         this.agentTeamService = null;
         this.packageArchiveService = null;
         this.mcpServerService = null;
+        this.skillDefinitionService = null;
+        this.skillPackageArchiveReader = null;
+        this.skillPackageHasher = null;
         this.catalog = loadCatalog();
     }
 
@@ -101,6 +130,9 @@ public class MarketplaceResourceService {
         this.agentTeamService = null;
         this.packageArchiveService = null;
         this.mcpServerService = null;
+        this.skillDefinitionService = null;
+        this.skillPackageArchiveReader = null;
+        this.skillPackageHasher = null;
         this.catalog = parseCatalogDocument(catalogJson);
     }
 
@@ -180,10 +212,17 @@ public class MarketplaceResourceService {
     }
 
     private List<MarketplaceCatalogEntry> loadCatalog() {
-        try (InputStream input = new ClassPathResource("marketplace/catalog.json").getInputStream()) {
+        List<MarketplaceCatalogEntry> combined = new ArrayList<>();
+        combined.addAll(loadCatalogFile("marketplace/catalog.json"));
+        combined.addAll(loadCatalogFile("marketplace/experts.json"));
+        return List.copyOf(combined);
+    }
+
+    private List<MarketplaceCatalogEntry> loadCatalogFile(String path) {
+        try (InputStream input = new ClassPathResource(path).getInputStream()) {
             return parseCatalogDocument(new String(input.readAllBytes()));
         } catch (IOException exception) {
-            log.error("Unable to load marketplace catalog; serving an empty directory", exception);
+            log.error("Unable to load marketplace catalog {}", path, exception);
             return List.of();
         }
     }
@@ -249,16 +288,38 @@ public class MarketplaceResourceService {
 
     private MarketplaceInstallResponse installSkill(CurrentUser user, MarketplaceCatalogEntry entry) {
         requireInstallServices();
-        SkillResponse skill = skillPackageImportService.importPackage(user, packageArchiveService.archive(entry.delivery()), null);
+        byte[] archive = packageArchiveService.archive(entry.delivery());
+        SkillResponse skill = findOwnedExactPackage(user, archive)
+            .orElseGet(() -> skillPackageImportService.importPackage(user, archive, null));
         return new MarketplaceInstallResponse(entry.id(), entry.type(), skill.id(), List.of(), List.of(skill.id()),
             null, "INSTALLED", "ENABLED".equals(skill.status()), List.of());
     }
 
+    /**
+     * A marketplace recipe is pinned to exact package bytes. Reuse is therefore
+     * safe across separate "add expert" actions, but a same-named user Skill with
+     * different content is never silently substituted.
+     */
+    private java.util.Optional<SkillResponse> findOwnedExactPackage(CurrentUser user, byte[] archive) {
+        if (skillDefinitionService == null || skillPackageArchiveReader == null || skillPackageHasher == null) {
+            return java.util.Optional.empty();
+        }
+        String expectedHash = skillPackageHasher.filesystemHash(skillPackageArchiveReader.read(archive).files().entrySet().stream()
+            .map(file -> new SkillPackageHasher.PackageFile(file.getKey(), file.getValue()))
+            .toList());
+        return skillDefinitionService.listSkills(user, 1, 100).items().stream()
+            .filter(skill -> "ENABLED".equals(skill.status()))
+            .filter(skill -> expectedHash.equals(skill.packageHash()))
+            .findFirst();
+    }
+
     private MarketplaceInstallResponse installAgent(CurrentUser user, MarketplaceCatalogEntry entry) {
         requireInstallServices();
-        InstalledAgent installed = createOnlineAgent(user, entry, entry.name(), new LinkedHashMap<>());
+        List<String> warnings = new ArrayList<>();
+        InstalledAgent installed = createOnlineAgent(user, entry, entry.name(), new LinkedHashMap<>(),
+            new LinkedHashMap<>(), warnings);
         return new MarketplaceInstallResponse(entry.id(), entry.type(), installed.agent().id(), List.of(installed.agent().id()),
-            installed.skillIds(), null, "INSTALLED", "ONLINE".equals(installed.agent().status()), List.of());
+            installed.skillIds(), null, "INSTALLED", "ONLINE".equals(installed.agent().status()), List.copyOf(warnings));
     }
 
     private MarketplaceInstallResponse installTeam(CurrentUser user, MarketplaceCatalogEntry entry) {
@@ -267,14 +328,18 @@ public class MarketplaceResourceService {
         if (templateIds.isEmpty()) throw invalid("Team template has no Agent blueprints");
         List<InstalledAgent> installed = new ArrayList<>();
         Map<String, String> installedSkillIds = new LinkedHashMap<>();
+        Map<String, List<String>> installedMcpCapabilities = new LinkedHashMap<>();
+        List<String> warnings = new ArrayList<>();
         for (int i = 0; i < templateIds.size(); i++) {
             MarketplaceCatalogEntry blueprint = find(templateIds.get(i)).orElseThrow(() -> invalid("Team Agent blueprint is missing"));
             if (blueprint.type() != MarketplaceResourceType.AGENT) throw invalid("Team blueprint must reference Agent templates");
-            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · " + blueprint.name(), installedSkillIds));
+            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · " + blueprint.name(), installedSkillIds,
+                installedMcpCapabilities, warnings));
         }
         if (installed.size() == 1) {
             MarketplaceCatalogEntry blueprint = find(templateIds.get(0)).orElseThrow(() -> invalid("Team Agent blueprint is missing"));
-            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · 结果复核", installedSkillIds));
+            installed.add(createOnlineAgent(user, blueprint, entry.name() + " · 结果复核", installedSkillIds,
+                installedMcpCapabilities, warnings));
         }
         String teamName = agentTeamService.nextAvailableName(user, entry.name());
         TeamResponse team = agentTeamService.createTeam(user, new TeamCreateRequest(teamName, entry.description(),
@@ -282,12 +347,16 @@ public class MarketplaceResourceService {
         List<String> agents = installed.stream().map(item -> item.agent().id()).toList();
         List<String> skills = installed.stream().flatMap(item -> item.skillIds().stream()).distinct().toList();
         return new MarketplaceInstallResponse(entry.id(), entry.type(), team.id(), agents, skills, team.id(),
-            "INSTALLED", true, List.of());
+            "INSTALLED", true, List.copyOf(warnings));
     }
 
     private InstalledAgent createOnlineAgent(CurrentUser user, MarketplaceCatalogEntry entry, String name,
-                                             Map<String, String> installedSkillIds) {
+                                             Map<String, String> installedSkillIds,
+                                             Map<String, List<String>> installedMcpCapabilities,
+                                             List<String> warnings) {
         List<String> installedSkills = installLinkedSkills(user, entry.draft(), installedSkillIds);
+        List<String> capabilityKeys = new ArrayList<>(stringList(entry.draft().path("capabilityKeys")));
+        capabilityKeys.addAll(installLinkedMcpCapabilities(entry.draft(), installedMcpCapabilities, warnings));
         List<AgentSkillBindingRequest> bindings = IntStream.range(0, installedSkills.size())
             .mapToObj(index -> new AgentSkillBindingRequest(installedSkills.get(index), index + 1)).toList();
         AgentResponse created = agentDefinitionService.createAgent(user, new AgentCreateRequest(
@@ -298,9 +367,48 @@ public class MarketplaceResourceService {
             entry.draft().path("systemPrompt").asText(),
             catalogModelName(entry.draft()),
             bindings,
-            stringList(entry.draft().path("capabilityKeys"))
+            List.copyOf(new LinkedHashSet<>(capabilityKeys))
         ));
         return new InstalledAgent(agentDefinitionService.onlineAgent(user, created.id(), created.version()), installedSkills);
+    }
+
+    /**
+     * MCP tool ids are user-owned and exist only after runtime discovery.  A curated
+     * template therefore installs and binds only enabled, available tools; it never
+     * pretends that an unreachable remote MCP is usable.
+     */
+    private List<String> installLinkedMcpCapabilities(
+            JsonNode draft,
+            Map<String, List<String>> installedMcpCapabilities,
+            List<String> warnings
+    ) {
+        LinkedHashSet<String> capabilities = new LinkedHashSet<>();
+        for (String linkedId : stringList(draft.path("marketplaceMcpIds"))) {
+            List<String> resolved = installedMcpCapabilities.get(linkedId);
+            if (resolved == null) {
+                MarketplaceCatalogEntry mcpEntry = find(linkedId)
+                    .orElseThrow(() -> invalid("linked MCP template is missing"));
+                if (mcpEntry.type() != MarketplaceResourceType.MCP) {
+                    throw invalid("linked resource is not an MCP");
+                }
+                MarketplaceInstallResponse installed = installMcp(mcpEntry);
+                if (!installed.enabled()) {
+                    warnings.addAll(installed.warnings());
+                    resolved = List.of();
+                } else {
+                    resolved = mcpServerService.tools(installed.primaryResourceId()).stream()
+                        .filter(tool -> tool.enabled() && tool.available())
+                        .map(tool -> CapabilityKeys.forMcpTool(tool.id()))
+                        .toList();
+                    if (resolved.isEmpty()) {
+                        warnings.add("MCP 已启用但没有可绑定的审核工具，未分配给专家。");
+                    }
+                }
+                installedMcpCapabilities.put(linkedId, resolved);
+            }
+            capabilities.addAll(resolved);
+        }
+        return List.copyOf(capabilities);
     }
 
     private List<String> installLinkedSkills(CurrentUser user, JsonNode draft, Map<String, String> installedSkillIds) {

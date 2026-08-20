@@ -38,6 +38,10 @@ class RouterFallbackTest {
         );
 
         assertEquals(new RouteDecision(RouteDecision.Route.DIRECT, "ROUTER_FALLBACK"), runtime.selectRoute("AUTO", "query", "", candidates));
+        // Resource creation is now a semantic planner/router decision.  A model outage
+        // must not let a backend keyword matcher create resources on the user's behalf.
+        assertEquals(new RouteDecision(RouteDecision.Route.DIRECT, "ROUTER_FALLBACK"),
+                runtime.selectRoute("AUTO", "给我一个游戏测试 Agent", "", candidates));
         assertEquals(new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST"), runtime.selectRoute("ORCHESTRATED", "query", "", candidates));
     }
 }

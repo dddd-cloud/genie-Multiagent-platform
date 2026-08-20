@@ -267,9 +267,6 @@ public final class Phase2OrchestrationRuntime {
             MasterPersona masterPersona
     ) {
         String routingQuery = ChatAttachmentPrompt.withoutUploadedFileBodies(query);
-        if (SystemResourceBuilder.requiresResourceCreation(routingQuery)) {
-            return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "RESOURCE_CREATION_REQUEST");
-        }
         if ("ORCHESTRATED".equals(mode)) {
             return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST");
         }
@@ -485,9 +482,13 @@ public final class Phase2OrchestrationRuntime {
         return changed ? new OrchestrationPlan(remapped) : plan;
     }
 
-    /** A resource request always begins with the hidden system Agent exactly once. */
+    /**
+     * Preserve the planner's semantic decision, while normalizing a selected hidden
+     * builder to one first step.  This deliberately does not infer creation intent
+     * from query keywords: that decision belongs to the planner model.
+     */
     static OrchestrationPlan enforceSystemResourceStep(String query, OrchestrationPlan plan) {
-        if (!SystemResourceBuilder.requiresResourceCreation(query) || plan == null) {
+        if (plan == null || plan.steps().stream().noneMatch(step -> SystemResourceBuilder.isSystemAgent(step.agentId()))) {
             return plan;
         }
         List<OrchestrationStep> retained = new java.util.ArrayList<>();
@@ -500,9 +501,14 @@ public final class Phase2OrchestrationRuntime {
             }
         }
         List<OrchestrationStep> normalized = new java.util.ArrayList<>();
+        OrchestrationStep plannedSystemStep = plan.steps().stream()
+                .filter(step -> SystemResourceBuilder.isSystemAgent(step.agentId()))
+                .findFirst().orElse(null);
         normalized.add(new OrchestrationStep(
                 "system-resource-create", SystemResourceBuilder.AGENT_ID,
-                "按用户意图创建 Agent 或 Team：使用贴合任务的名称、职责说明和系统提示词，并按最小权限绑定已启用的 Skill 和 MCP 工具。", List.of()
+                plannedSystemStep == null || plannedSystemStep.objective() == null || plannedSystemStep.objective().isBlank()
+                        ? "按用户意图创建 Agent 或 Team：输出结构化成员定义、职责、系统提示词及所需 Skill/MCP 绑定。"
+                        : plannedSystemStep.objective(), List.of()
         ));
         for (OrchestrationStep step : retained) {
             List<String> refs = step.inputRefs().stream().filter(ref -> !removedIds.contains(ref)).toList();

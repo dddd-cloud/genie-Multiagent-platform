@@ -14,11 +14,11 @@ class MarketplaceResourceServiceTest {
 
     @Test
     void catalogContainsAllFourResourceKindsWithoutCredentials() {
-        assertThat(service.entries()).hasSize(22);
+        assertThat(service.entries()).hasSize(58);
         assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
-            .filteredOn(MarketplaceResourceType.AGENT::equals).hasSize(5);
+            .filteredOn(MarketplaceResourceType.AGENT::equals).hasSize(33);
         assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
-            .filteredOn(MarketplaceResourceType.TEAM::equals).hasSize(4);
+            .filteredOn(MarketplaceResourceType.TEAM::equals).hasSize(12);
         assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
             .filteredOn(MarketplaceResourceType.SKILL::equals).hasSize(8);
         assertThat(service.entries()).extracting(MarketplaceCatalogEntry::type)
@@ -28,6 +28,24 @@ class MarketplaceResourceServiceTest {
             assertThat(entry.draft().toString()).doesNotContain("apiKey");
             assertThat(entry.draft().toString()).doesNotContain("tenantId");
         });
+    }
+
+    @Test
+    void curatedExpertTeamsOnlyReferenceListedExpertBlueprints() {
+        var expertIds = service.search(MarketplaceResourceType.AGENT, null, null).stream()
+            .map(MarketplaceResourceView::id)
+            .collect(java.util.stream.Collectors.toSet());
+        var teamBlueprintIds = service.entries().stream()
+            .filter(entry -> entry.type() == MarketplaceResourceType.TEAM)
+            .flatMap(entry -> {
+                var templates = entry.draft().path("recommendedAgentTemplates");
+                return java.util.stream.StreamSupport.stream(templates.spliterator(), false)
+                    .map(node -> node.asText());
+            })
+            .toList();
+
+        assertThat(teamBlueprintIds).isNotEmpty();
+        assertThat(expertIds).containsAll(teamBlueprintIds);
     }
 
     @Test

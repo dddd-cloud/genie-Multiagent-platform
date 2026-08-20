@@ -15,6 +15,7 @@ class SystemResourcePlanTest {
     @Test
     void prependsHiddenBuilderThenPreservesWorkForTheCurrentVisibleAgent() {
         OrchestrationPlan input = new OrchestrationPlan(List.of(
+                new OrchestrationStep("resource-step", SystemResourceBuilder.AGENT_ID, "创建一个开发团队", List.of()),
                 new OrchestrationStep("step-1", "current-team-agent", "继续生成软件", List.of())
         ));
         OrchestrationPlan plan = Phase2OrchestrationRuntime.enforceSystemResourceStep(
