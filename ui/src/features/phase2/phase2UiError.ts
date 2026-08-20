@@ -84,6 +84,9 @@ export function phase2ErrorMessage(
     return messageForCode(err, fallback);
   }
   if (err instanceof MvpApiError) {
+    if (err.code === 'VALIDATION_ERROR' && err.message?.trim() && err.message !== err.code) {
+      return err.message;
+    }
     return messageForCode(err.code, err.message || fallback);
   }
   if (err instanceof Error && err.message.trim()) {

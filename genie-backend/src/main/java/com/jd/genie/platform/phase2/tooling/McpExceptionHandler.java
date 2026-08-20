@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class McpExceptionHandler {
     @ExceptionHandler(Phase2ContractException.class)
     ResponseEntity<ApiResponse<Void>> phase2(Phase2ContractException ex) {
-        MvpErrorCode code=ex.errorCode(); return ResponseEntity.status(Phase2ErrorHttpStatus.httpStatus(code)).body(new ApiResponse<>(code.name(),code.name(),null));
+        MvpErrorCode code=ex.errorCode(); return ResponseEntity.status(Phase2ErrorHttpStatus.httpStatus(code)).body(new ApiResponse<>(code.name(),ex.getMessage(),null));
     }
     @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class})
     ResponseEntity<ApiResponse<Void>> validation(Exception ex) { return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse<>(MvpErrorCode.VALIDATION_ERROR.name(),MvpErrorCode.VALIDATION_ERROR.name(),null)); }

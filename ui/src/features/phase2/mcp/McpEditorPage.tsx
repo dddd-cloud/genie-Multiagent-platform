@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Modal, Space, Spin, Typography, message } from 'antd';
 import type { Phase2McpToolResponse } from '@/contracts/phase2';
 import type {
@@ -36,6 +36,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
   const { serverId } = useParams<{ serverId?: string }>();
   const isNew = !serverId || serverId === 'new';
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [form, setForm] = useState<McpFormState>(emptyMcpFormState());
   const [credential, setCredential] = useState('');
@@ -62,7 +63,14 @@ const McpEditorPage: GenieType.FC = memo(() => {
   const loadServer = useCallback(
     async (signal?: AbortSignal) => {
       if (isNew || !serverId) {
-        setForm(emptyMcpFormState());
+        const template = (location.state as {
+          externalMcpTemplate?: { name?: string; serverUrl?: string };
+        } | null)?.externalMcpTemplate;
+        setForm({
+          ...emptyMcpFormState(),
+          name: template?.name || '',
+          serverUrl: template?.serverUrl || '',
+        });
         setTools([]);
         setVersionConflict(false);
         clearCredential();
@@ -89,7 +97,7 @@ const McpEditorPage: GenieType.FC = memo(() => {
         setLoading(false);
       }
     },
-    [clearCredential, isNew, serverId],
+    [clearCredential, isNew, location.state, serverId],
   );
 
   useEffect(() => {

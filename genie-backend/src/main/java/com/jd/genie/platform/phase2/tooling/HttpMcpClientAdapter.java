@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -30,6 +32,7 @@ public class HttpMcpClientAdapter implements McpClientAdapter {
     private final McpUrlPolicy urlPolicy;
     private final String mcpClientUrl;
     private final String internalMcpToken;
+    private final ConcurrentMap<String, String> streamableSessions = new ConcurrentHashMap<>();
 
     public HttpMcpClientAdapter(
             ObjectMapper mapper,
@@ -48,7 +51,7 @@ public class HttpMcpClientAdapter implements McpClientAdapter {
         if (prefersGenieClient(url)) {
             return listToolsViaGenieClient(url, type, authName, credential);
         }
-        JsonNode tools = post(url, type, authName, credential, "tools/list", Map.of()).path("result").path("tools");
+        JsonNode tools = postWithStreamableSession(url, type, authName, credential, "tools/list", Map.of()).path("result").path("tools");
         if (!tools.isArray() || tools.size() > 200) {
             throw discovery();
         }
@@ -71,7 +74,7 @@ public class HttpMcpClientAdapter implements McpClientAdapter {
         if (prefersGenieClient(url)) {
             return callToolViaGenieClient(url, type, authName, credential, name, arguments);
         }
-        return post(url, type, authName, credential, "tools/call", Map.of("name", name, "arguments", arguments));
+        return postWithStreamableSession(url, type, authName, credential, "tools/call", Map.of("name", name, "arguments", arguments));
     }
 
     private List<RemoteTool> listToolsViaGenieClient(
@@ -195,6 +198,80 @@ public class HttpMcpClientAdapter implements McpClientAdapter {
         } catch (Exception error) {
             throw unavailable();
         }
+    }
+
+    /**
+     * Try the modern Streamable HTTP lifecycle first.  Legacy JSON-RPC HTTP
+     * servers do not understand initialize; for those, retain the original
+     * stateless request path.
+     */
+    private JsonNode postWithStreamableSession(
+            String raw, AuthType type, String authName, String credential,
+            String method, Map<String, Object> params
+    ) {
+        String key = raw == null ? "" : raw;
+        String session = streamableSessions.get(key);
+        if (session == null) {
+            HttpResponse<String> initialized = sendRemote(raw, type, authName, credential,
+                    "initialize", Map.of(
+                            "protocolVersion", "2025-06-18",
+                            "capabilities", Map.of(),
+                            "clientInfo", Map.of("name", "joyagent", "version", "phase3")
+                    ), null);
+            if (initialized != null && initialized.statusCode() / 100 == 2) {
+                JsonNode body = parseResponse(initialized);
+                if (!body.path("error").isObject()) {
+                    session = initialized.headers().firstValue("Mcp-Session-Id").orElse("");
+                    if (!session.isBlank()) streamableSessions.put(key, session);
+                    // MCP requires this notification before the first request
+                    // after a successful initialize handshake.
+                    sendRemote(raw, type, authName, credential, "notifications/initialized", Map.of(), session);
+                    return parseResponse(sendRemote(raw, type, authName, credential, method, params, session));
+                }
+            }
+            return post(raw, type, authName, credential, method, params);
+        }
+        return parseResponse(sendRemote(raw, type, authName, credential, method, params, session));
+    }
+
+    private HttpResponse<String> sendRemote(
+            String raw, AuthType type, String authName, String credential,
+            String method, Map<String, Object> params, String session
+    ) {
+        try {
+            URI uri = URI.create(resolveRemoteUrl(raw, type, authName, credential));
+            String body = mapper.writeValueAsString(Map.of("jsonrpc", "2.0", "id", System.nanoTime(), "method", method, "params", params));
+            HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json").header("Accept", "application/json, text/event-stream");
+            if (session != null && !session.isBlank()) builder.header("Mcp-Session-Id", session);
+            if (type == AuthType.BEARER_TOKEN) builder.header("Authorization", "Bearer " + credential);
+            HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+                    .followRedirects(HttpClient.Redirect.NEVER).build()
+                    .send(builder.POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 401 || response.statusCode() == 403) throw auth();
+            return response;
+        } catch (Phase2ContractException error) { throw error; }
+        catch (Exception error) { return null; }
+    }
+
+    private JsonNode parseResponse(HttpResponse<String> response) {
+        if (response == null || response.statusCode() / 100 != 2 || response.body() == null
+                || response.body().length() > 2 * 1024 * 1024) throw unavailable();
+        try {
+            String body = response.body().trim();
+            if (body.startsWith("data:") || body.contains("\ndata:")) {
+                String[] lines = body.split("\\R");
+                for (int i = lines.length - 1; i >= 0; i--) {
+                    String line = lines[i].trim();
+                    if (line.startsWith("data:")) {
+                        String data = line.substring("data:".length()).trim();
+                        if (!data.isBlank() && !"[DONE]".equals(data)) return mapper.readTree(data);
+                    }
+                }
+            }
+            return mapper.readTree(body);
+        }
+        catch (Exception error) { throw discovery(); }
     }
 
     private String resolveRemoteUrl(String raw, AuthType type, String authName, String credential) {

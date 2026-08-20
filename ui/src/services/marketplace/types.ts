@@ -1,4 +1,24 @@
 export type MarketplaceResourceType = 'AGENT' | 'TEAM' | 'SKILL' | 'MCP';
+export type ExternalMarketplaceSource = 'SKILLHUB' | 'MCP_REGISTRY';
+
+export interface ExternalMarketplaceResource {
+  source: ExternalMarketplaceSource;
+  type: Extract<MarketplaceResourceType, 'SKILL' | 'MCP'>;
+  slug: string;
+  version: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  stars: number;
+  downloads: number;
+  sourceUrl: string;
+  repositoryUrl: string;
+  remoteUrl: string;
+  transport: string;
+  requiresCredential: boolean;
+  compatibility: string;
+}
 
 export interface MarketplaceResource {
   id: string;

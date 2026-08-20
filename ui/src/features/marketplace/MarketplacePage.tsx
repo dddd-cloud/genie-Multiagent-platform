@@ -20,18 +20,25 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { phase2ErrorMessage } from '@/features/phase2/phase2UiError';
+import { useSettingsModal } from '../settings/SettingsModalContext';
 import AddSuccessToast from './AddSuccessToast';
 import {
   createMarketplaceDraft,
   installMarketplaceResource,
+  installSkillHubSkill,
   listMarketplaceCategories,
   listMarketplaceResources,
+  searchExternalMarketplace,
 } from '@/services/marketplace';
 import type {
+  ExternalMarketplaceResource,
+  ExternalMarketplaceSource,
   MarketplaceDraftResponse,
   MarketplaceResource,
   MarketplaceResourceType,
 } from '@/services/marketplace';
+
+type MarketplaceSource = 'LOCAL' | ExternalMarketplaceSource;
 
 const TYPE_OPTIONS: Array<{ label: string; value: MarketplaceResourceType | 'ALL' }> = [
   {
@@ -65,7 +72,10 @@ export interface MarketplacePageProps {
 }
 
 export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps) {
+  const { openSettings } = useSettingsModal();
   const [resources, setResources] = useState<MarketplaceResource[]>([]);
+  const [externalResources, setExternalResources] = useState<ExternalMarketplaceResource[]>([]);
+  const [source, setSource] = useState<MarketplaceSource>('SKILLHUB');
   const [selectedType, setSelectedType] = useState<MarketplaceResourceType | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>();
@@ -104,14 +114,14 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
     };
     async function loadResources() {
       setLoading(true);
-      listMarketplaceResources({
-        type: selectedType === 'ALL' ? undefined : selectedType,
-        category,
-        query: query || undefined,
-      })
+      const request = source === 'LOCAL'
+        ? listMarketplaceResources({ type: selectedType === 'ALL' ? undefined : selectedType, category, query: query || undefined })
+        : searchExternalMarketplace(source, query || undefined);
+      request
         .then((items) => {
           if (!cancelled) {
-            setResources(items);
+            if (source === 'LOCAL') setResources(items as MarketplaceResource[]);
+            else setExternalResources(items as ExternalMarketplaceResource[]);
             setError(undefined);
           }
         })
@@ -122,7 +132,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
           if (!cancelled) setLoading(false);
         });
     }
-  }, [selectedType, category, query]);
+  }, [selectedType, category, query, source]);
 
   async function copyDraft(resource: MarketplaceResource) {
     setDraftLoading(true);
@@ -169,6 +179,29 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
     }
   }
 
+  async function addExternalSkill(resource: ExternalMarketplaceResource) {
+    setAddingId(resource.slug);
+    setError(undefined);
+    try {
+      const result = await installSkillHubSkill(resource.slug, resource.version);
+      setSuccessToast({ id: Date.now(), text: `${result?.name || resource.name} 已导入并启用` });
+      setSelected(undefined);
+    } catch (err: unknown) {
+      setError(phase2ErrorMessage(err, 'SkillHub 导入失败，请稍后重试。'));
+    } finally {
+      setAddingId(undefined);
+    }
+  }
+
+  function configureExternalMcp(resource: ExternalMarketplaceResource) {
+    openSettings('/app/settings/mcp/new', {
+      externalMcpTemplate: {
+        name: resource.name,
+        serverUrl: resource.remoteUrl,
+      },
+    });
+  }
+
   return (
     <section className="mx-auto w-full max-w-[1180px] px-24 py-24" data-testid="marketplace-page">
       {successToast ? (
@@ -184,7 +217,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
             资源广场
           </Typography.Title>
           <Typography.Text type="secondary">
-            发现经过整理的 Agent、Team、Skill 和 MCP 模板。Agent、Team、Skill 可一键添加到当前账户。
+            从 SkillHub 和官方 MCP Registry 搜索并安装可用能力。
           </Typography.Text>
         </div>
         <Space direction="vertical" align="end">
@@ -198,11 +231,24 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
       </div>
       <div className="mb-20 flex flex-wrap items-center gap-12">
         <Segmented
+          options={[{ label: 'SkillHub', value: 'SKILLHUB' }, { label: '官方 MCP', value: 'MCP_REGISTRY' }]}
+          value={source}
+          onChange={(value) => {
+            const next = value as MarketplaceSource;
+            setSource(next);
+            setSelectedType(next === 'SKILLHUB' ? 'SKILL' : next === 'MCP_REGISTRY' ? 'MCP' : 'ALL');
+            setCategory(undefined);
+            setSelected(undefined);
+          }}
+        />
+        <Segmented
+          disabled={source !== 'LOCAL'}
           options={TYPE_OPTIONS}
           value={selectedType}
           onChange={(value) => setSelectedType(value as MarketplaceResourceType | 'ALL')}
         />
         <Select
+          disabled={source !== 'LOCAL'}
           allowClear
           placeholder="按分类筛选"
           value={category}
@@ -216,7 +262,7 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
         <Input
           allowClear
           prefix={<SearchOutlined />}
-          placeholder="搜索名称、标签或能力"
+          placeholder={source === 'SKILLHUB' ? '搜索 SkillHub Skills' : source === 'MCP_REGISTRY' ? '搜索官方 MCP Server' : '搜索名称、标签或能力'}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="w-[280px]"
@@ -227,11 +273,11 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
         <div className="flex justify-center py-64">
           <Spin />
         </div>
-      ) : resources.length === 0 ? (
+      ) : (source === 'LOCAL' ? resources.length : externalResources.length) === 0 ? (
         <Empty description="没有匹配的模板" />
       ) : (
         <div className="grid grid-cols-1 gap-16 md:grid-cols-2 xl:grid-cols-3">
-          {resources.map((resource) => (
+          {source === 'LOCAL' && resources.map((resource) => (
             <Card
               key={resource.id}
               hoverable
@@ -281,6 +327,18 @@ export default function MarketplacePage({ onDraftCreated }: MarketplacePageProps
                     查看配置
                   </Button>
                 )}
+              </div>
+            </Card>
+          ))}
+          {source !== 'LOCAL' && externalResources.map((resource) => (
+            <Card key={`${resource.source}-${resource.slug}`} hoverable onClick={() => setSelected(undefined)} className="h-full"
+              title={<div className="flex items-center justify-between gap-8"><span>{resource.name}</span><Tag>{resource.type}</Tag></div>}>
+              <Typography.Paragraph ellipsis={{ rows: 2 }} className="!mb-12">{resource.description || '暂无描述'}</Typography.Paragraph>
+              <Space wrap size={[4, 4]} className="mb-16">{resource.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}<Tag color="gold">★ {resource.stars}</Tag>{resource.downloads > 0 && <Tag>下载 {resource.downloads}</Tag>}{resource.type === 'MCP' && <Tag color={resource.requiresCredential ? 'orange' : 'green'}>{resource.requiresCredential ? '需要 API Key/OAuth' : '免费免 Key'}</Tag>}</Space>
+              <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} className="!mb-12">{resource.requiresCredential ? '需要服务商 API Key、OAuth 或付费凭据；请打开服务详情按提供方指引申请后再配置。' : '免费公开服务，无需 API Key，可直接配置并使用。'}</Typography.Paragraph>
+              <div className="flex items-center justify-between"><Typography.Text type="secondary">{resource.category}</Typography.Text>
+                {resource.type === 'SKILL' ? <Button type="link" icon={<PlusOutlined />} loading={addingId === resource.slug} onClick={(event) => { event.stopPropagation(); void addExternalSkill(resource); }}>导入 Skill</Button>
+                  : <Button type="link" icon={<CopyOutlined />} onClick={(event) => { event.stopPropagation(); configureExternalMcp(resource); }}>配置 MCP</Button>}
               </div>
             </Card>
           ))}

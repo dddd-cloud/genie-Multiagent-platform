@@ -22,6 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MarketplaceController {
     private final MarketplaceResourceService resources;
+    private final ExternalMarketplaceService externalResources;
     private final CurrentUserProvider currentUserProvider;
 
     @GetMapping("/resources")
@@ -46,6 +47,22 @@ public class MarketplaceController {
     @PostMapping("/resources/{id}/draft")
     public ApiResponse<MarketplaceDraftResponse> draft(@PathVariable String id) {
         return success(resources.createDraft(currentUserProvider.requireCurrentUser(), id));
+    }
+
+    @GetMapping("/external/resources")
+    public ApiResponse<List<ExternalMarketplaceResource>> externalResources(
+        @RequestParam ExternalMarketplaceSource source,
+        @RequestParam(required = false) String q,
+        @RequestParam(defaultValue = "stars") String sort
+    ) {
+        return success(externalResources.search(source, q, sort));
+    }
+
+    @PostMapping("/external/skillhub/install")
+    public ApiResponse<com.jd.genie.platform.phase2.configuration.skill.dto.SkillResponse> installSkillHub(
+        @org.springframework.web.bind.annotation.RequestBody ExternalMarketplaceInstallRequest request
+    ) {
+        return success(externalResources.installSkillHub(currentUserProvider.requireCurrentUser(), request));
     }
 
     @PostMapping("/resources/{id}/install")

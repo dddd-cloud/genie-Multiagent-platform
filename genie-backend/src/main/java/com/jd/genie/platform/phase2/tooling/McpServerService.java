@@ -33,9 +33,15 @@ public class McpServerService {
     public McpServerResponse get(String id) { var u=currentUser.requireCurrentUser(); return one(u.tenantId(),u.userId(),id); }
     @Transactional public McpServerResponse create(CreateMcpServerRequest req) {
         validate(req); urlPolicy.validate(req.serverUrl()); var u=currentUser.requireCurrentUser(); String id=UUID.randomUUID().toString(); LocalDateTime now=LocalDateTime.now(clock);
-        String envelope=credentials.encrypt(req.credential(),u.tenantId(),u.userId(),id,req.authType());
-        try { jdbc.update("INSERT INTO mcp_server(id,tenant_id,owner_id,name,server_url,auth_type,auth_name,credential_envelope,status,version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'DRAFT',0,?,?)", id,u.tenantId(),u.userId(),req.name().trim(),req.serverUrl().trim(),req.authType().name(),blankToNull(req.authName()),envelope,now,now); }
-        catch (DataAccessException ex) { throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR,"MCP server cannot be saved",ex); }
+        AuthType authType = req.authType() == null ? AuthType.NONE : req.authType();
+        String envelope=credentials.encrypt(req.credential(),u.tenantId(),u.userId(),id,authType);
+        try { jdbc.update("INSERT INTO mcp_server(id,tenant_id,owner_id,name,server_url,auth_type,auth_name,credential_envelope,status,version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'DRAFT',0,?,?)", id,u.tenantId(),u.userId(),req.name().trim(),req.serverUrl().trim(),authType.name(),blankToNull(req.authName()),envelope,now,now); }
+        catch (DataAccessException ex) {
+            if (ex.getCause() instanceof java.sql.SQLException sql && "23000".equals(sql.getSQLState())) {
+                throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR, "MCP 名称已存在，请换一个名称");
+            }
+            throw new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR,"MCP server cannot be saved",ex);
+        }
         return one(u.tenantId(),u.userId(),id);
     }
     @Transactional public McpServerResponse update(String id, UpdateMcpServerRequest req) {
@@ -105,7 +111,7 @@ public class McpServerService {
     }
     private String sha256(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
     private void validate(CreateMcpServerRequest r){if(r==null)throw validation();validate(r.name(),r.serverUrl(),r.authType(),r.authName());}
-    private void validate(String name,String url,AuthType type,String authName){if(name==null||name.isBlank()||name.length()>128||url==null||url.isBlank()||url.length()>2048||type==null)throw validation();if(type==AuthType.QUERY_PARAM&&(authName==null||authName.isBlank()))throw validation();if(type==AuthType.NONE&&authName!=null&&!authName.isBlank())throw validation();}
+    private void validate(String name,String url,AuthType type,String authName){if(name==null||name.isBlank()||name.length()>128||url==null||url.isBlank()||url.length()>2048)throw validation();if(type==AuthType.QUERY_PARAM&&(authName==null||authName.isBlank()))throw validation();if((type==null||type==AuthType.NONE)&&authName!=null&&!authName.isBlank())throw validation();}
     private String blankToNull(String v){return v==null||v.isBlank()?null:v.trim();} private Phase2ContractException validation(){return new Phase2ContractException(MvpErrorCode.VALIDATION_ERROR,"Invalid MCP server request");} private Phase2ContractException notFound(){return new Phase2ContractException(MvpErrorCode.RESOURCE_NOT_FOUND,"Resource not found");}
     private record Raw(String credentialEnvelope,String lastCheckStatus,String authType,String authName){}
 }

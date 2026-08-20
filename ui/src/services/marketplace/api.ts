@@ -1,5 +1,5 @@
 import { requestMvp } from '@/services/mvp';
-import type { MarketplaceDraftResponse, MarketplaceInstallResponse, MarketplaceResource, MarketplaceResourceType } from './types';
+import type { ExternalMarketplaceResource, ExternalMarketplaceSource, MarketplaceDraftResponse, MarketplaceInstallResponse, MarketplaceResource, MarketplaceResourceType } from './types';
 
 export async function listMarketplaceResources(filters: {
   type?: MarketplaceResourceType;
@@ -42,5 +42,21 @@ export function installMarketplaceResource(id: string) {
   return requestMvp<MarketplaceInstallResponse>({
     method: 'POST',
     url: `/api/v2/marketplace/resources/${id}/install`,
+  });
+}
+
+export async function searchExternalMarketplace(source: ExternalMarketplaceSource, query?: string, sort = 'stars') {
+  return (await requestMvp<ExternalMarketplaceResource[]>({
+    method: 'GET',
+    url: '/api/v2/marketplace/external/resources',
+    params: { source, q: query, sort },
+  })) ?? [];
+}
+
+export function installSkillHubSkill(slug: string, version: string) {
+  return requestMvp<{ id: string; name: string; status: string }>({
+    method: 'POST',
+    url: '/api/v2/marketplace/external/skillhub/install',
+    data: { slug, version },
   });
 }
