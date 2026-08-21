@@ -312,7 +312,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                                 candidates.get(0),
                                 new RouteDecision(RouteDecision.Route.ORCHESTRATED, route.reasonCode()),
                                 observer,
-                                attachmentPrompts.specialistQuery()
+                                attachmentPrompts.specialistQuery(),
+                                trustedRequest.getSessionId()
                         );
                     } catch (Throwable error) {
                         if (!observer.isTerminal()) {
@@ -341,7 +342,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             observer,
                             masterPersona,
                             request.teamId(),
-                            attachmentPrompts.specialistQuery()
+                            attachmentPrompts.specialistQuery(),
+                            trustedRequest.getSessionId()
                     );
                 } catch (Throwable error) {
                     if (!observer.isTerminal()) {
@@ -381,7 +383,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             agent,
                             route,
                             observer,
-                            attachmentPrompts.specialistQuery()
+                            attachmentPrompts.specialistQuery(),
+                            trustedRequest.getSessionId()
                     );
                 } catch (Throwable error) {
                     if (!observer.isTerminal()) {
@@ -434,7 +437,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                                 agent,
                                 new RouteDecision(RouteDecision.Route.ORCHESTRATED, "AUTO_SINGLE_AGENT"),
                                 observer,
-                                attachmentPrompts.specialistQuery()
+                                attachmentPrompts.specialistQuery(),
+                                trustedRequest.getSessionId()
                         );
                         return;
                     }
@@ -455,7 +459,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             observer,
                             teamTargets.masterPersona(),
                             decision.targetId(),
-                            attachmentPrompts.specialistQuery()
+                            attachmentPrompts.specialistQuery(),
+                            trustedRequest.getSessionId()
                     );
                 } catch (Throwable error) {
                     if (!observer.isTerminal()) {

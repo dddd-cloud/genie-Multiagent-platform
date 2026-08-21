@@ -425,11 +425,20 @@ export default function OrchestrationTimeline({
                   fallback: `专家${subIndex + 1}`,
                 }),
               );
+              const parallelLive =
+                step.status === 'RUNNING' ||
+                subTasks.some((sub) => sub.status !== 'PLANNED');
               return (
                 <div key={`${latest?.attemptNo}-${step.stepId}`}>
-                  <Notice testId={`orchestration-handoff-parallel-${step.stepId}`}>
-                    主规划安排 {names.join('、')} 同时开始
-                  </Notice>
+                  {parallelLive ? (
+                    <Notice testId={`orchestration-handoff-parallel-${step.stepId}`}>
+                      主规划安排 {names.join('、')} 同时开始
+                    </Notice>
+                  ) : thinking ? (
+                    <Notice testId={`orchestration-handoff-parallel-queued-${step.stepId}`}>
+                      随后将同时邀请 {names.join('、')}
+                    </Notice>
+                  ) : null}
                   {subTasks.map((sub, subIndex) => {
                     const subName = names[subIndex];
                     const phase = thoughtPhase(sub.status, thinking);

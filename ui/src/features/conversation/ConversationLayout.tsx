@@ -43,6 +43,7 @@ import {
   isNewConversationPath,
 } from './newConversationPath';
 import { peekConversationDraft } from './pendingConversationDraft';
+import { peekLiveChatRun } from './liveChatRuns';
 import {
   isUnusedConversation,
   unusedConversationIds,
@@ -193,7 +194,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
 
   const discardUnusedDrafts = useCallback(async (exceptId?: string | null) => {
     const ids = unusedConversationIds(itemsRef.current, exceptId).filter(
-      (id) => !peekConversationDraft(id),
+      (id) => !peekConversationDraft(id) && peekLiveChatRun(id)?.sendInFlight !== true,
     );
     ids.forEach((id) => {
       dispatch({

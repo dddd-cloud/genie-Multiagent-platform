@@ -5,6 +5,7 @@ import {
   type OrchestrationPlanStepView,
   type StepMode,
 } from '@/contracts';
+import { looksLikeUuid } from './orchestrationCopy';
 import type { OrchestrationTrace } from './parseOrchestrationTrace';
 import type {
   AttemptUiState,
@@ -270,17 +271,17 @@ function preferReadableAgentName(
   const pick = (value: string | null | undefined): string | null => {
     if (!value || value.trim().length === 0) return null;
     const trimmed = value.trim();
-    if (
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        trimmed,
-      )
-    ) {
+    if (looksLikeUuid(trimmed)) {
       return null;
     }
     if (trimmed === agentId) return null;
     return trimmed;
   };
   return pick(incoming) ?? pick(current) ?? agentId;
+}
+
+function activatePlanned<T extends string>(status: T): T | 'RUNNING' {
+  return status === 'PLANNED' ? 'RUNNING' : status;
 }
 
 function applyRouteSelected(
@@ -747,9 +748,17 @@ function applyParallelStarted(
       `PARALLEL_STARTED unknown step ignored (${event.eventId})`,
     );
   }
+  const subTasks = cloneSubTasks(step.subTasks ?? emptySubTasks());
+  for (const id of Object.keys(subTasks)) {
+    subTasks[id] = {
+      ...subTasks[id],
+      status: activatePlanned(subTasks[id].status),
+    };
+  }
   const next = updateStepStatus(state, attemptNo, stepId, {
     status: step.status === 'PLANNED' ? 'RUNNING' : step.status,
     stepMode: 'PARALLEL_AGENTS',
+    subTasks,
   });
   return acknowledgeEvent(next, event);
 }
@@ -1116,7 +1125,11 @@ export function reduceOrchestrationTrace(
   const step = existingAttempt.steps[stepId] ?? {
     stepId,
     agentId: trace.agentId ?? stepId,
-    agentName: trace.agentName ?? trace.agentId ?? stepId,
+    agentName: preferReadableAgentName(
+      trace.agentName,
+      undefined,
+      trace.agentId ?? stepId,
+    ),
     objective: '',
     status: 'RUNNING' as const,
     errorCode: null,
@@ -1143,7 +1156,11 @@ export function reduceOrchestrationTrace(
       ({
         subTaskId: trace.subTaskId,
         agentId: trace.agentId ?? '',
-        agentName: trace.agentName ?? trace.agentId ?? trace.subTaskId,
+        agentName: preferReadableAgentName(
+          trace.agentName,
+          undefined,
+          trace.agentId ?? trace.subTaskId,
+        ),
         objective: '',
         status: 'RUNNING' as const,
         retryNo: trace.retryNo ?? 0,
@@ -1154,9 +1171,14 @@ export function reduceOrchestrationTrace(
     const patchedSub: SubTaskUiState = {
       ...existing,
       agentId: trace.agentId ?? existing.agentId,
-      agentName: trace.agentName ?? existing.agentName,
+      agentName: preferReadableAgentName(
+        trace.agentName,
+        existing.agentName,
+        trace.agentId ?? existing.agentId,
+      ),
       retryNo: trace.retryNo ?? existing.retryNo,
       lines: appendTraceLine(existing.lines, trace),
+      status: activatePlanned(existing.status),
     };
     if (trace.kind === 'ERROR' && !existing.errorCode) {
       patchedSub.errorCode = trace.text;
@@ -1189,10 +1211,15 @@ export function reduceOrchestrationTrace(
   const patched: StepUiState = {
     ...step,
     agentId: trace.agentId ?? step.agentId,
-    agentName: trace.agentName ?? step.agentName,
+    agentName: preferReadableAgentName(
+      trace.agentName,
+      step.agentName,
+      trace.agentId ?? step.agentId,
+    ),
     objective: step.objective || objectiveFromStatus,
     lines: appendTraceLine(step.lines, trace),
     subTasks: cloneSubTasks(step.subTasks ?? emptySubTasks()),
+    status: activatePlanned(step.status),
   };
   if (trace.kind === 'OUTPUT') {
     patched.output =

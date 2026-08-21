@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -163,7 +164,7 @@ public final class SerialOrchestrationService {
             int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer
     ) {
-        return execute(user, query, "", longTermMemory, steps, events, cancellationRequested, reusableResults, traceChannel, attemptNo, observer);
+        return execute(user, query, "", longTermMemory, steps, events, cancellationRequested, reusableResults, traceChannel, attemptNo, observer, null);
     }
 
     public Map<String, AgentTaskResult> execute(
@@ -179,8 +180,27 @@ public final class SerialOrchestrationService {
             int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer
     ) {
+        return execute(user, query, conversationHistory, longTermMemory, steps, events, cancellationRequested,
+                reusableResults, traceChannel, attemptNo, observer, null);
+    }
+
+    public Map<String, AgentTaskResult> execute(
+            CurrentUser user,
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            Iterable<OrchestrationStep> steps,
+            OrchestrationEventSink events,
+            BooleanSupplier cancellationRequested,
+            Map<String, AgentTaskResult> reusableResults,
+            OrchestrationTraceChannel traceChannel,
+            int attemptNo,
+            com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
+            String fileSessionId
+    ) {
         AtomicReference<String> runningStepId = new AtomicReference<>();
         requestRunningStep.set(runningStepId);
+        String fileScope = resolveFileScope(fileSessionId);
         try {
             Map<String, AgentTaskResult> results = new LinkedHashMap<>();
             List<File> deliverableFiles = Collections.synchronizedList(new ArrayList<>());
@@ -217,7 +237,8 @@ public final class SerialOrchestrationService {
                         traceChannel,
                         attemptNo,
                         observer,
-                        deliverableFiles
+                        deliverableFiles,
+                        fileScope
                 );
                 results.put(step.stepId(), result);
                 blocked = result.status() == AgentTaskResult.Status.FAILURE;
@@ -243,12 +264,13 @@ public final class SerialOrchestrationService {
             OrchestrationTraceChannel traceChannel,
             int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
-            List<File> deliverableFiles
+            List<File> deliverableFiles,
+            String fileScope
     ) {
         return switch (step.mode()) {
             case SINGLE_AGENT -> executeSingleStepWithReview(
                     user, query, conversationHistory, longTermMemory, step, inputs, reusableResults, events, runningStepId,
-                    cancellationRequested, traceChannel, attemptNo, observer, deliverableFiles
+                    cancellationRequested, traceChannel, attemptNo, observer, deliverableFiles, fileScope
             );
             case PARALLEL_AGENTS -> executeParallelStep(
                     user,
@@ -263,7 +285,8 @@ public final class SerialOrchestrationService {
                     traceChannel,
                     attemptNo,
                     observer,
-                    deliverableFiles
+                    deliverableFiles,
+                    fileScope
             );
             case MAIN_ONLY -> executeMainOnlyStep(
                     user, longTermMemory, step, inputs, events, runningStepId,
@@ -359,10 +382,11 @@ public final class SerialOrchestrationService {
             OrchestrationTraceChannel traceChannel,
             int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
-            List<File> deliverableFiles
+            List<File> deliverableFiles,
+            String fileScope
     ) {
         AgentTaskResult initial = executeStep(user, query, conversationHistory, longTermMemory, step, step.stepId(), step.agentId(), step.objective(),
-                inputs, reusableResults, events, runningStepId, cancellationRequested, traceChannel, attemptNo, false, observer, deliverableFiles);
+                inputs, reusableResults, events, runningStepId, cancellationRequested, traceChannel, attemptNo, false, observer, deliverableFiles, fileScope);
         if (modelPort == null) {
             return initial;
         }
@@ -381,7 +405,7 @@ public final class SerialOrchestrationService {
         if (decision == OrchestrationModelPort.ReviewDecision.RETRY && retryNoEligible(0)) {
             events.emit("STEP_RETRY_STARTED", step, initial, Map.of("retryNo", 1));
             AgentTaskResult retried = executeStep(user, query, conversationHistory, longTermMemory, step, step.stepId(), step.agentId(), step.objective(),
-                    inputs, new LinkedHashMap<>(), events, runningStepId, cancellationRequested, traceChannel, attemptNo, false, observer, deliverableFiles);
+                    inputs, new LinkedHashMap<>(), events, runningStepId, cancellationRequested, traceChannel, attemptNo, false, observer, deliverableFiles, fileScope);
             OrchestrationModelPort.ReviewDecision retryDecision = review(step, retried, 1, events);
             if (retryDecision == OrchestrationModelPort.ReviewDecision.COMPLETE
                     && retried.status() == AgentTaskResult.Status.SUCCESS) {
@@ -497,7 +521,8 @@ public final class SerialOrchestrationService {
             OrchestrationTraceChannel traceChannel,
             int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
-            List<File> deliverableFiles
+            List<File> deliverableFiles,
+            String fileScope
     ) {
         if (!runningStepId.compareAndSet(null, step.stepId())) {
             throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "More than one orchestration step is running");
@@ -510,7 +535,7 @@ public final class SerialOrchestrationService {
                     "subTaskCount", step.subTasks().size()
             ));
             Map<OrchestrationSubTask, AgentTaskResult> results = executeParallelSubTasks(
-                    user, query, conversationHistory, longTermMemory, step, step.subTasks(), inputs, cancellationRequested, events, workers, traceChannel, attemptNo, observer, deliverableFiles
+                    user, query, conversationHistory, longTermMemory, step, step.subTasks(), inputs, cancellationRequested, events, workers, traceChannel, attemptNo, observer, deliverableFiles, fileScope
             );
             AgentTaskResult aggregate = ParallelStepExecutor.aggregate(List.copyOf(results.values()));
             if (modelPort == null) {
@@ -527,7 +552,7 @@ public final class SerialOrchestrationService {
                 if (!retryTargets.isEmpty()) {
                     events.emit("STEP_RETRY_STARTED", step, aggregate, Map.of("retryNo", 1));
                     results.putAll(executeParallelSubTasks(
-                            user, query, conversationHistory, longTermMemory, step, retryTargets, inputs, cancellationRequested, events, workers, traceChannel, attemptNo, observer, deliverableFiles
+                            user, query, conversationHistory, longTermMemory, step, retryTargets, inputs, cancellationRequested, events, workers, traceChannel, attemptNo, observer, deliverableFiles, fileScope
                     ));
                     aggregate = ParallelStepExecutor.aggregate(List.copyOf(results.values()));
                     decision = review(step, aggregate, 1, events);
@@ -557,11 +582,12 @@ public final class SerialOrchestrationService {
             ExecutorService workers,
             OrchestrationTraceChannel traceChannel, int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
-            List<File> deliverableFiles
+            List<File> deliverableFiles,
+            String fileScope
     ) {
         return ParallelStepExecutor.runAll(subTasks, workers, cancellationRequested, subTask -> executeSubTask(
                 user, query, conversationHistory, longTermMemory, step, subTask, inputs,
-                cancellationRequested, events, traceChannel, attemptNo, observer, deliverableFiles));
+                cancellationRequested, events, traceChannel, attemptNo, observer, deliverableFiles, fileScope));
     }
 
     private AgentTaskResult executeSubTask(
@@ -577,7 +603,8 @@ public final class SerialOrchestrationService {
             OrchestrationTraceChannel traceChannel,
             int attemptNo,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
-            List<File> deliverableFiles
+            List<File> deliverableFiles,
+            String fileScope
     ) {
         AtomicReference<String> subTaskRunningStep = new AtomicReference<>();
         requestRunningStep.set(subTaskRunningStep);
@@ -608,7 +635,8 @@ public final class SerialOrchestrationService {
                     attemptNo,
                     true,
                     observer,
-                    deliverableFiles
+                    deliverableFiles,
+                    fileScope
             );
         } finally {
             requestRunningStep.remove();
@@ -633,7 +661,8 @@ public final class SerialOrchestrationService {
             int attemptNo,
             boolean subTask,
             com.jd.genie.platform.agentbridge.ConversationStreamObserver observer,
-            List<File> deliverableFiles
+            List<File> deliverableFiles,
+            String fileScope
     ) {
         if (!runningStepId.compareAndSet(null, step.stepId())) {
             throw new AgentBridgeException(MvpErrorCode.INTERNAL_ERROR, "More than one orchestration step is running");
@@ -664,9 +693,20 @@ public final class SerialOrchestrationService {
                 }
                 return reused;
             }
-            List<File> productFiles = new ArrayList<>();
+            List<File> productFiles = priorDeliverables(deliverableFiles);
             List<File> taskProductFiles = new ArrayList<>();
             String normalizedObjective = objective == null ? "" : objective.trim();
+            emitExecutionEvent(events, "STARTED", step, executionId, agentId, agentName, null, Map.of(
+                    "agentId", agentId,
+                    "agentName", agentName
+            ), subTask);
+            if (traceChannel != null) {
+                emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, agentId, agentName,
+                        OrchestrationTraceChannel.KIND_STATUS,
+                        "开始执行：" + normalizedObjective,
+                        false,
+                        subTask);
+            }
             // Keep the original user question as a topic bound only; the executable task is still the step objective.
             String stepQuery = StepQueryBuilder.build(
                     agentName,
@@ -679,7 +719,7 @@ public final class SerialOrchestrationService {
             );
             AgentContext context = AgentContext.builder()
                     .requestId(executionId)
-                    .sessionId(executionId)
+                    .sessionId(fileScope)
                     .query(stepQuery)
                     .task(normalizedObjective)
                     .basePrompt(stepQuery)
@@ -696,17 +736,6 @@ public final class SerialOrchestrationService {
             context.setToolCollection(tools);
             if (cancellationRequested.getAsBoolean()) {
                 throw new AgentBridgeException(MvpErrorCode.CLIENT_DISCONNECTED, "Orchestration cancelled before Agent launch");
-            }
-            emitExecutionEvent(events, "STARTED", step, executionId, agentId, agentName, null, Map.of(
-                    "agentId", agentId,
-                    "agentName", agentName
-            ), subTask);
-            if (traceChannel != null) {
-                emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, agentId, agentName,
-                        OrchestrationTraceChannel.KIND_STATUS,
-                        "开始执行：" + normalizedObjective,
-                        false,
-                        subTask);
             }
             AgentTaskResult result = executor.execute(context, profile, printer, maxAgentSteps);
             DeliverableFiles.collect(deliverableFiles, context.getProductFiles());
@@ -873,6 +902,22 @@ public final class SerialOrchestrationService {
     public String runningStepId() {
         AtomicReference<String> runningStepId = requestRunningStep.get();
         return runningStepId == null ? null : runningStepId.get();
+    }
+
+    private static String resolveFileScope(String fileSessionId) {
+        if (fileSessionId == null || fileSessionId.isBlank()) {
+            return UUID.randomUUID().toString();
+        }
+        return fileSessionId.trim();
+    }
+
+    private static List<File> priorDeliverables(List<File> deliverableFiles) {
+        if (deliverableFiles == null || deliverableFiles.isEmpty()) {
+            return new ArrayList<>();
+        }
+        synchronized (deliverableFiles) {
+            return new ArrayList<>(deliverableFiles);
+        }
     }
 
     private String resultSignature(

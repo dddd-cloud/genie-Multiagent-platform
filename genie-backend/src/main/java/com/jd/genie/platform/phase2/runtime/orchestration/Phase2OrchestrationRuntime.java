@@ -186,6 +186,26 @@ public final class Phase2OrchestrationRuntime {
             String teamId,
             String specialistQuery
     ) {
+        execute(user, requestId, runId, query, conversationSummary, longTermMemory, conversationHistory,
+                candidates, route, observer, masterPersona, teamId, specialistQuery, requestId);
+    }
+
+    public void execute(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
+            String conversationHistory,
+            List<AgentCapabilitySummary> candidates,
+            RouteDecision route,
+            ConversationStreamObserver observer,
+            MasterPersona masterPersona,
+            String teamId,
+            String specialistQuery,
+            String fileSessionId
+    ) {
         MasterPersona persona = masterPersona == null ? MasterPersona.none() : masterPersona;
         Map<String, String> failures = new LinkedHashMap<>();
         AtomicLong sequence = new AtomicLong();
@@ -247,7 +267,8 @@ public final class Phase2OrchestrationRuntime {
                     new LinkedHashMap<>(),
                     traces,
                     1,
-                    observer
+                    observer,
+                    fileSessionId
             );
             collectResults(results, successes, failures);
             boolean hadDegraded = degraded.get();
@@ -290,6 +311,24 @@ public final class Phase2OrchestrationRuntime {
             RouteDecision route,
             ConversationStreamObserver observer,
             String specialistQuery
+    ) {
+        executeSolo(user, requestId, runId, query, conversationSummary, longTermMemory, conversationHistory,
+                agent, route, observer, specialistQuery, requestId);
+    }
+
+    public void executeSolo(
+            CurrentUser user,
+            String requestId,
+            String runId,
+            String query,
+            String conversationSummary,
+            String longTermMemory,
+            String conversationHistory,
+            AgentCapabilitySummary agent,
+            RouteDecision route,
+            ConversationStreamObserver observer,
+            String specialistQuery,
+            String fileSessionId
     ) {
         if (agent == null || agent.agentId() == null || agent.agentId().isBlank()) {
             throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
@@ -348,7 +387,8 @@ public final class Phase2OrchestrationRuntime {
                     new LinkedHashMap<>(),
                     traces,
                     1,
-                    observer
+                    observer,
+                    fileSessionId
             );
             Map<String, String> successes = new LinkedHashMap<>();
             Map<String, String> failures = new LinkedHashMap<>();

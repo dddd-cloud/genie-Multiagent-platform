@@ -225,7 +225,7 @@ describe('OrchestrationTimeline', () => {
                       agentId: 'backend',
                       agentName: '后端',
                       objective: '写接口',
-                      status: 'PLANNED',
+                      status: 'RUNNING',
                       retryNo: 0,
                       errorCode: null,
                       lines: [],
@@ -248,9 +248,97 @@ describe('OrchestrationTimeline', () => {
       '思考中',
     );
     expect(screen.getByTestId('orchestration-message-st-back-status')).toHaveTextContent(
-      '等待中',
+      '思考中',
     );
-    expect(screen.getByText('排队等待')).toBeTruthy();
+    expect(screen.getByText('正在思考')).toBeTruthy();
+    expect(screen.queryByText('排队等待')).toBeNull();
+  });
+
+  it('does not claim a later parallel group has started', () => {
+    render(
+      <OrchestrationTimeline
+        state={state({
+          masterOpen: true,
+          terminalStatus: 'RUNNING',
+          phaseLabel: 'thinking',
+          attempts: {
+            1: {
+              attemptNo: 1,
+              steps: {
+                s1: step({
+                  stepId: 's1',
+                  agentName: '前端',
+                  objective: '写页面',
+                  status: 'RUNNING',
+                  subTasks: {
+                    'st-front': {
+                      subTaskId: 'st-front',
+                      agentId: 'frontend',
+                      agentName: '代码团队·前端',
+                      objective: '写页面',
+                      status: 'RUNNING',
+                      retryNo: 0,
+                      errorCode: null,
+                      lines: [],
+                      open: true,
+                    },
+                    'st-back': {
+                      subTaskId: 'st-back',
+                      agentId: 'backend',
+                      agentName: '代码团队·后端',
+                      objective: '写接口',
+                      status: 'RUNNING',
+                      retryNo: 0,
+                      errorCode: null,
+                      lines: [],
+                      open: true,
+                    },
+                  },
+                }),
+                s2: step({
+                  stepId: 's2',
+                  agentName: '',
+                  objective: '审查测试',
+                  status: 'PLANNED',
+                  lines: [],
+                  subTasks: {
+                    'st-review': {
+                      subTaskId: 'st-review',
+                      agentId: 'review',
+                      agentName: '代码团队·审查官',
+                      objective: '审查',
+                      status: 'PLANNED',
+                      retryNo: 0,
+                      errorCode: null,
+                      lines: [],
+                      open: true,
+                    },
+                    'st-qa': {
+                      subTaskId: 'st-qa',
+                      agentId: 'qa',
+                      agentName: '代码团队·测试排爆',
+                      objective: '测试',
+                      status: 'PLANNED',
+                      retryNo: 0,
+                      errorCode: null,
+                      lines: [],
+                      open: true,
+                    },
+                  },
+                }),
+              },
+            },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('orchestration-handoff-parallel-s1')).toHaveTextContent(
+      '主规划安排 代码团队·前端、代码团队·后端 同时开始',
+    );
+    expect(
+      screen.getByTestId('orchestration-handoff-parallel-queued-s2'),
+    ).toHaveTextContent('随后将同时邀请 代码团队·审查官、代码团队·测试排爆');
+    expect(screen.queryByTestId('orchestration-handoff-parallel-s2')).toBeNull();
   });
 
   it('keeps later serial steps in waiting while the first is running', () => {

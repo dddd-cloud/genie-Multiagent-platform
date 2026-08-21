@@ -79,7 +79,7 @@ interface ChatViewProps {
   };
   detachedRunning: boolean;
   onReloadMessages: () => Promise<void>;
-  onConversationChanged: () => Promise<void>;
+  onConversationChanged: (conversationId?: string) => Promise<void>;
   privacyMode?: boolean;
   onPrivacyModeChange?: () => void;
   executionMode?: ExecutionMode;
@@ -328,10 +328,12 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const liveOnMount = conversationId
     ? peekLiveChatRun(conversationId)
     : undefined;
+  const seedChats =
+    liveOnMount && liveOnMount.chatList.length > 0
+      ? liveOnMount.chatList
+      : initialChats;
 
-  const [chatList, setChatList] = useState<PersistedChatItem[]>(
-    liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
-  );
+  const [chatList, setChatList] = useState<PersistedChatItem[]>(seedChats);
   const [taskList, setTaskList] = useState<MESSAGE.Task[]>([]);
   const [activeTask, setActiveTask] = useState<CHAT.Task>();
   const [plan, setPlan] = useState<CHAT.Plan>();
@@ -344,9 +346,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
   const chatRef = useRef<HTMLDivElement>(null);
   const actionViewRef = ActionView.useActionView();
-  const chatListRef = useRef<PersistedChatItem[]>(
-    liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
-  );
+  const chatListRef = useRef<PersistedChatItem[]>(seedChats);
 
   const relayWheelToChat = useMemoizedFn((event: WheelEvent<HTMLElement>) => {
     const chat = chatRef.current;
@@ -378,7 +378,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     for (const delayMs of [2000, 8000]) {
       const id = window.setTimeout(() => {
         titleRefreshTimersRef.current = titleRefreshTimersRef.current.filter((item) => item !== id);
-        void onConversationChanged();
+        void onConversationChanged(sessionIdRef.current || undefined);
       }, delayMs);
       titleRefreshTimersRef.current.push(id);
     }
@@ -1026,7 +1026,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           return;
         }
         openedOnceRef.current = true;
-        void onConversationChanged();
+        void onConversationChanged(sessionId);
         scheduleTitleRefresh();
       };
 
@@ -1075,7 +1075,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         finishLiveChatRun(sessionId, requestId);
         if (mountedRef.current) {
           await onReloadMessages();
-          await onConversationChanged();
+          await onConversationChanged(sessionId);
         }
         return;
       }
@@ -1115,7 +1115,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       if (result.reason === 'ABORT') {
         if (stoppedByUser) {
           if (mountedRef.current) {
-            await onConversationChanged();
+            await onConversationChanged(sessionId);
           }
           return;
         }

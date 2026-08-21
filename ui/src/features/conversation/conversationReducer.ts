@@ -91,6 +91,16 @@ export function conversationReducer(
           items: [action.item, ...state.items],
         };
       }
+      const prev = state.items[index];
+      const bumpToFront =
+        Boolean(action.item.lastMessageAt) &&
+        action.item.lastMessageAt !== prev.lastMessageAt;
+      if (bumpToFront) {
+        return {
+          ...state,
+          items: [action.item, ...state.items.filter((_, i) => i !== index)],
+        };
+      }
       const next = state.items.slice();
       next[index] = action.item;
       return {

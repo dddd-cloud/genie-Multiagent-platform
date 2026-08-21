@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -134,8 +135,8 @@ class ParallelOrchestrationServiceTest {
         assertNotSame(first.getToolCollection(), second.getToolCollection());
         assertEquals("sub-a", first.getRequestId());
         assertEquals("sub-b", second.getRequestId());
-        assertEquals("sub-a", first.getSessionId());
-        assertEquals("sub-b", second.getSessionId());
+        assertEquals(first.getSessionId(), second.getSessionId());
+        assertNotEquals(first.getRequestId(), first.getSessionId());
     }
 
     @Test

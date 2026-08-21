@@ -132,6 +132,72 @@ describe('TraceV2SubTaskTest', () => {
       'output B',
     ]);
     expect(state.lastTraceSequence).toBe(4);
+    expect(step.subTasks['st-a'].status).toBe('RUNNING');
+    expect(step.subTasks['st-b'].status).toBe('RUNNING');
+  });
+
+  it('keeps the planned Chinese name when a later trace sends a UUID', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        attemptNo: null,
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        steps: [
+          {
+            stepId: 's1',
+            agentId: null,
+            agentName: null,
+            objective: 'Parallel',
+            inputRefs: [],
+            mode: 'PARALLEL_AGENTS',
+            subTasks: [
+              {
+                subTaskId: 'st-back',
+                agentId: '4ec620f8-9449-4bc1-9f4c-44f423d56914',
+                agentName: '代码团队·后端',
+                objective: '写接口',
+              },
+              {
+                subTaskId: 'st-front',
+                agentId: 'front-id',
+                agentName: '代码团队·前端',
+                objective: '写页面',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    state = reduceOrchestrationTrace(
+      state,
+      trace({
+        sequence: 3,
+        scope: 'SUBTASK',
+        subTaskId: 'st-back',
+        agentId: '4ec620f8-9449-4bc1-9f4c-44f423d56914',
+        agentName: '4ec620f8-9449-4bc1-9f4c-44f423d56914',
+        kind: 'THOUGHT',
+        text: '先写会话接口。',
+      }),
+    );
+
+    const back = state.attempts[1].steps.s1.subTasks['st-back'];
+    expect(back.agentName).toBe('代码团队·后端');
+    expect(back.status).toBe('RUNNING');
   });
 
   it('reroutes leftover parent STEP traces onto the matching subtask', () => {
