@@ -16,18 +16,13 @@ test.describe('Phase2 real E2E smoke', () => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
     await expect(page.getByTestId('phase2-navigation')).toBeVisible();
-    await openSettingsSection(page, 'Agent');
-    await expect(
-      page.getByTestId('settings-nav').getByRole('link', { name: 'Agent' }),
-    ).toBeVisible();
-    await expect(
-      page.getByTestId('settings-nav').getByRole('link', { name: 'Skill' }),
-    ).toBeVisible();
-    await expect(
-      page.getByTestId('settings-nav').getByRole('link', { name: 'MCP' }),
-    ).toBeVisible();
+    await expect(page.getByTestId('app-navigation').getByRole('link', { name: '资源广场' })).toBeVisible();
+    await openSettingsSection(page, '本地记忆');
     await expect(
       page.getByTestId('settings-nav').getByRole('link', { name: '本地记忆' }),
     ).toBeVisible();
+    await expect(
+      page.getByTestId('settings-nav').getByRole('link', { name: '智能体' }),
+    ).toHaveCount(0);
   });
 });

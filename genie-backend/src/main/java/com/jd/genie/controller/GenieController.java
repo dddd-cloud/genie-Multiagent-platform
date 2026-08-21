@@ -5,6 +5,7 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.jd.genie.agent.agent.AgentContext;
 import com.jd.genie.agent.llm.RequestScopedLlmSettings;
+import com.jd.genie.agent.llm.RequestTokenUsage;
 import com.jd.genie.agent.printer.Printer;
 import com.jd.genie.agent.printer.SSEPrinter;
 import com.jd.genie.agent.tool.ToolCollection;
@@ -127,6 +128,7 @@ public class GenieController {
         // 执行调度引擎
         ThreadUtil.execute(() -> {
             try {
+                RequestTokenUsage.setBillingRequestId(RequestTokenUsage.fromAgentRequestId(request.getRequestId()));
                 applyRuntimeModel(request);
                 Printer printer = new SSEPrinter(emitter, request, request.getAgentType(), sendLock);
                 AgentContext agentContext = AgentContext.builder()
@@ -159,6 +161,7 @@ public class GenieController {
                 log.error("{} auto agent failed", request.getRequestId());
             } finally {
                 RequestScopedLlmSettings.clear();
+                RequestTokenUsage.clearBillingRequestId();
             }
         });
 

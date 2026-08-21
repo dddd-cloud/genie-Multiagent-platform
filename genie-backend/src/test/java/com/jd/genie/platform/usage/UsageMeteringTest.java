@@ -16,6 +16,7 @@ import com.jd.genie.platform.usage.mapper.UsageUserAggregateRow;
 import com.jd.genie.platform.usage.service.ExecutionTelemetryRegistry;
 import com.jd.genie.platform.usage.service.MeteringConversationExecutionPort;
 import com.jd.genie.platform.usage.service.UsageRecordingService;
+import com.jd.genie.agent.llm.RequestTokenUsage;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -58,6 +59,24 @@ class UsageMeteringTest {
         assertEquals("req-1", row.getRequestId());
         assertEquals(1_500L, row.getDurationMs());
         assertNotNull(row.getId());
+    }
+
+    @Test
+    void completeCopiesAccumulatedTokenUsageOntoTheMeteringRow() {
+        RequestTokenUsage.add("req-1", "gpt-4o-mini", 11, 22, 33);
+        MovingClock clock = new MovingClock(Instant.parse("2026-01-02T03:04:05Z"));
+        MeteringConversationExecutionPort port = port(clock, prepared());
+
+        ConversationExecutionResult result = port.prepareExecution(USER,
+            new ConversationExecutionCommand("conv-1", "req-1", "你好", 0, "html"));
+        port.complete(USER, new MessageCompletionCommand(result.assistantMessageId(), "done", "{}", 1));
+
+        ModelUsageRecordEntity row = mapper.rows.get(0);
+        assertEquals("gpt-4o-mini", row.getModelName());
+        assertEquals(11L, row.getPromptTokens());
+        assertEquals(22L, row.getCompletionTokens());
+        assertEquals(33L, row.getTotalTokens());
+        assertNull(RequestTokenUsage.consume("req-1"));
     }
 
     @Test

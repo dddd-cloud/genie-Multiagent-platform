@@ -35,6 +35,7 @@ public final class OrchestrationTraceChannel {
     private final String mainDisplayName;
     // PARALLEL_AGENTS subtasks share one channel across worker threads.
     private final Map<String, Integer> stepEmittedChars = new ConcurrentHashMap<>();
+    private final Object emitLock = new Object();
 
     public OrchestrationTraceChannel(
             ConversationStreamObserver observer,
@@ -96,6 +97,23 @@ public final class OrchestrationTraceChannel {
     }
 
     private void emit(
+            String scope,
+            Integer attemptNo,
+            Integer retryNo,
+            String stepId,
+            String subTaskId,
+            String agentId,
+            String agentName,
+            String kind,
+            String text,
+            boolean append
+    ) {
+        synchronized (emitLock) {
+            emitLocked(scope, attemptNo, retryNo, stepId, subTaskId, agentId, agentName, kind, text, append);
+        }
+    }
+
+    private void emitLocked(
             String scope,
             Integer attemptNo,
             Integer retryNo,

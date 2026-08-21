@@ -136,6 +136,87 @@ describe('TraceV2SubTaskTest', () => {
     expect(step.subTasks['st-b'].status).toBe('RUNNING');
   });
 
+  it('keeps a slower expert visible when a faster expert already has a higher sequence', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        attemptNo: null,
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        steps: [
+          {
+            stepId: 's1',
+            agentId: null,
+            agentName: null,
+            objective: 'Parallel',
+            inputRefs: [],
+            mode: 'PARALLEL_AGENTS',
+            subTasks: [
+              {
+                subTaskId: 'st-front',
+                agentId: 'agent-front',
+                agentName: '前端工程师',
+                objective: '前端',
+              },
+              {
+                subTaskId: 'st-back',
+                agentId: 'agent-back',
+                agentName: '后端工程师',
+                objective: '后端',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    state = reduceOrchestrationTrace(
+      state,
+      trace({
+        sequence: 20,
+        scope: 'SUBTASK',
+        subTaskId: 'st-back',
+        agentId: 'agent-back',
+        agentName: '后端工程师',
+        kind: 'THOUGHT',
+        text: '后端接口设计',
+      }),
+    );
+    state = reduceOrchestrationTrace(
+      state,
+      trace({
+        sequence: 8,
+        scope: 'SUBTASK',
+        subTaskId: 'st-front',
+        agentId: 'agent-front',
+        agentName: '前端工程师',
+        kind: 'THOUGHT',
+        text: '页面结构草案',
+      }),
+    );
+
+    const step = state.attempts[1].steps.s1;
+    expect(step.subTasks['st-back'].lines.map((l) => l.text)).toEqual([
+      '后端接口设计',
+    ]);
+    expect(step.subTasks['st-front'].lines.map((l) => l.text)).toEqual([
+      '页面结构草案',
+    ]);
+    expect(state.lastTraceSequence).toBe(20);
+  });
+
   it('keeps the planned Chinese name when a later trace sends a UUID', () => {
     let state = createInitialOrchestrationState();
     state = reduceOrchestrationEvent(

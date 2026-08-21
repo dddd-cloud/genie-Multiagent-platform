@@ -42,7 +42,7 @@ const ModelSettingsPage: GenieType.FC = memo(() => {
     <div data-testid="settings-models">
       <div className="mb-16 flex items-start justify-between gap-12">
         <p className="m-0 text-[13px] leading-[20px] text-text-secondary">
-          在这里添加和编辑可用模型。API Key 只会写入服务端，详情里始终显示为圆点。
+          管理可用模型。API Key 仅保存在服务端。
         </p>
         <Button
           type="primary"

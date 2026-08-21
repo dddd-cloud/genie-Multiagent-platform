@@ -30,7 +30,13 @@ export function formatAverageDuration(totals: UsageTotals): string {
 }
 
 export function formatTokens(totals: UsageTotals): string {
-  return totals.tokensAvailable ? formatCount(totals.totalTokens) : TOKENS_UNAVAILABLE;
+  if (totals.tokensAvailable) {
+    return formatCount(totals.totalTokens);
+  }
+  if (totals.calls <= 0) {
+    return formatCount(0);
+  }
+  return TOKENS_UNAVAILABLE;
 }
 
 export function successRate(totals: UsageTotals): string {

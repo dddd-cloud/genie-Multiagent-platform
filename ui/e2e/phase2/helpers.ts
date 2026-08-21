@@ -17,12 +17,33 @@ export async function loginAsMock(
 
 export async function openSettingsSection(
   page: Page,
-  name: 'Agent' | 'Skill' | 'MCP' | '本地记忆' | '模型' | '偏好' | '账户与用量',
+  name: '本地记忆' | '模型' | '偏好' | '账户与用量',
 ): Promise<void> {
   await page.getByTestId('sidebar-user-menu').click();
   await page.getByTestId('settings-menu-item').click();
   await page.getByTestId('settings-nav').waitFor();
   await page.getByTestId('settings-nav').getByRole('link', { name }).click();
+}
+
+export async function openMarketplaceLibrary(
+  page: Page,
+  kind: 'agents' | 'teams' | 'skills' | 'connectors',
+): Promise<void> {
+  await page.getByTestId('app-navigation').getByRole('link', { name: '资源广场' }).click();
+  const tabLabel = {
+    agents: '智能体',
+    teams: '智能体团队',
+    skills: '技能',
+    connectors: '连接器',
+  }[kind];
+  await page.getByTestId('marketplace-tabs').getByText(tabLabel, { exact: true }).click();
+  const buttonId = {
+    agents: 'marketplace-my-agents',
+    teams: 'marketplace-my-teams',
+    skills: 'marketplace-my-skills',
+    connectors: 'marketplace-my-connectors',
+  }[kind];
+  await page.getByTestId(buttonId).click();
 }
 
 export async function logoutMock(page: Page): Promise<void> {

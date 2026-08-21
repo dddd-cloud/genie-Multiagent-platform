@@ -7,7 +7,6 @@ import {
   ClusterOutlined,
   ControlOutlined,
   IdcardOutlined,
-  RobotOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
 import classNames from 'classnames';
@@ -17,7 +16,6 @@ import { useSettingsModal } from './SettingsModalContext';
 
 const SETTINGS_ICONS: Record<string, ReactNode> = {
   '/app/settings/models': <ClusterOutlined />,
-  '/app/settings/agents': <RobotOutlined />,
   '/app/settings/memory': <BookOutlined />,
   '/app/settings/preferences': <ControlOutlined />,
   '/app/settings/account': <IdcardOutlined />,

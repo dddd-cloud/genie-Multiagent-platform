@@ -12,6 +12,11 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -91,8 +96,74 @@ class OrchestrationTraceV2SubTaskTest {
         assertEquals(2, traces.get(1).get("schemaVersion"));
     }
 
+    @Test
+    void concurrentSubTaskEmitsKeepMonotonicSendOrder() throws Exception {
+        RecordingChannel channel = new RecordingChannel();
+        ConversationStreamObserver observer = new ConversationStreamObserver(
+                new StreamPersistenceObserver(new FakeConversationExecutionPort(), USER, "assistant-1"),
+                channel
+        );
+        AtomicLong sequence = new AtomicLong();
+        OrchestrationTraceChannel traceChannel = new OrchestrationTraceChannel(observer, "request-1", "run-1", sequence);
+        int perWorker = 40;
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+        pool.submit(() -> {
+            awaitQuietly(start);
+            try {
+                for (int index = 0; index < perWorker; index++) {
+                    traceChannel.emitSubTask(1, null, "step-1", "sub-a", "agent-a", "前端",
+                            OrchestrationTraceChannel.KIND_THOUGHT, "A" + index, false);
+                }
+            } finally {
+                done.countDown();
+            }
+        });
+        pool.submit(() -> {
+            awaitQuietly(start);
+            try {
+                for (int index = 0; index < perWorker; index++) {
+                    traceChannel.emitSubTask(1, null, "step-1", "sub-b", "agent-b", "后端",
+                            OrchestrationTraceChannel.KIND_THOUGHT, "B" + index, false);
+                }
+            } finally {
+                done.countDown();
+            }
+        });
+        start.countDown();
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+        pool.shutdownNow();
+
+        List<Map<?, ?>> traces = channel.traces();
+        assertEquals(perWorker * 2, traces.size());
+        long previous = 0;
+        int seenA = 0;
+        int seenB = 0;
+        for (Map<?, ?> trace : traces) {
+            long seq = ((Number) trace.get("sequence")).longValue();
+            assertTrue(seq > previous, "send order must match sequence order");
+            previous = seq;
+            if ("sub-a".equals(trace.get("subTaskId"))) {
+                seenA++;
+            } else if ("sub-b".equals(trace.get("subTaskId"))) {
+                seenB++;
+            }
+        }
+        assertEquals(perWorker, seenA);
+        assertEquals(perWorker, seenB);
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static final class RecordingChannel implements ConversationStreamObserver.ClientChannel {
-        private final List<GptProcessResult> events = new ArrayList<>();
+        private final List<GptProcessResult> events = new CopyOnWriteArrayList<>();
 
         @Override
         public void sendEvent(GptProcessResult event) {

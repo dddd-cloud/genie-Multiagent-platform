@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { loginAsMock, openSettingsSection } from '../helpers';
+import { loginAsMock, openMarketplaceLibrary } from '../helpers';
 
 test.describe('Phase2 MCP credential security (mock)', () => {
   test('credential not in URL or localStorage after save', async ({ page }) => {
     const secret = `e2e-secret-${Date.now()}`;
     await loginAsMock(page, 'user-a');
 
-    await openSettingsSection(page, 'MCP');
-    await page.getByRole('button', { name: /新建 MCP/i }).click();
+    await openMarketplaceLibrary(page, 'connectors');
+    await page.getByRole('button', { name: /^新建$/ }).click();
     await expect(page.getByTestId('mcp-editor-page')).toBeVisible();
 
     await page.getByTestId('mcp-name').fill('Secure MCP');

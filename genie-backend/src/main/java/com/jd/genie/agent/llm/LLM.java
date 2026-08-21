@@ -237,6 +237,7 @@ public class LLM {
             }
 
             log.info("{} call llm ask request {}", context.getRequestId(), JSONObject.toJSONString(params));
+            final String billingRequestId = RequestTokenUsage.billingKeyOr(context.getRequestId());
             // 处理非流式请求
             if (!stream) {
                 params.put("stream", false);
@@ -255,7 +256,9 @@ public class LLM {
                             throw new IllegalArgumentException("Empty or invalid response from LLM");
                         }
 
-                        return choices.get(0).get("message").get("content").asText();
+                        String content = choices.get(0).get("message").get("content").asText();
+                        recordTokenUsage(billingRequestId, jsonResponse.get("usage"), formattedMessages, content);
+                        return content;
                     } catch (IOException e) {
                         throw new CompletionException(e);
                     }
@@ -264,7 +267,10 @@ public class LLM {
                 // 处理流式请求
                 params.put("stream", true);
                 // 调用流式 API
-                return callOpenAIStream(params);
+                return callOpenAIStream(params).thenApply(content -> {
+                    recordTokenUsage(billingRequestId, null, formattedMessages, content);
+                    return content;
+                });
             }
         } catch (Exception e) {
             log.error("{} Unexpected error in ask: {}", e.getMessage(), e);
@@ -466,6 +472,7 @@ public class LLM {
             }
 
             log.info("{} call llm request {}", context.getRequestId(), JSONObject.toJSONString(params));
+            final String billingRequestId = RequestTokenUsage.billingKeyOr(context.getRequestId());
             if (!stream) {
                 params.put("stream", false);
                 // 调用 API
@@ -519,7 +526,10 @@ public class LLM {
                         }
                         // 提取其他信息
                         String finishReason = choices.get(0).get("finish_reason").asText();
-                        int totalTokens = jsonResponse.get("usage").get("total_tokens").asInt();
+                        JsonNode usageNode = jsonResponse.get("usage");
+                        int totalTokens = usageNode == null ? 0 : usageNode.path("total_tokens").asInt(0);
+                        recordTokenUsage(billingRequestId, usageNode, formattedMessages,
+                                completionText(content, toolCalls));
 
                         long endTime = System.currentTimeMillis();
                         long duration = endTime - startTime;
@@ -614,6 +624,9 @@ public class LLM {
      */
     public CompletableFuture<ToolCallResponse> callOpenAIFunctionCallStream(AgentContext context, Map<String, Object> params, int timeout) {
         CompletableFuture<ToolCallResponse> future = new CompletableFuture<>();
+        final String billingRequestId = RequestTokenUsage.billingKeyOr(context.getRequestId());
+        @SuppressWarnings("unchecked")
+        final List<Map<String, Object>> billedMessages = (List<Map<String, Object>>) params.get("messages");
         try {
             OkHttpClient client = new OkHttpClient.Builder()
                     .callTimeout(timeout, TimeUnit.SECONDS)
@@ -661,6 +674,7 @@ public class LLM {
                         StringBuilder stringBuilderAll = new StringBuilder();
                         int index = 1;
                         Map<Integer, OpenAIToolCall> openToolCallsMap = new HashMap<>();
+                        JsonNode[] lastUsage = new JsonNode[1];
                         String line;
                         BufferedReader reader = new BufferedReader(
                                 new InputStreamReader(responseBody.byteStream())
@@ -676,6 +690,9 @@ public class LLM {
                                 }
                                 try {
                                     JsonNode chunk = objectMapper.readTree(data);
+                                    if (chunk.has("usage") && chunk.get("usage").isObject()) {
+                                        lastUsage[0] = chunk.get("usage");
+                                    }
                                     if (chunk.has("choices") && !chunk.get("choices").isEmpty()) {
                                         for (JsonNode element : chunk.get("choices")) {
                                             OpenAIChoice choice = objectMapper.convertValue(element, OpenAIChoice.class);
@@ -781,6 +798,8 @@ public class LLM {
 
                         log.info("{} call llm stream response {} {}", context.getRequestId(), stringBuilderAll, JSON.toJSONString(toolCalls));
 
+                        recordTokenUsage(billingRequestId, lastUsage[0], billedMessages,
+                                completionText(contentAll, toolCalls));
                         ToolCallResponse fullResponse = ToolCallResponse.builder()
                                 .toolCalls(toolCalls)
                                 .content(contentAll)
@@ -807,6 +826,9 @@ public class LLM {
      */
     public CompletableFuture<ToolCallResponse> callClaudeFunctionCallStream(AgentContext context, Map<String, Object> params) {
         CompletableFuture<ToolCallResponse> future = new CompletableFuture<>();
+        final String billingRequestId = RequestTokenUsage.billingKeyOr(context.getRequestId());
+        @SuppressWarnings("unchecked")
+        final List<Map<String, Object>> billedMessages = (List<Map<String, Object>>) params.get("messages");
         try {
             OkHttpClient client = new OkHttpClient.Builder()
                     .connectTimeout(300, TimeUnit.SECONDS)
@@ -972,6 +994,8 @@ public class LLM {
 
                         log.info("{} call llm stream response {} tool calls {}", context.getRequestId(), stringBuilderAll, JSON.toJSONString(toolCalls));
 
+                        recordTokenUsage(billingRequestId, null, billedMessages,
+                                completionText(contentAll, toolCalls));
                         future.complete(ToolCallResponse.builder()
                                 .content(contentAll)
                                 .toolCalls(toolCalls)
@@ -1093,6 +1117,54 @@ public class LLM {
         return future;
     }
 
+
+    private void recordTokenUsage(String billingRequestId, JsonNode usageNode,
+                                  List<Map<String, Object>> messages, String completionText) {
+        long prompt = 0L;
+        long completion = 0L;
+        long total = 0L;
+        if (usageNode != null && usageNode.isObject()) {
+            prompt = Math.max(0L, usageNode.path("prompt_tokens").asLong(0));
+            completion = Math.max(0L, usageNode.path("completion_tokens").asLong(0));
+            total = Math.max(0L, usageNode.path("total_tokens").asLong(0));
+            if (prompt == 0L) {
+                prompt = Math.max(0L, usageNode.path("input_tokens").asLong(0));
+            }
+            if (completion == 0L) {
+                completion = Math.max(0L, usageNode.path("output_tokens").asLong(0));
+            }
+            if (total == 0L) {
+                total = prompt + completion;
+            }
+        }
+        if (total <= 0L) {
+            prompt = messages == null ? 0L : tokenCounter.countListMessageTokens(messages);
+            completion = tokenCounter.countText(completionText);
+            total = prompt + completion;
+        }
+        RequestTokenUsage.add(billingRequestId, model, prompt, completion, total);
+    }
+
+    private static String completionText(String content, List<ToolCall> toolCalls) {
+        StringBuilder text = new StringBuilder();
+        if (content != null) {
+            text.append(content);
+        }
+        if (toolCalls != null) {
+            for (ToolCall toolCall : toolCalls) {
+                if (toolCall == null || toolCall.getFunction() == null) {
+                    continue;
+                }
+                if (toolCall.getFunction().getName() != null) {
+                    text.append(toolCall.getFunction().getName());
+                }
+                if (toolCall.getFunction().getArguments() != null) {
+                    text.append(toolCall.getFunction().getArguments());
+                }
+            }
+        }
+        return text.toString();
+    }
 
     /**
      * 查找匹配的工具调用

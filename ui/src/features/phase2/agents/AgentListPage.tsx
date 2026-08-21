@@ -1,10 +1,13 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Spin } from 'antd';
+import { Alert, Button, Spin, Typography } from 'antd';
 import type { Phase2AgentResponse } from '@/contracts/phase2';
+import { AGENTS_LIBRARY_PATH } from '@/features/marketplace/paths';
 import { listAgents } from '@/services/phase2/agents';
 import { phase2ErrorMessage } from '../phase2UiError';
 import { agentStatusLabel } from './agentFormModel';
+
+const { Title, Text } = Typography;
 
 const AgentListPage: GenieType.FC = memo(() => {
   const navigate = useNavigate();
@@ -37,13 +40,16 @@ const AgentListPage: GenieType.FC = memo(() => {
   return (
     <div data-testid="agent-list-page">
       <div className="mb-16 flex items-start justify-between gap-12">
-        <p className="m-0 text-[13px] leading-[20px] text-text-secondary">
-          上线后可在对话中选用。
-        </p>
+        <div>
+          <Title level={4} className="!mb-4">
+            我的智能体
+          </Title>
+          <Text type="secondary">上线后可在对话中选用。</Text>
+        </div>
         <Button
           type="primary"
           className="rounded-full"
-          onClick={() => navigate('/app/settings/agents/new')}
+          onClick={() => navigate(`${AGENTS_LIBRARY_PATH}/new`)}
         >
           新建
         </Button>
@@ -78,7 +84,7 @@ const AgentListPage: GenieType.FC = memo(() => {
                   index === items.length - 1 ? '' : 'border-b border-solid border-border',
                 ].join(' ')}
                 onClick={() =>
-                  navigate(`/app/settings/agents/${encodeURIComponent(item.id)}`)
+                  navigate(`${AGENTS_LIBRARY_PATH}/${encodeURIComponent(item.id)}`)
                 }
               >
                 <div className="min-w-0">

@@ -48,6 +48,13 @@ function withWarning(
   };
 }
 
+const PARALLEL_LIVE_EVENT_TYPES = new Set([
+  'PARALLEL_STARTED',
+  'SUBTASK_STARTED',
+  'SUBTASK_COMPLETED',
+  'SUBTASK_FAILED',
+]);
+
 function acknowledgeEvent(
   state: OrchestrationUiState,
   event: OrchestrationEvent,
@@ -56,7 +63,7 @@ function acknowledgeEvent(
   const next: OrchestrationUiState = {
     ...state,
     schemaVersion: state.schemaVersion ?? event.schemaVersion,
-    lastSequence: event.sequence,
+    lastSequence: Math.max(state.lastSequence, event.sequence),
     seenEventIds: {
       ...state.seenEventIds,
       [event.eventId]: true,
@@ -162,6 +169,42 @@ function cloneAttempts(
     };
   }
   return out;
+}
+
+function lastLineSequence(lines: TraceLine[] | undefined): number {
+  if (!lines || lines.length === 0) {
+    return 0;
+  }
+  return lines[lines.length - 1].sequence;
+}
+
+function lastSequenceForTrace(
+  state: OrchestrationUiState,
+  trace: OrchestrationTrace,
+): number {
+  if (trace.scope === 'MAIN') {
+    return lastLineSequence(state.main.lines);
+  }
+  const stepId = trace.stepId;
+  if (!stepId) {
+    return 0;
+  }
+  const attemptNo =
+    typeof trace.attemptNo === 'number' && state.attempts[trace.attemptNo]
+      ? trace.attemptNo
+      : maxAttemptNo(state);
+  const step = state.attempts[attemptNo]?.steps[stepId];
+  if (!step) {
+    return 0;
+  }
+  if (trace.scope === 'SUBTASK' && trace.subTaskId) {
+    return lastLineSequence(step.subTasks?.[trace.subTaskId]?.lines);
+  }
+  return lastLineSequence(step.lines);
+}
+
+function nextTraceSequence(state: OrchestrationUiState, sequence: number): number {
+  return Math.max(state.lastTraceSequence, sequence);
 }
 
 function appendTraceLine(
@@ -1012,7 +1055,12 @@ export function reduceOrchestrationEvent(
     );
   }
 
-  if (event.sequence <= state.lastSequence) {
+  const parallelLive =
+    PARALLEL_LIVE_EVENT_TYPES.has(event.eventType) && !isTerminal(state);
+  if (event.sequence < state.lastSequence && parallelLive) {
+    // Parallel workers share one sequence counter; a later packet from the
+    // faster expert can arrive before an earlier packet from the other.
+  } else if (event.sequence <= state.lastSequence) {
     return withWarning(
       {
         ...state,
@@ -1086,14 +1134,13 @@ export function reduceOrchestrationTrace(
   state: OrchestrationUiState,
   trace: OrchestrationTrace,
 ): OrchestrationUiState {
-  if (trace.sequence <= state.lastTraceSequence) {
-    return state;
-  }
-
   if (trace.scope === 'MAIN') {
+    if (trace.sequence <= lastSequenceForTrace(state, trace)) {
+      return state;
+    }
     return {
       ...state,
-      lastTraceSequence: trace.sequence,
+      lastTraceSequence: nextTraceSequence(state, trace.sequence),
       main: {
         ...state.main,
         lines: appendTraceLine(state.main.lines, trace),
@@ -1105,7 +1152,7 @@ export function reduceOrchestrationTrace(
   if (!stepId) {
     return {
       ...state,
-      lastTraceSequence: trace.sequence,
+      lastTraceSequence: nextTraceSequence(state, trace.sequence),
     };
   }
 
@@ -1142,11 +1189,15 @@ export function reduceOrchestrationTrace(
   if (parallelTrace === 'drop') {
     return {
       ...state,
-      lastTraceSequence: trace.sequence,
+      lastTraceSequence: nextTraceSequence(state, trace.sequence),
     };
   }
   if (parallelTrace) {
     trace = parallelTrace;
+  }
+
+  if (trace.sequence <= lastSequenceForTrace(state, trace)) {
+    return state;
   }
 
   if (trace.scope === 'SUBTASK' && trace.subTaskId) {
@@ -1197,7 +1248,7 @@ export function reduceOrchestrationTrace(
     };
     return {
       ...state,
-      lastTraceSequence: trace.sequence,
+      lastTraceSequence: nextTraceSequence(state, trace.sequence),
       attempts,
     };
   }
@@ -1237,7 +1288,7 @@ export function reduceOrchestrationTrace(
   };
   return {
     ...state,
-    lastTraceSequence: trace.sequence,
+    lastTraceSequence: nextTraceSequence(state, trace.sequence),
     attempts,
   };
 }

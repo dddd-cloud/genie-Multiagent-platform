@@ -75,11 +75,11 @@ const TeamListPage: GenieType.FC = memo(() => {
   ];
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="team-list-page">
+    <div className="h-full w-full overflow-auto" data-testid="team-list-page">
       <div className="flex items-center justify-between gap-12 mb-16">
         <div>
           <Title level={4} className="!mb-4">
-            团队
+            我的团队
           </Title>
           <Text type="secondary">一个主 Agent 带若干子 Agent 协作完成任务</Text>
         </div>

@@ -4,22 +4,18 @@ import {
   Button,
   Card,
   Empty,
-  Input,
   Modal,
-  Segmented,
-  Select,
   Space,
   Spin,
   Tag,
   Typography,
 } from 'antd';
-import { CopyOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CopyOutlined, PlusOutlined } from '@ant-design/icons';
 import { phase2ErrorMessage } from '@/features/phase2/phase2UiError';
 import AddSuccessToast from './AddSuccessToast';
 import {
   createMarketplaceDraft,
   installMarketplaceResource,
-  listMarketplaceCategories,
   listMarketplaceResources,
 } from '@/services/marketplace';
 import type {
@@ -35,19 +31,25 @@ function curatedType(source: CuratedSource): MarketplaceResourceType {
 }
 
 function resourceTypeLabel(type: MarketplaceResourceType): string {
-  return type === 'AGENT' ? '专家' : type === 'TEAM' ? '专家团队' : type;
+  return type === 'AGENT' ? '智能体' : type === 'TEAM' ? '智能体团队' : type;
 }
 
 function canInstall(resource: MarketplaceResource): boolean {
   return resource.installMode === 'INSTALL';
 }
 
-export default function CuratedMarketplacePage() {
+type CuratedMarketplacePageProps = {
+  source: CuratedSource;
+  query: string;
+  category?: string;
+};
+
+export default function CuratedMarketplacePage({
+  source,
+  query,
+  category,
+}: CuratedMarketplacePageProps) {
   const [resources, setResources] = useState<MarketplaceResource[]>([]);
-  const [source, setSource] = useState<CuratedSource>('EXPERTS');
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<string>();
-  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [selected, setSelected] = useState<MarketplaceResource>();
@@ -60,18 +62,9 @@ export default function CuratedMarketplacePage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    listMarketplaceCategories()
-      .then((items) => {
-        if (!cancelled) setCategories(items);
-      })
-      .catch(() => {
-        if (!cancelled) setCategories([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setSelected(undefined);
+    setDraftResult(undefined);
+  }, [source, category, query]);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,43 +143,6 @@ export default function CuratedMarketplacePage() {
           onDone={dismissSuccessToast}
         />
       ) : null}
-      <div className="mb-16 flex flex-wrap items-center gap-12">
-        <Segmented
-          options={[
-            { label: '专家', value: 'EXPERTS' },
-            { label: '专家团队', value: 'TEAMS' },
-          ]}
-          value={source}
-          onChange={(value) => {
-            setSource(value as CuratedSource);
-            setCategory(undefined);
-            setSelected(undefined);
-          }}
-          data-testid="curated-marketplace-source"
-        />
-        <Select
-          allowClear
-          placeholder="按分类筛选"
-          value={category}
-          onChange={setCategory}
-          options={categories.map((item) => ({
-            label: item,
-            value: item,
-          }))}
-          className="w-[180px]"
-        />
-        <Input
-          allowClear
-          prefix={<SearchOutlined />}
-          placeholder={
-            source === 'EXPERTS' ? '搜索专家、专长或能力' : '搜索专家团队、场景或能力'
-          }
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className="w-[280px]"
-          data-testid="curated-marketplace-search"
-        />
-      </div>
       {error ? <Alert className="mb-16" type="warning" message={error} showIcon /> : null}
       {loading ? (
         <div className="flex justify-center py-64">
@@ -232,7 +188,7 @@ export default function CuratedMarketplacePage() {
                       void addResource(resource);
                     }}
                   >
-                    {resource.type === 'AGENT' ? '添加专家' : '添加团队'}
+                    {resource.type === 'AGENT' ? '添加智能体' : '添加团队'}
                   </Button>
                 ) : (
                   <Button
@@ -303,7 +259,7 @@ export default function CuratedMarketplacePage() {
                 onClick={() => void addResource(selected)}
               >
                 {selected.type === 'AGENT'
-                  ? '添加专家'
+                  ? '添加智能体'
                   : selected.type === 'TEAM'
                     ? '添加团队'
                     : '添加并启用'}

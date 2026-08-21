@@ -13,12 +13,6 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
     hint: '添加、编辑可用模型和密钥',
   },
   {
-    to: '/app/settings/agents',
-    label: '智能体',
-    hint: '配置对话里使用的智能体',
-    phase2Only: true,
-  },
-  {
     to: '/app/settings/memory',
     label: '本地记忆',
     hint: '只保存在这台电脑上的长期记忆',
@@ -27,7 +21,7 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
   {
     to: '/app/settings/preferences',
     label: '偏好',
-    hint: '默认执行方式与默认模型',
+    hint: '会话默认执行方式与模型',
   },
   {
     to: '/app/settings/account',

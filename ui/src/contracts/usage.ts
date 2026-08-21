@@ -1,6 +1,6 @@
 /**
- * `tokensAvailable` is false while the streaming path does not report token counts. The UI must show
- * "暂不可用" in that case rather than presenting zero as a real measurement.
+ * `tokensAvailable` is false when recorded calls exist but none reported token counts. Empty
+ * ranges should still show 0 rather than "unavailable".
  */
 export interface UsageTotals {
   calls: number;

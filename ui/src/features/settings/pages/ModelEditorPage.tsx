@@ -250,7 +250,7 @@ const ModelEditorPage: GenieType.FC = memo(() => {
             hint={
               loaded?.apiKeyConfigured
                 ? '已配置。留空保存表示不修改；输入新值会替换旧密钥。'
-                : '密钥只会用圆点显示，保存后不会再回传到浏览器。'
+                : '保存后密钥不会回传到浏览器。'
             }
             last
           >

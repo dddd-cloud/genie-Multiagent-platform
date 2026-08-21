@@ -37,6 +37,7 @@ import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.TeamRuntimeCatalogPort;
 import com.jd.genie.agent.llm.RequestScopedLlmSettings;
+import com.jd.genie.agent.llm.RequestTokenUsage;
 import com.jd.genie.agent.util.ThreadUtil;
 import com.jd.genie.service.IGptProcessService;
 import com.jd.genie.service.IMultiAgentService;
@@ -321,6 +322,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
                         }
                     } finally {
                         RequestScopedLlmSettings.clear();
+                        RequestTokenUsage.clearBillingRequestId();
                     }
                 });
                 return;
@@ -351,6 +353,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     }
                 } finally {
                     RequestScopedLlmSettings.clear();
+                    RequestTokenUsage.clearBillingRequestId();
                 }
             });
         });
@@ -392,6 +395,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     }
                 } finally {
                     RequestScopedLlmSettings.clear();
+                    RequestTokenUsage.clearBillingRequestId();
                 }
             });
         });
@@ -468,6 +472,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     }
                 } finally {
                     RequestScopedLlmSettings.clear();
+                    RequestTokenUsage.clearBillingRequestId();
                 }
             });
         });
@@ -626,6 +631,9 @@ public class GptProcessServiceImpl implements IGptProcessService {
     }
 
     private void applySelectedModel(CurrentUser currentUser, GptQueryReq request) {
+        if (request != null) {
+            RequestTokenUsage.setBillingRequestId(request.getRequestId());
+        }
         ModelCatalogService catalog = modelCatalogServiceProvider.getIfAvailable();
         if (catalog == null || currentUser == null || request == null) {
             return;

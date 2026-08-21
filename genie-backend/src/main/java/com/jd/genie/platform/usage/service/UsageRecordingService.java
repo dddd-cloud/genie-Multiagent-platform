@@ -1,5 +1,6 @@
 package com.jd.genie.platform.usage.service;
 
+import com.jd.genie.agent.llm.RequestTokenUsage;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.usage.entity.ModelUsageRecordEntity;
 import com.jd.genie.platform.usage.entity.UsageTerminalState;
@@ -48,6 +49,13 @@ public class UsageRecordingService {
                 record.setConversationId(telemetry.conversationId());
                 record.setRequestId(truncate(telemetry.requestId()));
                 record.setDurationMs(Math.max(0L, clock.millis() - telemetry.startedAtMillis()));
+                RequestTokenUsage.Snapshot usage = RequestTokenUsage.consume(telemetry.requestId());
+                if (usage != null) {
+                    record.setModelName(truncateModel(usage.modelName()));
+                    record.setPromptTokens(usage.promptTokens());
+                    record.setCompletionTokens(usage.completionTokens());
+                    record.setTotalTokens(usage.totalTokens());
+                }
             }
             modelUsageMapper.insertIgnore(record);
         } catch (RuntimeException ex) {
@@ -60,5 +68,12 @@ public class UsageRecordingService {
             return requestId;
         }
         return requestId.substring(0, MAX_REQUEST_ID_LENGTH);
+    }
+
+    private static String truncateModel(String modelName) {
+        if (modelName == null || modelName.length() <= 128) {
+            return modelName;
+        }
+        return modelName.substring(0, 128);
     }
 }

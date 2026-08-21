@@ -681,7 +681,9 @@ public final class Phase2OrchestrationRuntime {
             Map<String, Object> details,
             List<OrchestrationPlanStepView> steps
     ) {
-        observer.onEvent(eventMapper.progress(requestId, runId, sequence.incrementAndGet(), eventType, details, steps));
+        synchronized (sequence) {
+            observer.onEvent(eventMapper.progress(requestId, runId, sequence.incrementAndGet(), eventType, details, steps));
+        }
     }
 
     private OrchestrationPlanStepView stepView(

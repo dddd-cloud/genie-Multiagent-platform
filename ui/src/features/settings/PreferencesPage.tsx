@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Select, Spin, Switch, message } from 'antd';
+import { Alert, Button, ConfigProvider, Select, Spin, Switch, message } from 'antd';
 import type { UserPreferences, UserPreferencesPatch } from '@/contracts';
 import { EXECUTION_MODE_PREFERENCES } from '@/contracts';
 import type { Phase2ModelResponse } from '@/contracts/phase2';
@@ -8,13 +8,22 @@ import { MvpApiError } from '@/services/apiError';
 import { listModels } from '@/services/phase2/models';
 import SettingRow from './SettingRow';
 
+const SELECT_THEME = {
+  components: {
+    Select: {
+      optionSelectedBg: '#F2F2F7',
+      optionSelectedColor: '#1D1D1F',
+    },
+  },
+};
+
 const EXECUTION_MODE_LABELS: Record<
   (typeof EXECUTION_MODE_PREFERENCES)[number],
   string
 > = {
-  AUTO: '自动选择',
-  DIRECT: '直接由单个 Agent 回答',
-  ORCHESTRATED: '编排多个 Agent 协作',
+  AUTO: '自动',
+  DIRECT: '单一智能体',
+  ORCHESTRATED: '多智能体协作',
 };
 
 const PreferencesPage: GenieType.FC = memo(() => {
@@ -64,8 +73,8 @@ const PreferencesPage: GenieType.FC = memo(() => {
       <Alert
         type="warning"
         showIcon
-        message="读取设置失败"
-        description={error ?? '暂时无法读取你的偏好，下面显示的是默认值。'}
+        message="无法加载偏好设置"
+        description={error ?? '当前显示为系统默认值。'}
         action={
           <Button size="small" onClick={() => void reload()}>
             重试
@@ -83,45 +92,47 @@ const PreferencesPage: GenieType.FC = memo(() => {
       >
         <section>
           <h2 className="m-0 mb-8 px-4 text-[13px] font-medium tracking-[0.02em] text-text-tertiary">
-            新会话默认值
+            会话默认
           </h2>
           <p className="m-0 mb-8 px-4 text-[12px] leading-[18px] text-text-tertiary">
-            这些默认值用于开启新会话时预设输入框，发送前仍可临时改；已有会话沿用它上一轮的选择。
+            仅应用于新会话。发送前仍可更改，已有会话不受影响。
           </p>
           <div className="overflow-hidden rounded-xl bg-surface shadow-xs">
-            <SettingRow
-              label="默认执行方式"
-              hint="新会话默认走哪条执行路径。"
-            >
-              <Select
-                className="w-[260px]"
-                value={preferences.defaultExecutionMode}
-                loading={savingKey === 'defaultExecutionMode'}
-                options={EXECUTION_MODE_PREFERENCES.map((mode) => ({
-                  value: mode,
-                  label: EXECUTION_MODE_LABELS[mode],
-                }))}
-                onChange={(value) => void apply('defaultExecutionMode', value)}
-              />
-            </SettingRow>
-            <SettingRow
-              label="默认模型"
-              hint="新对话和所有 Agent 都会使用这个模型，也可在输入框左侧随时切换。"
-              last
-            >
-              <Select
-                className="w-[260px]"
-                value={preferences.preferredModelName || undefined}
-                loading={savingKey === 'preferredModelName'}
-                placeholder={models.length === 0 ? '请先在「模型」中配置' : '选择默认模型'}
-                options={models.map((item) => ({
-                  value: item.name,
-                  label: item.displayName || item.name,
-                }))}
-                onChange={(value) => void apply('preferredModelName', value)}
-                data-testid="preferences-default-model"
-              />
-            </SettingRow>
+            <ConfigProvider theme={SELECT_THEME}>
+              <SettingRow
+                label="默认执行方式"
+                hint="新会话启动时采用的执行模式。"
+              >
+                <Select
+                  className="w-[260px]"
+                  value={preferences.defaultExecutionMode}
+                  loading={savingKey === 'defaultExecutionMode'}
+                  options={EXECUTION_MODE_PREFERENCES.map((mode) => ({
+                    value: mode,
+                    label: EXECUTION_MODE_LABELS[mode],
+                  }))}
+                  onChange={(value) => void apply('defaultExecutionMode', value)}
+                />
+              </SettingRow>
+              <SettingRow
+                label="默认模型"
+                hint="新会话默认使用的模型，可在输入框随时切换。"
+                last
+              >
+                <Select
+                  className="w-[260px]"
+                  value={preferences.preferredModelName || undefined}
+                  loading={savingKey === 'preferredModelName'}
+                  placeholder={models.length === 0 ? '请先在「模型」中添加' : '选择默认模型'}
+                  options={models.map((item) => ({
+                    value: item.name,
+                    label: item.displayName || item.name,
+                  }))}
+                  onChange={(value) => void apply('preferredModelName', value)}
+                  data-testid="preferences-default-model"
+                />
+              </SettingRow>
+            </ConfigProvider>
           </div>
         </section>
 
@@ -131,8 +142,8 @@ const PreferencesPage: GenieType.FC = memo(() => {
           </h2>
           <div className="overflow-hidden rounded-xl bg-surface shadow-xs">
             <SettingRow
-              label="默认收起侧边栏"
-              hint="小屏幕上能多留出正文空间，登录后仍可随时展开。"
+              label="默认折叠侧边栏"
+              hint="登录后默认折叠导航，可随时展开。"
               last
             >
               <Switch

@@ -161,7 +161,7 @@ const TeamEditorPage: GenieType.FC = memo(() => {
   };
 
   return (
-    <div className="h-full w-full overflow-auto p-24" data-testid="team-editor-page">
+    <div className="h-full w-full overflow-auto" data-testid="team-editor-page">
       <div className="flex items-center justify-between gap-12 mb-16">
         <div>
           <Title level={4} className="!mb-4">

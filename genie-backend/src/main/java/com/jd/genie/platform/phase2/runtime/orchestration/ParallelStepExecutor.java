@@ -1,5 +1,8 @@
 package com.jd.genie.platform.phase2.runtime.orchestration;
 
+import com.jd.genie.agent.llm.LLMSettings;
+import com.jd.genie.agent.llm.RequestScopedLlmSettings;
+import com.jd.genie.agent.llm.RequestTokenUsage;
 import com.jd.genie.platform.agentbridge.AgentBridgeException;
 import com.jd.genie.platform.contract.MvpErrorCode;
 import com.jd.genie.platform.phase2.runtime.agent.AgentTaskResult;
@@ -54,8 +57,19 @@ final class ParallelStepExecutor {
             BooleanSupplier cancellationRequested,
             Function<OrchestrationSubTask, AgentTaskResult> work
     ) {
+        LLMSettings llmSettings = RequestScopedLlmSettings.get();
+        String billingRequestId = RequestTokenUsage.getBillingRequestId();
         List<CompletableFuture<AgentTaskResult>> futures = subTasks.stream()
-                .map(subTask -> CompletableFuture.supplyAsync(() -> work.apply(subTask), workers))
+                .map(subTask -> CompletableFuture.supplyAsync(() -> {
+                    RequestScopedLlmSettings.set(llmSettings);
+                    RequestTokenUsage.setBillingRequestId(billingRequestId);
+                    try {
+                        return work.apply(subTask);
+                    } finally {
+                        RequestScopedLlmSettings.clear();
+                        RequestTokenUsage.clearBillingRequestId();
+                    }
+                }, workers))
                 .toList();
         awaitCompletion(futures, cancellationRequested);
         Map<OrchestrationSubTask, AgentTaskResult> results = new LinkedHashMap<>();

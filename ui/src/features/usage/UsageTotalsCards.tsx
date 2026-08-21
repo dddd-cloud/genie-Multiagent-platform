@@ -37,7 +37,7 @@ const UsageTotalsCards = memo(({ totals }: UsageTotalsCardsProps) => {
         ? `输入 ${formatCount(totals.promptTokens)} · 输出 ${formatCount(
           totals.completionTokens,
         )}`
-        : '当前流式链路还没有回传 token 计数，所以这里不显示数字，而不是显示 0。',
+        : '部分历史会话未记录 Token，新会话将自动计入。',
     },
   ];
 
@@ -62,7 +62,7 @@ const UsageTotalsCards = memo(({ totals }: UsageTotalsCardsProps) => {
           )}
           {card.value === TOKENS_UNAVAILABLE ? (
             <div className="mt-2 text-[12px] leading-[18px] text-text-tertiary">
-              等链路回传后自动生效
+              新会话开始后自动统计
             </div>
           ) : null}
         </div>

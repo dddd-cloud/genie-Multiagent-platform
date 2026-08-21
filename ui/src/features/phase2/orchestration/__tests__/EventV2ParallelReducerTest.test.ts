@@ -128,4 +128,80 @@ describe('EventV2ParallelReducerTest', () => {
       Object.values(step.subTasks).filter((s) => s.status === 'RUNNING').length,
     ).toBe(2);
   });
+
+  it('accepts a late SUBTASK_STARTED after a faster sibling used a higher sequence', () => {
+    let state = createInitialOrchestrationState();
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e1',
+        sequence: 1,
+        eventType: 'ROUTE_SELECTED',
+        attemptNo: null,
+        route: 'ORCHESTRATED',
+        reasonCode: 'MULTI_AGENT',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e2',
+        sequence: 2,
+        eventType: 'PLAN_CREATED',
+        steps: [
+          {
+            stepId: 's1',
+            agentId: null,
+            agentName: null,
+            objective: 'Parallel research',
+            inputRefs: [],
+            mode: 'PARALLEL_AGENTS',
+            subTasks: [
+              {
+                subTaskId: 'st-a',
+                agentId: 'agent-a',
+                agentName: '前端工程师',
+                objective: 'Research A',
+              },
+              {
+                subTaskId: 'st-b',
+                agentId: 'agent-b',
+                agentName: '后端工程师',
+                objective: 'Research B',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e3',
+        sequence: 10,
+        eventType: 'SUBTASK_STARTED',
+        stepId: 's1',
+        subTaskId: 'st-b',
+        agentId: 'agent-b',
+        agentName: '后端工程师',
+      }),
+    );
+    state = reduceOrchestrationEvent(
+      state,
+      event({
+        eventId: 'e4',
+        sequence: 7,
+        eventType: 'SUBTASK_STARTED',
+        stepId: 's1',
+        subTaskId: 'st-a',
+        agentId: 'agent-a',
+        agentName: '前端工程师',
+      }),
+    );
+
+    const step = state.attempts[1].steps.s1;
+    expect(step.subTasks['st-a'].status).toBe('RUNNING');
+    expect(step.subTasks['st-b'].status).toBe('RUNNING');
+    expect(state.lastSequence).toBe(10);
+  });
 });

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectPhase2Nav, loginAsAcceptanceUser } from './helpers';
-import { openSettingsSection } from '../helpers';
+import { openMarketplaceLibrary } from '../helpers';
 
 const realReady = process.env.PHASE2_REAL_E2E_READY === '1';
 
@@ -10,26 +10,23 @@ test.describe('Phase2 real management pages', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAcceptanceUser(page, 'user-a');
     await expectPhase2Nav(page);
-    await openSettingsSection(page, 'Agent');
   });
 
-  test('agents / skills / mcp load; create skill when API allows', async ({page}) => {
-    const nav = page.getByTestId('settings-nav');
-
-    await nav.getByRole('link', { name: 'Agent' }).click();
+  test('agents / skills / mcp load; create skill when API allows', async ({ page }) => {
+    await openMarketplaceLibrary(page, 'agents');
     await expect(page.getByTestId('agent-list-page')).toBeVisible();
-    // Soft: list API errors should not block page shell coverage.
     await expect
       .soft(page.locator('[data-testid="agent-list-page"] .ant-alert-error'))
       .toHaveCount(0);
+    await page.getByTestId('library-modal-close').click();
 
-    await nav.getByRole('link', { name: 'Skill' }).click();
+    await openMarketplaceLibrary(page, 'skills');
     await expect(page.getByTestId('skill-list-page')).toBeVisible();
     await expect
       .soft(page.locator('[data-testid="skill-list-page"] .ant-alert-error'))
       .toHaveCount(0);
 
-    await page.getByRole('button', { name: /新建 Skill/i }).click();
+    await page.getByRole('button', { name: /新建/i }).click();
     await expect(page.getByTestId('skill-editor-page')).toBeVisible();
     const skillName = `E2E Skill ${Date.now()}`;
     await page.getByTestId('skill-name').fill(skillName);
@@ -50,7 +47,8 @@ test.describe('Phase2 real management pages', () => {
       await expect.soft(page.getByTestId('skill-editor-page')).toBeVisible();
     }
 
-    await nav.getByRole('link', { name: 'MCP' }).click();
+    await page.getByTestId('library-modal-close').click();
+    await openMarketplaceLibrary(page, 'connectors');
     await expect(page.getByTestId('mcp-list-page')).toBeVisible();
     await expect
       .soft(page.locator('[data-testid="mcp-list-page"] .ant-alert-error'))

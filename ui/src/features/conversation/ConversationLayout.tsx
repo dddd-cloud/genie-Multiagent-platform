@@ -11,10 +11,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Tooltip, Spin, message } from 'antd';
 import {
+  AppstoreOutlined,
   FormOutlined,
+  FolderOpenOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons';
@@ -24,7 +26,7 @@ import LocalMemoryProvider from '@/features/phase2/localMemory/LocalMemoryProvid
 import { useUserSettings } from '@/features/userSettings/useUserSettings';
 import SidebarUserMenu from '@/features/userSettings/SidebarUserMenu';
 import Logo from '@/components/Logo';
-import AppNavigation from '@/layout/AppNavigation';
+import AppNavigation, { AdminNavigation } from '@/layout/AppNavigation';
 import SettingsModal from '@/features/settings/SettingsModal';
 import { SettingsModalProvider } from '@/features/settings/SettingsModalContext';
 import { MvpApiError } from '@/services/apiError';
@@ -38,10 +40,8 @@ import {
   conversationReducer,
   initialConversationListState,
 } from './conversationReducer';
-import {
-  isChatSurfacePath,
-  isNewConversationPath,
-} from './newConversationPath';
+import { isChatSurfacePath, isNewConversationPath } from './newConversationPath';
+import { isPhase2Enabled } from '@/features/phase2/executionMode/featureFlag';
 import { peekConversationDraft } from './pendingConversationDraft';
 import { peekLiveChatRun } from './liveChatRuns';
 import {
@@ -407,10 +407,28 @@ const ConversationLayout: GenieType.FC = memo(() => {
                 <FormOutlined className="text-[16px]" />
               </button>
             </Tooltip>
+            <Tooltip title="工作区" placement="right">
+              <NavLink
+                to="/app/workspace"
+                aria-label="工作区"
+                className="flex h-32 w-32 items-center justify-center rounded-[8px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
+              >
+                <FolderOpenOutlined className="text-[16px]" />
+              </NavLink>
+            </Tooltip>
+            <Tooltip title="资源广场" placement="right">
+              <NavLink
+                to="/app/marketplace"
+                aria-label="资源广场"
+                className="flex h-32 w-32 items-center justify-center rounded-[8px] text-text-secondary hover:bg-[#F5F5F7] transition-colors duration-150"
+              >
+                <AppstoreOutlined className="text-[16px]" />
+              </NavLink>
+            </Tooltip>
           </div>
         ) : (
           <div className="h-full w-[272px] shrink-0 flex flex-col bg-sidebar border-r border-border">
-            <div className="w-full px-14 py-12 border-b border-border flex items-center justify-between gap-8">
+            <div className="w-full px-14 py-12 flex items-center justify-between gap-8">
               <Logo hideSplit />
               <Tooltip title="收起侧边栏">
                 <button
@@ -425,19 +443,27 @@ const ConversationLayout: GenieType.FC = memo(() => {
                 </button>
               </Tooltip>
             </div>
-            <div className="w-full px-10 pt-10 pb-8 border-b border-border flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={handleNew}
-                aria-label="新会话"
-                className="w-full flex items-center gap-8 rounded-[8px] px-10 py-8 text-[14px] leading-[22px] text-text-primary hover:bg-[#F5F5F7] transition-colors duration-150"
-              >
-                <FormOutlined className="text-[15px] text-text-secondary" />
-                <span>新会话</span>
-              </button>
-            </div>
-            <AppNavigation />
-            <div className="flex-1 min-h-0 w-full">
+            <nav
+              className="flex w-full flex-col gap-1 px-10 pt-4 pb-8"
+              data-testid={isPhase2Enabled() ? 'phase2-navigation' : 'primary-navigation'}
+              aria-label="主导航"
+            >
+              <ul className="flex flex-col gap-1 m-0 p-0 list-none">
+                <li>
+                  <button
+                    type="button"
+                    onClick={handleNew}
+                    aria-label="新会话"
+                    className="w-full flex items-center gap-8 rounded-[8px] px-10 py-7 text-[14px] leading-[22px] text-text-primary hover:bg-[#F5F5F7] transition-colors duration-150"
+                  >
+                    <FormOutlined className="text-[15px] text-text-secondary" />
+                    <span>新会话</span>
+                  </button>
+                </li>
+              </ul>
+              <AppNavigation />
+            </nav>
+            <div className="flex-1 min-h-0 w-full border-t border-border">
               <ConversationSidebar
                 state={state}
                 onRename={handleRename}
@@ -447,6 +473,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
                 onSelect={handleSelect}
               />
             </div>
+            <AdminNavigation />
             <SidebarUserMenu />
           </div>
         )}

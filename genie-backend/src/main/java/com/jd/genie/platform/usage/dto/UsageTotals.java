@@ -1,8 +1,7 @@
 package com.jd.genie.platform.usage.dto;
 
 /**
- * {@code tokensAvailable} is false while the streaming path does not report token counts, so the
- * client can render "unavailable" instead of a misleading zero.
+ * {@code tokensAvailable} is false when recorded calls exist but none reported token counts.
  */
 public record UsageTotals(
     long calls,

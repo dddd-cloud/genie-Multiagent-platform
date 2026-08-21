@@ -18,9 +18,18 @@ import SkillListPage from '@/features/phase2/skills/SkillListPage';
 import SkillEditorPage from '@/features/phase2/skills/SkillEditorPage';
 import McpListPage from '@/features/phase2/mcp/McpListPage';
 import McpEditorPage from '@/features/phase2/mcp/McpEditorPage';
-import { MCP_LIBRARY_PATH, SKILLS_LIBRARY_PATH } from './paths';
+import AgentListPage from '@/features/phase2/agents/AgentListPage';
+import AgentEditorPage from '@/features/phase2/agents/AgentEditorPage';
+import TeamListPage from '@/features/phase2/teams/TeamListPage';
+import TeamEditorPage from '@/features/phase2/teams/TeamEditorPage';
+import {
+  AGENTS_LIBRARY_PATH,
+  MCP_LIBRARY_PATH,
+  SKILLS_LIBRARY_PATH,
+  TEAMS_LIBRARY_PATH,
+} from './paths';
 
-export type LibraryKind = 'skills' | 'mcp';
+export type LibraryKind = 'skills' | 'mcp' | 'agents' | 'teams';
 
 export type LibraryModalProps = {
   open: boolean;
@@ -38,7 +47,16 @@ const EMPTY_ROUTE_CONTEXT = {
 };
 
 function defaultPath(kind: LibraryKind): string {
-  return kind === 'mcp' ? MCP_LIBRARY_PATH : SKILLS_LIBRARY_PATH;
+  if (kind === 'mcp') {
+    return MCP_LIBRARY_PATH;
+  }
+  if (kind === 'agents') {
+    return AGENTS_LIBRARY_PATH;
+  }
+  if (kind === 'teams') {
+    return TEAMS_LIBRARY_PATH;
+  }
+  return SKILLS_LIBRARY_PATH;
 }
 
 function resolveTo(to: To, currentPathname: string) {
@@ -176,6 +194,24 @@ const LibraryModal: GenieType.FC<LibraryModalProps> = memo(
                   <Route
                     path={`${MCP_LIBRARY_PATH}/:serverId`}
                     element={<McpEditorPage />}
+                  />
+                  <Route path={AGENTS_LIBRARY_PATH} element={<AgentListPage />} />
+                  <Route
+                    path={`${AGENTS_LIBRARY_PATH}/new`}
+                    element={<AgentEditorPage />}
+                  />
+                  <Route
+                    path={`${AGENTS_LIBRARY_PATH}/:agentId`}
+                    element={<AgentEditorPage />}
+                  />
+                  <Route path={TEAMS_LIBRARY_PATH} element={<TeamListPage />} />
+                  <Route
+                    path={`${TEAMS_LIBRARY_PATH}/new`}
+                    element={<TeamEditorPage />}
+                  />
+                  <Route
+                    path={`${TEAMS_LIBRARY_PATH}/:teamId`}
+                    element={<TeamEditorPage />}
                   />
                 </Routes>
               </LibraryInnerRouter>
