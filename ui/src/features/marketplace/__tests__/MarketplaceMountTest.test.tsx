@@ -11,6 +11,10 @@ vi.mock('@/services/marketplace', () => ({
     nextCursor: null,
   }),
   installSkillHubSkill: vi.fn(),
+  listMarketplaceCategories: vi.fn().mockResolvedValue([]),
+  listMarketplaceResources: vi.fn().mockResolvedValue([]),
+  createMarketplaceDraft: vi.fn(),
+  installMarketplaceResource: vi.fn(),
 }));
 
 vi.mock('@/features/phase2/skills/SkillListPage', () => ({
@@ -103,5 +107,14 @@ describe('MarketplaceMount', () => {
     expect(await screen.findByTestId('library-modal')).toBeTruthy();
     expect(screen.getByTestId('mcp-list-page')).toBeTruthy();
     expect(screen.getByTestId('marketplace-search')).toBeTruthy();
+  });
+
+  it('shows curated experts and teams on the agents tab', async () => {
+    renderMarketplace('/app/marketplace?tab=agents');
+    expect(await screen.findByTestId('curated-marketplace-page')).toBeTruthy();
+    expect(screen.getByText('专家')).toBeTruthy();
+    expect(screen.getByText('专家团队')).toBeTruthy();
+    expect(screen.queryByText('SkillHub')).toBeNull();
+    expect(screen.queryByText('官方 MCP')).toBeNull();
   });
 });

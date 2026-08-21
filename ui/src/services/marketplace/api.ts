@@ -42,6 +42,11 @@ export function installMarketplaceResource(id: string) {
   return requestMvp<MarketplaceInstallResponse>({
     method: 'POST',
     url: `/api/v2/marketplace/resources/${id}/install`,
+    // A team install may first import several reviewed Skill packages, then
+    // create and publish each member Agent.  The shared 10s API default can
+    // expire while the server finishes successfully, which previously showed
+    // a false "service unavailable" error to the user.
+    timeout: 120_000,
   });
 }
 

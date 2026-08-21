@@ -789,7 +789,7 @@ public final class SerialOrchestrationService {
             emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, SystemResourceBuilder.AGENT_ID, agentName,
                     OrchestrationTraceChannel.KIND_STATUS, "开始执行：" + step.objective(), false, subTask);
         }
-        AgentTaskResult result = AgentTaskResult.success(systemResourceBuilder.create(user, query));
+        AgentTaskResult result = AgentTaskResult.success(systemResourceBuilder.create(user, query, step.objective()));
         emitExecutionEvent(events, "COMPLETED", step, executionId, SystemResourceBuilder.AGENT_ID, agentName, result, Map.of("agentName", agentName), subTask);
         if (traceChannel != null) {
             emitExecutionTrace(traceChannel, attemptNo, step.stepId(), executionId, SystemResourceBuilder.AGENT_ID, agentName,

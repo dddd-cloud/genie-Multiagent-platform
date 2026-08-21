@@ -18,6 +18,11 @@ public interface OrchestrationModelPort {
         FALLBACK
     }
 
+    /** Hidden system-Agent call used only to design a Team/Agent resource blueprint. */
+    default String designResourceTeam(String query, String availableCapabilities) {
+        return "";
+    }
+
     RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates);
 
     default RouteDecision selectRoute(

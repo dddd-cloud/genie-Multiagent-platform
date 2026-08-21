@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Input, Segmented } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import MarketplacePage from '@/features/marketplace/MarketplacePage';
+import CuratedMarketplacePage from '@/features/marketplace/CuratedMarketplacePage';
 import LibraryModal, { type LibraryKind } from '@/features/marketplace/LibraryModal';
 import {
   MARKETPLACE_ROOT,
@@ -112,7 +113,7 @@ export default function MarketplaceMount() {
       </div>
       <div className="min-h-0 flex-1 overflow-hidden px-24 py-16">
         {tab === 'agents' ? (
-          <div data-testid="marketplace-agents-placeholder" />
+          <CuratedMarketplacePage />
         ) : (
           <MarketplacePage
             source={tab === 'connectors' ? 'MCP_REGISTRY' : 'SKILLHUB'}

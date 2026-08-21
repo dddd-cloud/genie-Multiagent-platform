@@ -54,6 +54,24 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
     }
 
     @Override
+    public String designResourceTeam(String query, String availableCapabilities) {
+        String system = """
+                You are the hidden System Resource Builder Agent. First determine whether the user explicitly requests one Agent or a Team.
+                Reply ONLY with one JSON object:
+                For one Agent: {"team":false,"agents":[{"name":"...","description":"...","systemPrompt":"...","capabilityHints":"..."}]}
+                For a Team: {"team":true,"teamName":"...","teamDescription":"...","agents":[{"name":"...","description":"...","systemPrompt":"...","capabilityHints":"..."}]}
+                If the user asks for one Agent/智能体/助手 and does not ask for a Team/团队/multiple members, output team:false with exactly one agent. Never silently create a Team to support a single Agent request.
+                For a Team create 2..20 distinct, domain-specific agents; the first is the Team master. Agent name is a human professional role title, not a task, workflow, function, deliverable, or capability. For Chinese names, end with a role word such as 负责人、总监、科学家、研究员、专家、工程师、分析师、架构师、顾问 or 审校; examples: 频谱地图补全算法专家, 无线信道研究员. Do not use generic names such as 协作专员, and do not use names such as 谱图补全算法设计 or 数据治理.
+                Every systemPrompt must state the role's concrete method, deliverables, evidence/risk rules, and that it may only use bound capabilities.
+                capabilityHints are concise keywords used to select the least-privilege subset of the listed capabilities.
+                Reuse an existing agent only when its name/description/prompt materially matches the planned role; otherwise design a new one.
+                Do not invent tools or capabilities outside the provided catalog. No markdown or commentary.
+                """;
+        return chat(system, "userRequest:\n" + nullToEmpty(query)
+                + "\n\ncurrentUserCapabilities:\n" + nullToEmpty(availableCapabilities), 4096, null);
+    }
+
+    @Override
     public RouteDecision selectRoute(
             String query,
             String conversationSummary,
@@ -85,9 +103,12 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 {"route":"DIRECT"|"ORCHESTRATED","reasonCode":"<SHORT_UPPER_SNAKE_CODE>"}
                 Choose DIRECT when a single agent can fully answer the request, including when only one candidate exists.
                 Choose ORCHESTRATED when the request needs work from two or more different candidates,
-                or when it explicitly asks several agents to each contribute.
+                when it explicitly asks several agents to each contribute, OR when the requested
+                deliverable is a newly created Agent or Team.  The latter may be phrased without
+                a creation verb, for example "give me a game testing agent".  A hidden candidate
+                named system resource builder is available for that creation step.
                 reasonCode is a short machine code such as SINGLE_CAPABILITY, ONLY_ONE_CANDIDATE,
-                MULTI_CAPABILITY, or EXPLICIT_MULTI_AGENT.
+                MULTI_CAPABILITY, EXPLICIT_MULTI_AGENT, or RESOURCE_CREATION_REQUEST.
                 Follow-up questions may refer to recentConversation; use it only to resolve references.
                 No markdown, no extra fields.
                 """;
@@ -391,6 +412,8 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - Every subTask must contain exactly subTaskId, agentId, objective; subTaskId values are unique across the plan
                 - Every agentId must be from candidates
                 - The reserved candidate id __system_resource_builder__ is a hidden platform Agent. Only use it for a request that creates an Agent or Team; when used it must be the first SINGLE_AGENT step, never a PARALLEL subTask. Its step creates resources only. Any later work must remain assigned to the user's existing visible candidates; never assume the newly created Team has replaced the current conversation Team.
+                - Treat a requested deliverable such as "给我一个游戏测试 Agent" / "I need a game testing agent" as resource creation even if the user did not write 创建/create. Use the hidden system resource builder for it. Do not assign a normal visible Agent to create platform resources.
+                - For a resource creation request, the system resource builder objective must state whether the user asks for one Agent or a Team. Never expand a single-Agent request into a Team. For a Team, state the requested member count and domain-specific roles; for one Agent, state its exact role, responsibilities, prompt requirements and least-privilege capability needs.
                 - A candidate may appear in multiple distinct parallel subTasks
                 - When the user asks multiple agents to each do something (各/分别/每个), use one PARALLEL_AGENTS step with independent subTasks when suitable
                 - Do not add a final summary / 汇总成稿 / 回答用户全部问题 step; the system synthesizes the user-facing answer after specialists finish

@@ -19,10 +19,14 @@ import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
 import com.jd.genie.platform.conversation.attachment.ChatAttachmentPrompt;
 import com.jd.genie.platform.phase2.tooling.McpServerService;
 import com.jd.genie.platform.phase2.tooling.McpToolResponse;
+import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationModelPort;
 import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -49,19 +53,36 @@ public class SystemResourceBuilder {
     private final AgentDefinitionService agentService;
     private final AgentTeamService teamService;
     private final AgentPromptCompiler promptCompiler;
+    private final ObjectMapper objectMapper;
+    private final OrchestrationModelPort modelPort;
 
+    @Autowired
     public SystemResourceBuilder(
             SkillDefinitionService skillService,
             McpServerService mcpServerService,
             AgentDefinitionService agentService,
             AgentTeamService teamService,
-            AgentPromptCompiler promptCompiler
+            AgentPromptCompiler promptCompiler,
+            ObjectMapper objectMapper,
+            OrchestrationModelPort modelPort
     ) {
         this.skillService = skillService;
         this.mcpServerService = mcpServerService;
         this.agentService = agentService;
         this.teamService = teamService;
         this.promptCompiler = promptCompiler;
+        this.objectMapper = objectMapper;
+        this.modelPort = modelPort;
+    }
+
+    SystemResourceBuilder(
+            SkillDefinitionService skillService,
+            McpServerService mcpServerService,
+            AgentDefinitionService agentService,
+            AgentTeamService teamService,
+            AgentPromptCompiler promptCompiler
+    ) {
+        this(skillService, mcpServerService, agentService, teamService, promptCompiler, new ObjectMapper(), null);
     }
 
     public static boolean requiresResourceCreation(String query) {
@@ -83,8 +104,19 @@ public class SystemResourceBuilder {
 
     @Transactional
     public String create(CurrentUser user, String query) {
-        Request request = Request.from(query);
+        return create(user, query, "");
+    }
+
+    /** Creates resources from the original request plus the hidden Agent's planned definition. */
+    public String create(CurrentUser user, String query, String plannedDefinition) {
         Available available = availableFor(user);
+        String blueprint = modelPort == null ? "" : modelPort.designResourceTeam(query, capabilityCatalog(available));
+        Optional<Request> designed = parseBlueprint(blueprint, query)
+                .or(() -> parseBlueprint(plannedDefinition, query));
+        if (modelPort != null && designed.isEmpty()) {
+            return "资源未创建：系统资源构建器未生成有效的角色型 Team 蓝图，请重试。";
+        }
+        Request request = designed.orElseGet(() -> Request.from(query));
         if (request.team()) {
             return createTeam(user, request, available);
         }
@@ -92,6 +124,76 @@ public class SystemResourceBuilder {
         AgentResponse agent = reusable.orElseGet(() -> createOnlineAgent(user, request.roles().get(0), available, query));
         return "资源已" + (reusable.isPresent() ? "复用" : "创建") + "：Agent「" + agent.name() + "」（id=" + agent.id() + "），已绑定 "
                 + agent.skillIds().size() + " 个 Skill 和 " + agent.capabilityKeys().size() + " 个 MCP 工具。当前对话不会自动切换 Agent。";
+    }
+
+    private String capabilityCatalog(Available available) {
+        StringBuilder catalog = new StringBuilder("enabledSkills:\n");
+        for (SkillResponse skill : available.skills()) {
+            catalog.append("- ").append(skill.name()).append(": ").append(nullToEmpty(skill.description())).append('\n');
+        }
+        catalog.append("availableMcpTools:\n");
+        for (McpToolResponse tool : available.mcpTools()) {
+            catalog.append("- ").append(tool.runtimeName()).append(": ").append(nullToEmpty(tool.description())).append('\n');
+        }
+        catalog.append("existingOnlineAgents:\n");
+        for (AgentResponse agent : available.agents()) {
+            catalog.append("- ").append(agent.name()).append(": ").append(nullToEmpty(agent.description())).append('\n');
+        }
+        return catalog.toString();
+    }
+
+    /**
+     * The hidden system Agent supplies this compact JSON blueprint in its plan objective.
+     * Reject malformed or over-broad data and fall back to the legacy safe template.
+     */
+    private Optional<Request> parseBlueprint(String text, String rawQuery) {
+        if (text == null || text.isBlank() || !text.trim().startsWith("{")) return Optional.empty();
+        try {
+            JsonNode root = objectMapper.readTree(text);
+            if (root == null || !root.isObject() || !root.has("team") || !root.has("agents")) {
+                return Optional.empty();
+            }
+            if (!root.path("team").isBoolean() || !root.path("agents").isArray()) return Optional.empty();
+            boolean team = root.path("team").asBoolean();
+            if (team != (root.size() == 4 && root.has("teamName") && root.has("teamDescription"))
+                    || (!team && root.size() != 2)) return Optional.empty();
+            String name = team ? requiredText(root, "teamName", 80) : "";
+            String description = team ? requiredText(root, "teamDescription", 500) : "";
+            List<RoleSpec> roles = new ArrayList<>();
+            for (JsonNode agent : root.path("agents")) {
+                if (!agent.isObject() || agent.size() != 4) return Optional.empty();
+                String agentName = requiredText(agent, "name", 80);
+                if (!isProfessionalRoleTitle(agentName)) return Optional.empty();
+                String agentDescription = requiredText(agent, "description", 500);
+                String prompt = requiredText(agent, "systemPrompt", 8000);
+                String skillHint = requiredText(agent, "capabilityHints", 500);
+                roles.add(new RoleSpec(agentName, agentDescription, prompt, skillHint));
+            }
+            if ((team && (roles.size() < 2 || roles.size() > 20)) || (!team && roles.size() != 1)) return Optional.empty();
+            if (!team) {
+                RoleSpec agent = roles.get(0);
+                return Optional.of(new Request(false, agent.name(), agent.description(), List.of(agent), rawQuery));
+            }
+            return Optional.of(new Request(true, name, description, List.copyOf(roles), rawQuery));
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private static String requiredText(JsonNode node, String field, int maxLength) {
+        JsonNode value = node.path(field);
+        if (!value.isTextual()) throw new IllegalArgumentException("missing " + field);
+        String text = value.asText().trim();
+        if (text.isBlank() || text.length() > maxLength) throw new IllegalArgumentException("invalid " + field);
+        return text;
+    }
+
+    /** Prevent a model's work-package label from becoming a user-visible Agent name. */
+    private static boolean isProfessionalRoleTitle(String name) {
+        String normalized = name.replaceAll("\\s+", "");
+        if (normalized.matches(".*(设计|治理|渲染|归档|验证|量化|执行|监控|分析|建模|开发|补全)$")) return false;
+        return normalized.matches(".*(负责人|总监|科学家|研究员|专家|工程师|分析师|架构师|顾问|审校)$")
+                || normalized.matches("(?i).*(lead|director|scientist|researcher|specialist|engineer|analyst|architect|advisor|reviewer)$");
     }
 
     private String createTeam(CurrentUser user, Request request, Available available) {
@@ -288,6 +390,8 @@ public class SystemResourceBuilder {
                 request = data(team, query);
             } else if (containsAny(text, "研究", "调研", "竞品", "财报")) {
                 request = research(team, query);
+            } else if (containsAny(text, "语义通信", "频谱地图", "频谱补全", "无线通信", "频谱感知")) {
+                request = semanticSpectrum(team, query);
             } else {
                 request = general(team, query);
             }
@@ -492,6 +596,36 @@ public class SystemResourceBuilder {
                                     "research report 文档 pdf"
                             )
                     ), query);
+        }
+
+        private static Request semanticSpectrum(boolean team, String query) {
+            RoleSpec lead = new RoleSpec("语义通信项目负责人", "制定语义通信与频谱地图补全总体方案，拆解研究任务并统筹验收。", """
+                    你是语义通信与频谱地图补全项目负责人。先定义研究问题、数据假设、评价指标和交付物，再协调各角色并汇总结果。
+                    明确区分理论推导、实验事实和待验证假设；检查各模块接口与实验口径一致。只使用当前已绑定的 Skill 和工具。
+                    """.strip(), "语义通信 频谱 地图 补全 项目 管理");
+            RoleSpec semantic = new RoleSpec("语义通信算法研究员", "研究语义信息提取、语义编码传输和任务相关性度量，降低频谱数据通信开销。", """
+                    你负责语义通信算法。围绕频谱感知任务设计语义表示、编码传输、失真度量和抗噪机制，给出可复现的公式、假设与基线。
+                    说明语义压缩相对原始 IQ/功率谱数据的通信开销、性能损失和适用边界，不要编造实验结果。
+                    """.strip(), "语义通信 信息论 编码 传输 抗噪");
+            RoleSpec completion = new RoleSpec("频谱地图补全算法专家", "设计稀疏采样频谱地图的时空补全模型与对比实验。", """
+                    你负责频谱地图补全。分析空间拓扑、时间相关性和缺失机制，比较图神经网络、张量分解、时空模型和生成式方法。
+                    明确输入输出张量、训练/验证划分、缺失率、指标和基线，避免数据泄漏；所有结论必须绑定实验或文献依据。
+                    """.strip(), "频谱地图 补全 时空 图神经网络 张量 生成式");
+            RoleSpec sensing = new RoleSpec("无线信道与频谱感知研究员", "负责信道建模、电磁环境、频谱采样策略和实测数据质量。", """
+                    你负责无线信道与频谱感知。建立传播、干扰、噪声和占用状态假设，设计采样与标注方案，检查仿真数据和外场数据的一致性。
+                    对模型适用频段、带宽、采样率和信噪比给出明确说明，区分测量事实与建模假设。
+                    """.strip(), "无线 信道 频谱感知 电磁 采样 信噪比");
+            RoleSpec ml = new RoleSpec("AI模型与系统优化工程师", "负责模型训练调优、压缩加速和边缘部署。", """
+                    你负责 AI 模型工程化。制定训练配置、消融实验、复杂度和显存评估，进行剪枝、量化或蒸馏，并说明边缘部署约束。
+                    给出可执行的复现实验步骤和失败诊断，不把未经运行的代码或指标当成已验证结果。
+                    """.strip(), "深度学习 训练 优化 轻量化 边缘部署");
+            RoleSpec validation = new RoleSpec("仿真平台与实验验证工程师", "搭建仿真和数据处理流水线，执行对比实验并复核统计结果。", """
+                    你负责实验验证。搭建可重复的仿真、数据预处理和评测流水线，统一随机种子、数据划分和指标计算。
+                    对比语义通信与传统传输方案，报告误差、通信开销、运行时间和置信区间；工具不可用时明确记录阻塞。
+                    """.strip(), "仿真 实验 验证 数据处理 指标 对比");
+            List<RoleSpec> roles = List.of(lead, semantic, completion, sensing, ml, validation);
+            if (!team) return new Request(false, lead.name(), lead.description(), roles.subList(0, 1), query);
+            return new Request(true, "语义通信频谱地图补全科研团队", "围绕语义通信与稀疏频谱地图补全开展理论、算法、系统和实验协作。", roles, query);
         }
 
         private static Request general(boolean team, String query) {

@@ -382,12 +382,16 @@ public class GptProcessServiceImpl implements IGptProcessService {
         );
     }
 
+    /**
+     * The hidden builder is always visible to the planner for an orchestrated request.
+     * The planner model, not a keyword matcher in the transport layer, decides whether
+     * a user is asking to create a new Agent or Team and assigns this candidate only then.
+     */
     private OrchestrationTargets withSystemResourceBuilder(OrchestrationTargets targets, String query) {
-        if (!SystemResourceBuilder.requiresResourceCreation(query)) {
-            return targets;
-        }
         List<AgentCapabilitySummary> candidates = new java.util.ArrayList<>(targets.candidates());
-        candidates.add(SystemResourceBuilder.candidate());
+        if (candidates.stream().noneMatch(candidate -> SystemResourceBuilder.isSystemAgent(candidate.agentId()))) {
+            candidates.add(SystemResourceBuilder.candidate());
+        }
         return new OrchestrationTargets(List.copyOf(candidates), targets.masterPersona());
     }
 
