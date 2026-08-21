@@ -21,10 +21,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 class Phase2GptProcessEntryTest {
@@ -44,7 +41,7 @@ class Phase2GptProcessEntryTest {
 
         AgentBridgeException error = assertThrows(
                 AgentBridgeException.class,
-                () -> service.queryPhase2AgentStreamIncr(request("DIRECT", List.of("agent-1")))
+                () -> service.queryPhase2AgentStreamIncr(request("DIRECT", List.of()))
         );
 
         assertEquals(MvpErrorCode.VALIDATION_ERROR, error.getErrorCode());
@@ -93,39 +90,57 @@ class Phase2GptProcessEntryTest {
     }
 
     @Test
-    void autoWithoutCandidatesFallsBackToSharedDirectPath() {
-        FakeConversationExecutionPort executionPort = preparedExecutionPort();
+    void autoWithoutCandidatesFailsWithoutLegacyV1Fallback() {
+        FakeConversationExecutionPort executionPort = new FakeConversationExecutionPort();
         RecordingCatalogPort catalogPort = new RecordingCatalogPort();
         IMultiAgentService agentService = mock(IMultiAgentService.class);
         GptProcessServiceImpl service = service(executionPort, catalogPort, agentService);
 
-        service.queryPhase2AgentStreamIncr(request("AUTO", List.of()));
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryPhase2AgentStreamIncr(request("AUTO", List.of()))
+        );
 
+        assertEquals(MvpErrorCode.NO_SUITABLE_AGENT, error.getErrorCode());
         assertEquals(List.of(List.of()), catalogPort.calls);
-        assertEquals(List.of(
-                FakeConversationExecutionPort.CallType.PREPARE_EXECUTION,
-                FakeConversationExecutionPort.CallType.LOAD_COMPLETED_HISTORY,
-                FakeConversationExecutionPort.CallType.MARK_STREAMING
-        ), executionPort.getCalls().stream().map(FakeConversationExecutionPort.CallRecord::type).toList());
-        verify(agentService, times(1)).searchForAgentRequest(any(), any(), any());
+        assertTrue(executionPort.getCalls().isEmpty());
+        verifyNoInteractions(agentService);
     }
 
     @Test
-    void directSkipsCandidateSnapshotAndStartsSharedAutoAgentPath() {
-        FakeConversationExecutionPort executionPort = preparedExecutionPort();
+    void directWithoutAgentFailsValidationWithoutLegacyV1Fallback() {
+        FakeConversationExecutionPort executionPort = new FakeConversationExecutionPort();
         RecordingCatalogPort catalogPort = new RecordingCatalogPort();
         IMultiAgentService agentService = mock(IMultiAgentService.class);
         GptProcessServiceImpl service = service(executionPort, catalogPort, agentService);
 
-        service.queryPhase2AgentStreamIncr(request("DIRECT", List.of()));
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryPhase2AgentStreamIncr(request("DIRECT", List.of()))
+        );
 
+        assertEquals(MvpErrorCode.VALIDATION_ERROR, error.getErrorCode());
         assertTrue(catalogPort.calls.isEmpty());
-        assertEquals(List.of(
-                FakeConversationExecutionPort.CallType.PREPARE_EXECUTION,
-                FakeConversationExecutionPort.CallType.LOAD_COMPLETED_HISTORY,
-                FakeConversationExecutionPort.CallType.MARK_STREAMING
-        ), executionPort.getCalls().stream().map(FakeConversationExecutionPort.CallRecord::type).toList());
-        verify(agentService, times(1)).searchForAgentRequest(any(), any(), any());
+        assertTrue(executionPort.getCalls().isEmpty());
+        verifyNoInteractions(agentService);
+    }
+
+    @Test
+    void directWithSelectedAgentDoesNotStartLegacyV1Path() {
+        FakeConversationExecutionPort executionPort = preparedExecutionPort();
+        RecordingCatalogPort catalogPort = new RecordingCatalogPort();
+        catalogPort.candidates = List.of(summary("agent-1"));
+        IMultiAgentService agentService = mock(IMultiAgentService.class);
+        GptProcessServiceImpl service = service(executionPort, catalogPort, agentService);
+
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> service.queryPhase2AgentStreamIncr(request("DIRECT", List.of("agent-1")))
+        );
+
+        assertEquals(MvpErrorCode.INTERNAL_ERROR, error.getErrorCode());
+        assertEquals(List.of(List.of("agent-1")), catalogPort.calls);
+        verifyNoInteractions(agentService);
     }
 
     @Test

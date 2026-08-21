@@ -114,8 +114,8 @@ public class FileTool implements BaseTool {
         MediaType mediaType = MediaType.get("application/json; charset=utf-8");
         String url = genieConfig.getCodeInterpreterUrl() + "/v1/file_tool/upload_file";
 
-        // 构建请求体 多轮对话替换requestId为sessionId
-        fileRequest.setRequestId(agentContext.getSessionId());
+        // Shared conversation/run workspace — not the per-step execution id.
+        fileRequest.setRequestId(fileScopeId());
         // 清理文件名中的特殊字符
         fileRequest.setFileName(StringUtil.removeSpecialChars(fileRequest.getFileName()));
         if (fileRequest.getFileName().isEmpty()) {
@@ -191,7 +191,6 @@ public class FileTool implements BaseTool {
 
     // 获取文件的 API 请求方法
     public String getFile(FileRequest fileRequest, Boolean noticeFe) {
-        long startTime = System.currentTimeMillis();
         OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS) // 设置连接超时时间为 60 秒
                 .readTimeout(300, TimeUnit.SECONDS)    // 设置读取超时时间为 60 秒
@@ -203,62 +202,113 @@ public class FileTool implements BaseTool {
         GenieConfig genieConfig = applicationContext.getBean(GenieConfig.class);
         MediaType mediaType = MediaType.get("application/json; charset=utf-8");
         String url = genieConfig.getCodeInterpreterUrl() + "/v1/file_tool/get_file";
-        // 构建请求体
-        FileRequest getFileRequest = FileRequest.builder()
-                .requestId(agentContext.getRequestId())
-                .fileName(fileRequest.getFileName())
-                .build();
-        // 适配多轮对话
-        getFileRequest.setRequestId(agentContext.getSessionId());
-        RequestBody body = RequestBody.create(JSON.toJSONString(getFileRequest), mediaType);
-        Request request = withInternalFileToken(new Request.Builder()
-                .url(url)
-                .post(body)
-                .addHeader("Content-Type", "application/json"), applicationContext)
-                .build();
-        try {
-            log.info("{} file tool get request {}", agentContext.getRequestId(), JSON.toJSONString(getFileRequest));
-            Response response = client.newCall(request).execute();
-            if (!response.isSuccessful() || response.body() == null) {
-                String errMessage = "获取文件失败 " + fileRequest.getFileName();
-                return errMessage;
-            }
-            String result = response.body().string();
-            FileResponse fileResponse = JSON.parseObject(result, FileResponse.class);
-            log.info("{} file tool get response {}", agentContext.getRequestId(), result);
-            // 构建前端格式
-            Map<String, Object> resultMap = new HashMap<>();
-            resultMap.put("command", "读取文件");
-            List<CodeInterpreterResponse.FileInfo> fileInfo = new ArrayList<>();
-            fileInfo.add(CodeInterpreterResponse.FileInfo.builder()
-                    .fileName(fileRequest.getFileName())
-                    .ossUrl(fileResponse.getOssUrl())
-                    .domainUrl(fileResponse.getDomainUrl())
-                    .fileSize(fileResponse.getFileSize())
-                    .build());
-            resultMap.put("fileInfo", fileInfo);
-            // 获取数字人
-            String digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
-            log.info("requestId:{} task:{} toolName:{} digitalEmployee:{}", agentContext.getRequestId(),
-                    agentContext.getToolCollection().getCurrentTask(), getName(), digitalEmployee);
-            // 通知前端
-            if (noticeFe) {
-                agentContext.getPrinter().send("file", resultMap, digitalEmployee);
-            }
-            // 返回工具执行结果
-            String fileContent = getUrlContent(fileResponse.getOssUrl());
-            if (Objects.nonNull(fileContent)) {
-                if (fileContent.length() > genieConfig.getFileToolContentTruncateLen()) {
-                    fileContent = fileContent.substring(0, genieConfig.getFileToolContentTruncateLen());
+        String fileName = fileRequest.getFileName();
+        Exception lastError = null;
+        for (String scope : lookupScopes(fileName)) {
+            FileRequest getFileRequest = FileRequest.builder()
+                    .requestId(scope)
+                    .fileName(fileName)
+                    .build();
+            RequestBody body = RequestBody.create(JSON.toJSONString(getFileRequest), mediaType);
+            Request request = withInternalFileToken(new Request.Builder()
+                    .url(url)
+                    .post(body)
+                    .addHeader("Content-Type", "application/json"), applicationContext)
+                    .build();
+            try (Response response = client.newCall(request).execute()) {
+                log.info("{} file tool get request {}", agentContext.getRequestId(), JSON.toJSONString(getFileRequest));
+                if (response.code() == 404) {
+                    continue;
                 }
-
-                return "文件内容 " + fileContent;
+                if (!response.isSuccessful() || response.body() == null) {
+                    return "获取文件失败 " + fileName;
+                }
+                String result = response.body().string();
+                FileResponse fileResponse = JSON.parseObject(result, FileResponse.class);
+                log.info("{} file tool get response {}", agentContext.getRequestId(), result);
+                String interpreterBase = genieConfig.getCodeInterpreterUrl();
+                fileResponse.setOssUrl(FileToolUrls.publicUrl(
+                        fileResponse.getOssUrl(), interpreterBase, "download",
+                        scope, fileName));
+                fileResponse.setDomainUrl(FileToolUrls.publicUrl(
+                        fileResponse.getDomainUrl(), interpreterBase, "preview",
+                        scope, fileName));
+                Map<String, Object> resultMap = new HashMap<>();
+                resultMap.put("command", "读取文件");
+                List<CodeInterpreterResponse.FileInfo> fileInfo = new ArrayList<>();
+                fileInfo.add(CodeInterpreterResponse.FileInfo.builder()
+                        .fileName(fileName)
+                        .ossUrl(fileResponse.getOssUrl())
+                        .domainUrl(fileResponse.getDomainUrl())
+                        .fileSize(fileResponse.getFileSize())
+                        .build());
+                resultMap.put("fileInfo", fileInfo);
+                String digitalEmployee = agentContext.getToolCollection().getDigitalEmployee(getName());
+                log.info("requestId:{} task:{} toolName:{} digitalEmployee:{}", agentContext.getRequestId(),
+                        agentContext.getToolCollection().getCurrentTask(), getName(), digitalEmployee);
+                if (noticeFe) {
+                    agentContext.getPrinter().send("file", resultMap, digitalEmployee);
+                }
+                String fileContent = getUrlContent(fileResponse.getOssUrl(), applicationContext);
+                if (Objects.nonNull(fileContent)) {
+                    if (fileContent.length() > genieConfig.getFileToolContentTruncateLen()) {
+                        fileContent = fileContent.substring(0, genieConfig.getFileToolContentTruncateLen());
+                    }
+                    return "文件内容 " + fileContent;
+                }
+                return "获取文件失败 " + fileName;
+            } catch (Exception e) {
+                lastError = e;
+                log.error("{} get file error scope={}", agentContext.getRequestId(), scope, e);
             }
-        } catch (Exception e) {
-
-            log.error("{} get file error", agentContext.getRequestId(), e);
         }
-        return null;
+        if (lastError != null) {
+            log.error("{} get file error", agentContext.getRequestId(), lastError);
+        }
+        return "获取文件失败 " + fileName;
+    }
+
+    private String fileScopeId() {
+        if (agentContext.getSessionId() != null && !agentContext.getSessionId().isBlank()) {
+            return agentContext.getSessionId();
+        }
+        return agentContext.getRequestId();
+    }
+
+    private List<String> lookupScopes(String fileName) {
+        LinkedHashSet<String> scopes = new LinkedHashSet<>();
+        String primary = fileScopeId();
+        if (primary != null && !primary.isBlank()) {
+            scopes.add(primary);
+        }
+        addScopesFromFiles(scopes, fileName, agentContext.getProductFiles());
+        addScopesFromFiles(scopes, fileName, agentContext.getTaskProductFiles());
+        if (agentContext.getRequestId() != null && !agentContext.getRequestId().isBlank()) {
+            scopes.add(agentContext.getRequestId());
+        }
+        return new ArrayList<>(scopes);
+    }
+
+    private static void addScopesFromFiles(Set<String> scopes, String fileName, List<File> files) {
+        if (files == null || fileName == null || fileName.isBlank()) {
+            return;
+        }
+        for (File file : files) {
+            if (file == null) {
+                continue;
+            }
+            if (!fileName.equals(file.getFileName()) && !fileName.equals(file.getOriginFileName())) {
+                continue;
+            }
+            String fromOss = FileToolUrls.scopeFromUrl(file.getOssUrl());
+            if (fromOss != null && !fromOss.isBlank()) {
+                scopes.add(fromOss);
+            }
+            String fromDomain = FileToolUrls.scopeFromUrl(file.getDomainUrl());
+            if (fromDomain != null && !fromDomain.isBlank()) {
+                scopes.add(fromDomain);
+            }
+        }
     }
 
     private Request.Builder withInternalFileToken(Request.Builder builder, ApplicationContext applicationContext) {
@@ -272,21 +322,24 @@ public class FileTool implements BaseTool {
         return builder;
     }
 
-    private String getUrlContent(String url) {
+    private String getUrlContent(String url, ApplicationContext applicationContext) {
+        if (!FileToolUrls.isHttpUrl(url)) {
+            log.error("{} get file skipped, not an http url: {}", agentContext.getRequestId(), url);
+            return null;
+        }
         OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS) // 设置连接超时时间为 60 秒
                 .readTimeout(60, TimeUnit.SECONDS)    // 设置读取超时时间为 60 秒
                 .writeTimeout(60, TimeUnit.SECONDS)   // 设置写入超时时间为 60 秒
                 .callTimeout(60, TimeUnit.SECONDS)    // 设置调用超时时间为 60 秒
                 .build();
-        Request request = new Request.Builder()
-                .url(url)
+        Request request = withInternalFileToken(new Request.Builder()
+                .url(url), applicationContext)
                 .build();
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful() && response.body() != null) {
                 return response.body().string();
             } else {
-                String errMsg = String.format("获取文件失败, 状态码:%d", response.code());
                 log.error("{} 获取文件失败 {}", agentContext.getRequestId(), response.code());
                 return null;
             }

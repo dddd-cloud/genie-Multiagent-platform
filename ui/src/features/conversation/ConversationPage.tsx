@@ -95,6 +95,8 @@ const ConversationPage: GenieType.FC = memo(() => {
   const executionSeededForIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(conversationId);
   const chatViewInstanceRef = useRef(0);
+  const stickyChatViewKeyRef = useRef<string | null>(null);
+  const composerKey = `composer-${layout?.composerEpoch ?? 0}`;
   if (prevConversationIdRef.current !== conversationId) {
     const liveHandoff =
       !prevConversationIdRef.current &&
@@ -102,8 +104,14 @@ const ConversationPage: GenieType.FC = memo(() => {
       peekLiveChatRun(conversationId as string)?.sendInFlight === true;
     if (!liveHandoff) {
       chatViewInstanceRef.current += 1;
+      stickyChatViewKeyRef.current = null;
+    } else {
+      stickyChatViewKeyRef.current = composerKey;
     }
     prevConversationIdRef.current = conversationId;
+  }
+  if (!conversationId) {
+    stickyChatViewKeyRef.current = composerKey;
   }
 
   // Send-mode selection is not persisted across refresh; empty chats pick up saved defaults.
@@ -183,6 +191,9 @@ const ConversationPage: GenieType.FC = memo(() => {
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
 
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
+
   const applyMessages = useCallback(
     async (list: ConversationMessageResponse[], id: string) => {
       setRawMessages(list);
@@ -205,11 +216,13 @@ const ConversationPage: GenieType.FC = memo(() => {
     try {
       const messages = await getMessages(conversationId);
       const list = messages ?? [];
-      if (
-        list.length === 0 &&
-        peekLiveChatRun(conversationId)?.sendInFlight
-      ) {
-        return;
+      if (list.length === 0) {
+        if (
+          chatsRef.current.length > 0 ||
+          (peekLiveChatRun(conversationId)?.chatList.length ?? 0) > 0
+        ) {
+          return;
+        }
       }
       await applyMessages(list, conversationId);
     } catch (err: unknown) {
@@ -242,16 +255,39 @@ const ConversationPage: GenieType.FC = memo(() => {
    * ConversationResponse has no lastMessagePreview — list reload is the only
    * correct way to refresh sidebar title/preview/lastMessageAt from backend.
    */
-  const refreshConversationMeta = useCallback(async () => {
-    if (!conversationId) {
+  const refreshConversationMeta = useCallback(async (id?: string | null) => {
+    const targetId = id || conversationId;
+    if (!targetId) {
       return;
     }
     try {
-      const conv = await getConversation(conversationId);
+      const conv = await getConversation(targetId);
       if (conv) {
-        setConversation(conv);
+        if (targetId === conversationId) {
+          setConversation(conv);
+        }
+        layoutRef.current?.upsert({
+          id: conv.id,
+          title: conv.title,
+          privacyMode: conv.privacyMode === true,
+          lastMessageAt: conv.lastMessageAt ?? new Date().toISOString(),
+          createdAt: conv.createdAt,
+          updatedAt: conv.updatedAt,
+          lastMessagePreview: null,
+        });
       }
       await layoutRef.current?.reload();
+      if (conv) {
+        layoutRef.current?.upsert({
+          id: conv.id,
+          title: conv.title,
+          privacyMode: conv.privacyMode === true,
+          lastMessageAt: conv.lastMessageAt ?? new Date().toISOString(),
+          createdAt: conv.createdAt,
+          updatedAt: conv.updatedAt,
+          lastMessagePreview: null,
+        });
+      }
     } catch (err: unknown) {
       if (isAuthRequired(err)) {
         throw err;
@@ -279,8 +315,12 @@ const ConversationPage: GenieType.FC = memo(() => {
           return null;
         }
         layout?.upsert({
-          ...created,
-          lastMessageAt: null,
+          id: created.id,
+          title: created.title,
+          privacyMode: created.privacyMode === true,
+          lastMessageAt: created.lastMessageAt ?? new Date().toISOString(),
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
           lastMessagePreview: null,
         });
         createdComposerIdRef.current = created.id;
@@ -310,7 +350,8 @@ const ConversationPage: GenieType.FC = memo(() => {
   const prevComposerEpochRef = useRef(layout?.composerEpoch);
   useEffect(() => {
     if (conversationId) {
-      createdComposerIdRef.current = conversationId;
+      // Route already owns this thread; do not reuse it as a composer draft.
+      createdComposerIdRef.current = null;
       prevComposerEpochRef.current = layout?.composerEpoch;
       return;
     }
@@ -412,6 +453,7 @@ const ConversationPage: GenieType.FC = memo(() => {
         const list = messages ?? [];
         const keepLocalTurns =
           Boolean(peekLiveChatRun(conversationId)?.sendInFlight) ||
+          (peekLiveChatRun(conversationId)?.chatList.length ?? 0) > 0 ||
           (list.length === 0 && Boolean(peekConversationDraft(conversationId)));
         if (keepLocalTurns) {
           setRawMessages(list);
@@ -594,7 +636,9 @@ const ConversationPage: GenieType.FC = memo(() => {
       data-testid={conversationId ? undefined : 'new-conversation'}
     >
       <ChatView
-        key={`${chatViewInstanceRef.current}-${conversationId ?? `new-${layout?.composerEpoch ?? 0}`}`}
+        key={`${chatViewInstanceRef.current}-${
+          stickyChatViewKeyRef.current ?? conversationId ?? composerKey
+        }`}
         conversationId={conversationId}
         conversationTitle={conversation?.title ?? '新会话'}
         initialChats={conversationId ? chats : []}

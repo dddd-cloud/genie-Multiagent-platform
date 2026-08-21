@@ -92,6 +92,8 @@ describe('EventV2ParallelReducerTest', () => {
       }),
     );
     expect(state.attempts[1].steps.s1.status).toBe('RUNNING');
+    expect(state.attempts[1].steps.s1.subTasks['st-a'].status).toBe('RUNNING');
+    expect(state.attempts[1].steps.s1.subTasks['st-b'].status).toBe('RUNNING');
 
     state = reduceOrchestrationEvent(
       state,

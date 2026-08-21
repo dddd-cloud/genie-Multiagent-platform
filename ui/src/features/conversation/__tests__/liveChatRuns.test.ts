@@ -76,4 +76,13 @@ describe('liveChatRuns', () => {
     finishLiveChatRun('conv-1', 'req-1');
     expect(peekLiveChatRun('conv-1')).toBeNull();
   });
+
+  it('finish keeps the snapshot while a view is still subscribed', () => {
+    beginLiveChatRun('conv-1', 'req-1', [chat({ requestId: 'req-1', response: 'final' })]);
+    subscribeLiveChatRun('conv-1', () => undefined);
+    finishLiveChatRun('conv-1', 'req-1');
+    const run = peekLiveChatRun('conv-1');
+    expect(run?.sendInFlight).toBe(false);
+    expect(run?.chatList[0]?.response).toBe('final');
+  });
 });

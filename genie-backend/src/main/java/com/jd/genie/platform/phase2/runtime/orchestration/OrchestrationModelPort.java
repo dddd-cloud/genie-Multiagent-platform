@@ -1,9 +1,11 @@
 package com.jd.genie.platform.phase2.runtime.orchestration;
 
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationPlan;
+import com.jd.genie.platform.phase2.runtime.route.DispatchDecision;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.MasterPersona;
+import com.jd.genie.platform.phase2contract.dto.TeamCapabilitySummary;
 
 import java.util.List;
 import java.util.Map;
@@ -46,6 +48,38 @@ public interface OrchestrationModelPort {
             MasterPersona masterPersona
     ) {
         return selectRoute(query, conversationSummary, conversationHistory, candidates);
+    }
+
+    /**
+     * AUTO dispatch: pick one specialist or one team. Default maps the legacy router
+     * onto a single agent when DIRECT, otherwise the first available team.
+     */
+    default DispatchDecision selectDispatch(
+            String query,
+            String conversationSummary,
+            String conversationHistory,
+            List<AgentCapabilitySummary> agents,
+            List<TeamCapabilitySummary> teams
+    ) {
+        List<AgentCapabilitySummary> safeAgents = agents == null ? List.of() : agents;
+        List<TeamCapabilitySummary> safeTeams = teams == null ? List.of() : teams;
+        RouteDecision route = selectRoute(
+                query, conversationSummary, conversationHistory, safeAgents, MasterPersona.none());
+        if (route != null && route.route() == RouteDecision.Route.DIRECT && !safeAgents.isEmpty()) {
+            AgentCapabilitySummary agent = safeAgents.get(0);
+            return DispatchDecision.agent(agent.agentId(), agent.name(), route.reasonCode());
+        }
+        if (!safeTeams.isEmpty()) {
+            TeamCapabilitySummary team = safeTeams.get(0);
+            return DispatchDecision.team(team.teamId(), team.name(),
+                    route == null ? "MULTI_AGENT" : route.reasonCode());
+        }
+        if (!safeAgents.isEmpty()) {
+            AgentCapabilitySummary agent = safeAgents.get(0);
+            return DispatchDecision.agent(agent.agentId(), agent.name(),
+                    route == null ? "SINGLE_CAPABILITY" : route.reasonCode());
+        }
+        throw new IllegalStateException("No dispatch target");
     }
 
     /**
@@ -185,5 +219,27 @@ public interface OrchestrationModelPort {
             MasterPersona masterPersona
     ) {
         return summarize(query, conversationHistory, longTermMemory, conversationSummary, evidence);
+    }
+
+    /**
+     * Same as {@link #summarize(String, String, String, String, List, MasterPersona)} but may
+     * invoke {@code onDelta} with incremental tokens as they arrive. Default implementation
+     * emits the full answer once for test fakes.
+     */
+    default String summarize(
+            String query,
+            String conversationHistory,
+            String longTermMemory,
+            String conversationSummary,
+            List<SummaryEvidence> evidence,
+            MasterPersona masterPersona,
+            java.util.function.Consumer<String> onDelta
+    ) {
+        String answer = summarize(
+                query, conversationHistory, longTermMemory, conversationSummary, evidence, masterPersona);
+        if (onDelta != null && answer != null && !answer.isBlank()) {
+            onDelta.accept(answer);
+        }
+        return answer;
     }
 }

@@ -109,6 +109,16 @@ class AgentTaskResultParserTest {
     }
 
     @Test
+    void extractsEnvelopeAfterLeadingMarkdown() {
+        AgentTaskResult result = parser.parse("""
+                **假设**：基于 Java 后端。
+                {"status":"SUCCESS","output":"接口契约基本一致","errorCode":null,"retryable":false}
+                """);
+        assertEquals(AgentTaskResult.Status.SUCCESS, result.status());
+        assertEquals("接口契约基本一致", result.output());
+    }
+
+    @Test
     void rejectsSuccessOutputOverTwentyThousandCharacters() {
         String output = "a".repeat(20_001);
         AgentBridgeException error = assertThrows(

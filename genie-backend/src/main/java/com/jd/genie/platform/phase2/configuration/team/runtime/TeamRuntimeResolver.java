@@ -9,6 +9,7 @@ import com.jd.genie.platform.phase2.configuration.team.mapper.AgentTeamMemberMap
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.dto.MasterPersona;
+import com.jd.genie.platform.phase2contract.dto.TeamCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.TeamRuntimeSelection;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -62,6 +64,33 @@ public class TeamRuntimeResolver implements TeamRuntimeCatalogPort {
             master.resolvedModelName()
         );
         return new TeamRuntimeSelection(team.getId(), team.getName(), persona, candidates);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TeamCapabilitySummary> listAvailable(CurrentUser user) {
+        requireUser(user);
+        List<AgentTeamEntity> teams = teamMapper.selectOwnedPage(
+                user.tenantId(), user.userId(), 100, 0);
+        List<TeamCapabilitySummary> available = new ArrayList<>();
+        for (AgentTeamEntity team : teams) {
+            try {
+                TeamRuntimeSelection selection = resolve(user, team.getId());
+                List<String> memberNames = selection.memberCandidates().stream()
+                        .map(AgentCapabilitySummary::name)
+                        .toList();
+                available.add(new TeamCapabilitySummary(
+                        team.getId(),
+                        team.getName(),
+                        team.getDescription(),
+                        selection.masterPersona().displayName(),
+                        memberNames
+                ));
+            } catch (Phase2ContractException ignored) {
+                // Offline master or empty members: the system master must not pick this team.
+            }
+        }
+        return List.copyOf(available);
     }
 
     private void requireUser(CurrentUser user) {

@@ -182,7 +182,7 @@ export function finishLiveChatRun(
   run.handle = null;
   run.skillAbort = null;
   notify(conversationId);
-  runs.delete(conversationId);
+  prune(conversationId);
 }
 
 /** Test helper — not used by production UI. */

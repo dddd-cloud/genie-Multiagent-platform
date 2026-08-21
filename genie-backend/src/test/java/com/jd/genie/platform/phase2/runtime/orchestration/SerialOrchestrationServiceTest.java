@@ -77,6 +77,45 @@ class SerialOrchestrationServiceTest {
     }
 
     @Test
+    void sharesFileSessionAcrossSerialSteps() {
+        FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
+        catalog.registerProfile(profile("agent-a"));
+        catalog.registerProfile(profile("agent-b"));
+        FakeRuntimeToolCollectionPort tools = new FakeRuntimeToolCollectionPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        List<String> sessionIds = new ArrayList<>();
+        List<String> requestIds = new ArrayList<>();
+        doAnswer(invocation -> {
+            AgentContext context = invocation.getArgument(0);
+            sessionIds.add(context.getSessionId());
+            requestIds.add(context.getRequestId());
+            return AgentTaskResult.success(context.getRequestId());
+        }).when(executor).execute(any(), any(), any(), any(Integer.TYPE));
+        SerialOrchestrationService service = new SerialOrchestrationService(catalog, tools, executor, 10);
+
+        service.execute(
+                USER,
+                "query",
+                "",
+                "",
+                List.of(
+                        new OrchestrationStep("step-1", "agent-a", "first", List.of()),
+                        new OrchestrationStep("step-2", "agent-b", "second", List.of("step-1"))
+                ),
+                (eventType, step, result, details) -> { },
+                () -> false,
+                new java.util.LinkedHashMap<>(),
+                null,
+                1,
+                null,
+                "conversation-session"
+        );
+
+        assertEquals(List.of("step-1", "step-2"), requestIds);
+        assertEquals(List.of("conversation-session", "conversation-session"), sessionIds);
+    }
+
+    @Test
     void injectsLongTermMemoryAndConversationSummaryIntoSpecialistQuery() {
         FakeAgentRuntimeCatalogPort catalog = new FakeAgentRuntimeCatalogPort();
         catalog.registerProfile(profile("agent-a"));

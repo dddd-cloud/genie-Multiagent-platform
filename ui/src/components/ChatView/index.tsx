@@ -28,15 +28,13 @@ import { listAgents } from '@/services/phase2/agents';
 import { useLocalMemoryOptional } from '@/features/phase2/localMemory/useLocalMemory';
 import OrchestrationTimeline from '@/features/phase2/orchestration/OrchestrationTimeline';
 import {
+  collapseOrchestrationFolds,
   createInitialOrchestrationState,
   markOrchestrationDone,
   preserveOrchestrationFold,
   reduceOrchestrationEvent,
   reduceOrchestrationTrace,
-  toggleMainOpen,
   toggleMasterOpen,
-  toggleStepOpen,
-  toggleSubTaskOpen,
 } from '@/features/phase2/orchestration/orchestrationReducer';
 import { extractOrchestrationEventFromResult } from '@/features/phase2/orchestration/parseOrchestrationEvent';
 import { extractOrchestrationTraceFromResult } from '@/features/phase2/orchestration/parseOrchestrationTrace';
@@ -81,7 +79,7 @@ interface ChatViewProps {
   };
   detachedRunning: boolean;
   onReloadMessages: () => Promise<void>;
-  onConversationChanged: () => Promise<void>;
+  onConversationChanged: (conversationId?: string) => Promise<void>;
   privacyMode?: boolean;
   onPrivacyModeChange?: () => void;
   executionMode?: ExecutionMode;
@@ -330,10 +328,12 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const liveOnMount = conversationId
     ? peekLiveChatRun(conversationId)
     : undefined;
+  const seedChats =
+    liveOnMount && liveOnMount.chatList.length > 0
+      ? liveOnMount.chatList
+      : initialChats;
 
-  const [chatList, setChatList] = useState<PersistedChatItem[]>(
-    liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
-  );
+  const [chatList, setChatList] = useState<PersistedChatItem[]>(seedChats);
   const [taskList, setTaskList] = useState<MESSAGE.Task[]>([]);
   const [activeTask, setActiveTask] = useState<CHAT.Task>();
   const [plan, setPlan] = useState<CHAT.Plan>();
@@ -346,9 +346,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
   const chatRef = useRef<HTMLDivElement>(null);
   const actionViewRef = ActionView.useActionView();
-  const chatListRef = useRef<PersistedChatItem[]>(
-    liveOnMount?.sendInFlight ? liveOnMount.chatList : initialChats,
-  );
+  const chatListRef = useRef<PersistedChatItem[]>(seedChats);
 
   const relayWheelToChat = useMemoizedFn((event: WheelEvent<HTMLElement>) => {
     const chat = chatRef.current;
@@ -380,7 +378,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     for (const delayMs of [2000, 8000]) {
       const id = window.setTimeout(() => {
         titleRefreshTimersRef.current = titleRefreshTimersRef.current.filter((item) => item !== id);
-        void onConversationChanged();
+        void onConversationChanged(sessionIdRef.current || undefined);
       }, delayMs);
       titleRefreshTimersRef.current.push(id);
     }
@@ -721,6 +719,14 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
             .slice(0, ALLOWED_AGENTS_MAX);
         }
 
+        if (
+          executionModeRef.current === 'DIRECT' &&
+          allowedAgentIdsForRequest.length !== 1
+        ) {
+          message.error('请先选择一个智能体');
+          return;
+        }
+
         // Memory text stays empty on purpose: the backend injects the on-disk
         // snapshot for non-privacy conversations.
         const built = buildPhase2GptQueryRequest({
@@ -888,12 +894,15 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           const working: PersistedChatItem = {
             ...base,
             multiAgent: structuredClone(
-              currentChat.multiAgent ?? base.multiAgent ?? { tasks: [] },
+              base.multiAgent ?? currentChat.multiAgent ?? { tasks: [] },
             ),
-            tasks: currentChat.tasks ? [...currentChat.tasks] : base.tasks,
-            files: currentChat.files ? [...currentChat.files] : base.files,
-            response: currentChat.response ?? base.response,
-            loading: currentChat.loading,
+            tasks: base.tasks ? [...base.tasks] : currentChat.tasks,
+            files: base.files ? [...base.files] : currentChat.files,
+            // Prev list is the source of truth. Preferring a stale currentChat
+            // empty string over the accumulated snapshot wipes streamed answers
+            // when orchestration_trace packets arrive in between.
+            response: base.response,
+            loading: base.loading,
           };
 
           if (orchEvent) {
@@ -920,12 +929,19 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
               combineData(resultMap.eventData, working);
             }
 
+            const nextResponseAll =
+              typeof data.responseAll === 'string' ? data.responseAll : '';
+            const nextResponse =
+              typeof data.response === 'string' ? data.response : '';
+            // Cumulative snapshots (responseAll) replace; never append a snapshot
+            // onto itself. Empty response is ignored so heartbeats cannot wipe text.
+            if (nextResponseAll) {
+              working.response = nextResponseAll;
+            } else if (nextResponse) {
+              working.response = nextResponse;
+            }
+
             if (packageType === 'result' && finished) {
-              if (data.responseAll) {
-                working.response = data.responseAll;
-              } else if (data.response) {
-                working.response = data.response;
-              }
               const generated = extractGeneratedFiles(resultMap);
               if (generated.length) {
                 working.generatedFiles = generated;
@@ -935,20 +951,6 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 working.orchestration = markOrchestrationDone(
                   working.orchestration,
                 );
-              }
-            } else if (!orchEvent) {
-              if (data.responseAll) {
-                working.response = data.responseAll;
-              } else if (data.response) {
-                working.response = data.response;
-              }
-              if (finished) {
-                working.loading = false;
-                if (working.orchestration) {
-                  working.orchestration = markOrchestrationDone(
-                    working.orchestration,
-                  );
-                }
               }
             } else if (finished) {
               working.loading = false;
@@ -961,15 +963,33 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           }
 
           const existing = idx >= 0 ? prev[idx] : undefined;
+          let nextOrch =
+            working.orchestration && existing?.orchestration
+              ? preserveOrchestrationFold(
+                  working.orchestration,
+                  existing.orchestration,
+                )
+              : working.orchestration;
+          const incomingAnswer =
+            typeof data.responseAll === 'string' && data.responseAll
+              ? data.responseAll
+              : typeof data.response === 'string'
+                ? data.response
+                : '';
+          const answerStarted = Boolean(
+            !isOrchPackage && incomingAnswer && !existing?.response,
+          );
+          if (
+            nextOrch &&
+            (orchEvent?.eventType === 'SUMMARY_STARTED' ||
+              orchEvent?.eventType === 'SUMMARY_FALLBACK' ||
+              answerStarted)
+          ) {
+            nextOrch = collapseOrchestrationFolds(nextOrch);
+          }
           const nextItem: PersistedChatItem = {
             ...working,
-            orchestration:
-              working.orchestration && existing?.orchestration
-                ? preserveOrchestrationFold(
-                    working.orchestration,
-                    existing.orchestration,
-                  )
-                : working.orchestration,
+            orchestration: nextOrch,
           };
           currentChat = nextItem;
           if (idx < 0) {
@@ -1006,7 +1026,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           return;
         }
         openedOnceRef.current = true;
-        void onConversationChanged();
+        void onConversationChanged(sessionId);
         scheduleTitleRefresh();
       };
 
@@ -1055,7 +1075,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         finishLiveChatRun(sessionId, requestId);
         if (mountedRef.current) {
           await onReloadMessages();
-          await onConversationChanged();
+          await onConversationChanged(sessionId);
         }
         return;
       }
@@ -1095,7 +1115,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       if (result.reason === 'ABORT') {
         if (stoppedByUser) {
           if (mountedRef.current) {
-            await onConversationChanged();
+            await onConversationChanged(sessionId);
           }
           return;
         }
@@ -1310,24 +1330,6 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                           state={chat.orchestration}
                           onToggleMaster={() =>
                             patchOrchestration(chat.requestId, toggleMasterOpen)
-                          }
-                          onToggleMain={() =>
-                            patchOrchestration(chat.requestId, toggleMainOpen)
-                          }
-                          onToggleStep={(attemptNo, stepId) =>
-                            patchOrchestration(chat.requestId, (state) =>
-                              toggleStepOpen(state, attemptNo, stepId),
-                            )
-                          }
-                          onToggleSubTask={(attemptNo, stepId, subTaskId) =>
-                            patchOrchestration(chat.requestId, (state) =>
-                              toggleSubTaskOpen(
-                                state,
-                                attemptNo,
-                                stepId,
-                                subTaskId,
-                              ),
-                            )
                           }
                         />
                         {chat.orchestrationRecoveryWarning ? (

@@ -105,8 +105,8 @@ public final class Phase2GptQueryRequestValidator {
                 || normalized.stream().distinct().count() != normalized.size()) {
             throw validationError("allowedAgentIds must contain unique non-blank values");
         }
-        if ("DIRECT".equals(executionMode) && !normalized.isEmpty()) {
-            throw validationError("DIRECT requests must not specify allowedAgentIds");
+        if ("DIRECT".equals(executionMode) && normalized.size() != 1) {
+            throw validationError("DIRECT requests must specify exactly one allowedAgentId");
         }
         return List.copyOf(normalized);
     }

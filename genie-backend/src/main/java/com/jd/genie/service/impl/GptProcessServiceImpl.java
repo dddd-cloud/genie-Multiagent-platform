@@ -27,9 +27,11 @@ import com.jd.genie.platform.phase2.memory.store.MemoryDocumentService;
 import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationConversationHistory;
 import com.jd.genie.platform.phase2.runtime.orchestration.Phase2OrchestrationRuntime;
 import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
+import com.jd.genie.platform.phase2.runtime.route.DispatchDecision;
 import com.jd.genie.platform.phase2.runtime.route.RouteDecision;
 import com.jd.genie.platform.phase2contract.dto.AgentCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.MasterPersona;
+import com.jd.genie.platform.phase2contract.dto.TeamCapabilitySummary;
 import com.jd.genie.platform.phase2contract.dto.TeamRuntimeSelection;
 import com.jd.genie.platform.phase2contract.error.Phase2ContractException;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
@@ -226,13 +228,26 @@ public class GptProcessServiceImpl implements IGptProcessService {
         ValidatedPhase2Request request = phase2RequestValidator.validate(externalRequest, currentUser);
         OrchestrationTargets targets = loadOrchestrationTargets(currentUser, request);
         if ("DIRECT".equals(request.executionMode())) {
-            return executeTrustedRequest(currentUser, withDirectRuntimeContext(currentUser, request));
+            if (targets.candidates().size() != 1) {
+                throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
+            }
+            return executeSoloRequest(currentUser, request, targets.candidates().get(0),
+                    new RouteDecision(RouteDecision.Route.ORCHESTRATED, "SOLO_AGENT"));
         }
-        if ("AUTO".equals(request.executionMode()) && targets.candidates().isEmpty()) {
-            return executeTrustedRequest(currentUser, withDirectRuntimeContext(currentUser, request));
+        List<TeamCapabilitySummary> teams = "AUTO".equals(request.executionMode())
+                ? listAvailableTeams(currentUser)
+                : List.of();
+        if ("AUTO".equals(request.executionMode())
+                && targets.candidates().isEmpty()
+                && teams.isEmpty()) {
+            throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
         }
         if ("ORCHESTRATED".equals(request.executionMode()) && targets.candidates().isEmpty()) {
             throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
+        }
+        if ("AUTO".equals(request.executionMode())
+                && !SystemResourceBuilder.requiresResourceCreation(request.trustedRequest().getQuery())) {
+            return executeAutoRequest(currentUser, request, targets.candidates(), teams);
         }
         return executeOrchestrationRequest(currentUser, request, targets);
     }
@@ -280,8 +295,34 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     masterPersona
             );
             if (route.route() == RouteDecision.Route.DIRECT) {
-                trustedRequest.setQuery(attachmentPrompts.specialistQuery());
-                startAgent(trustedRequest, observer, cancellableCall);
+                if (candidates.isEmpty()) {
+                    throw new AgentBridgeException(MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available");
+                }
+                ThreadUtil.execute(() -> {
+                    try {
+                        applySelectedModel(currentUser, trustedRequest);
+                        runtime.executeSolo(
+                                currentUser,
+                                trustedRequest.getRequestId(),
+                                UUID.randomUUID().toString(),
+                                attachmentPrompts.routingQuery(),
+                                localContext.conversationSummary(),
+                                localContext.longTermMemory(),
+                                conversationHistory,
+                                candidates.get(0),
+                                new RouteDecision(RouteDecision.Route.ORCHESTRATED, route.reasonCode()),
+                                observer,
+                                attachmentPrompts.specialistQuery(),
+                                trustedRequest.getSessionId()
+                        );
+                    } catch (Throwable error) {
+                        if (!observer.isTerminal()) {
+                            observer.onError(error);
+                        }
+                    } finally {
+                        RequestScopedLlmSettings.clear();
+                    }
+                });
                 return;
             }
             // Return SseEmitter first; sync execute() would buffer all SSE until the request thread finishes.
@@ -301,7 +342,8 @@ public class GptProcessServiceImpl implements IGptProcessService {
                             observer,
                             masterPersona,
                             request.teamId(),
-                            attachmentPrompts.specialistQuery()
+                            attachmentPrompts.specialistQuery(),
+                            trustedRequest.getSessionId()
                     );
                 } catch (Throwable error) {
                     if (!observer.isTerminal()) {
@@ -312,6 +354,134 @@ public class GptProcessServiceImpl implements IGptProcessService {
                 }
             });
         });
+    }
+
+    private SseEmitter executeSoloRequest(
+            CurrentUser currentUser,
+            ValidatedPhase2Request request,
+            AgentCapabilitySummary agent,
+            RouteDecision route
+    ) {
+        GptQueryReq trustedRequest = withDirectRuntimeContext(currentUser, request);
+        return executePreparedRequest(currentUser, trustedRequest, (observer, cancellableCall) -> {
+            applySelectedModel(currentUser, trustedRequest);
+            ChatAttachmentPrompt.Prompts attachmentPrompts = attachmentPrompts(currentUser, trustedRequest);
+            Phase2OrchestrationRuntime runtime = requireOrchestrationRuntime();
+            String conversationHistory = OrchestrationConversationHistory.format(trustedRequest.getHistoryMessages());
+            LocalContextSnapshot localContext = effectiveLocalContext(currentUser, request);
+            ThreadUtil.execute(() -> {
+                try {
+                    applySelectedModel(currentUser, trustedRequest);
+                    runtime.executeSolo(
+                            currentUser,
+                            trustedRequest.getRequestId(),
+                            UUID.randomUUID().toString(),
+                            attachmentPrompts.routingQuery(),
+                            localContext.conversationSummary(),
+                            localContext.longTermMemory(),
+                            conversationHistory,
+                            agent,
+                            route,
+                            observer,
+                            attachmentPrompts.specialistQuery(),
+                            trustedRequest.getSessionId()
+                    );
+                } catch (Throwable error) {
+                    if (!observer.isTerminal()) {
+                        observer.onError(error);
+                    }
+                } finally {
+                    RequestScopedLlmSettings.clear();
+                }
+            });
+        });
+    }
+
+    private SseEmitter executeAutoRequest(
+            CurrentUser currentUser,
+            ValidatedPhase2Request request,
+            List<AgentCapabilitySummary> agents,
+            List<TeamCapabilitySummary> teams
+    ) {
+        GptQueryReq trustedRequest = withDirectRuntimeContext(currentUser, request);
+        return executePreparedRequest(currentUser, trustedRequest, (observer, cancellableCall) -> {
+            applySelectedModel(currentUser, trustedRequest);
+            ChatAttachmentPrompt.Prompts attachmentPrompts = attachmentPrompts(currentUser, trustedRequest);
+            Phase2OrchestrationRuntime runtime = requireOrchestrationRuntime();
+            String conversationHistory = OrchestrationConversationHistory.format(trustedRequest.getHistoryMessages());
+            LocalContextSnapshot localContext = effectiveLocalContext(currentUser, request);
+            ThreadUtil.execute(() -> {
+                try {
+                    applySelectedModel(currentUser, trustedRequest);
+                    DispatchDecision decision = runtime.selectDispatch(
+                            attachmentPrompts.routingQuery(),
+                            localContext.conversationSummary(),
+                            conversationHistory,
+                            agents,
+                            teams
+                    );
+                    if (decision.kind() == DispatchDecision.Kind.AGENT) {
+                        AgentCapabilitySummary agent = agents.stream()
+                                .filter(item -> decision.targetId().equals(item.agentId()))
+                                .findFirst()
+                                .orElseThrow(() -> new AgentBridgeException(
+                                        MvpErrorCode.NO_SUITABLE_AGENT, "No suitable online Agent is available"));
+                        runtime.executeSolo(
+                                currentUser,
+                                trustedRequest.getRequestId(),
+                                UUID.randomUUID().toString(),
+                                attachmentPrompts.routingQuery(),
+                                localContext.conversationSummary(),
+                                localContext.longTermMemory(),
+                                conversationHistory,
+                                agent,
+                                new RouteDecision(RouteDecision.Route.ORCHESTRATED, "AUTO_SINGLE_AGENT"),
+                                observer,
+                                attachmentPrompts.specialistQuery(),
+                                trustedRequest.getSessionId()
+                        );
+                        return;
+                    }
+                    OrchestrationTargets teamTargets = withSystemResourceBuilder(
+                            loadTeamTargets(currentUser, decision.targetId()),
+                            trustedRequest.getQuery()
+                    );
+                    runtime.execute(
+                            currentUser,
+                            trustedRequest.getRequestId(),
+                            UUID.randomUUID().toString(),
+                            attachmentPrompts.routingQuery(),
+                            localContext.conversationSummary(),
+                            localContext.longTermMemory(),
+                            conversationHistory,
+                            teamTargets.candidates(),
+                            new RouteDecision(RouteDecision.Route.ORCHESTRATED, "AUTO_TEAM"),
+                            observer,
+                            teamTargets.masterPersona(),
+                            decision.targetId(),
+                            attachmentPrompts.specialistQuery(),
+                            trustedRequest.getSessionId()
+                    );
+                } catch (Throwable error) {
+                    if (!observer.isTerminal()) {
+                        observer.onError(error);
+                    }
+                } finally {
+                    RequestScopedLlmSettings.clear();
+                }
+            });
+        });
+    }
+
+    private Phase2OrchestrationRuntime requireOrchestrationRuntime() {
+        Phase2OrchestrationRuntime runtime = orchestrationRuntimeProvider.getIfAvailable();
+        if (runtime == null) {
+            throw new AgentBridgeException(
+                    MvpErrorCode.INTERNAL_ERROR,
+                    "Phase2 orchestration runtime is not available"
+            );
+        }
+        return runtime;
     }
 
     private SseEmitter executePreparedRequest(
@@ -371,7 +541,7 @@ public class GptProcessServiceImpl implements IGptProcessService {
             ValidatedPhase2Request request
     ) {
         if ("DIRECT".equals(request.executionMode())) {
-            return new OrchestrationTargets(List.of(), MasterPersona.none());
+            return new OrchestrationTargets(loadCandidateSnapshot(currentUser, request), MasterPersona.none());
         }
         if (request.teamId() != null && !request.teamId().isBlank()) {
             return withSystemResourceBuilder(loadTeamTargets(currentUser, request.teamId()), request.trustedRequest().getQuery());
@@ -406,6 +576,21 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     List.copyOf(selection.memberCandidates()),
                     selection.masterPersona()
             );
+        } catch (Phase2ContractException error) {
+            throw new AgentBridgeException(error.errorCode(), error.getMessage(), error);
+        } catch (RuntimeException error) {
+            throw AgentBridgeErrorMapper.asAgentBridgeException(error, MvpErrorCode.INTERNAL_ERROR);
+        }
+    }
+
+    private List<TeamCapabilitySummary> listAvailableTeams(CurrentUser currentUser) {
+        TeamRuntimeCatalogPort teamPort = teamRuntimeCatalogPortProvider.getIfAvailable();
+        if (teamPort == null) {
+            return List.of();
+        }
+        try {
+            List<TeamCapabilitySummary> teams = teamPort.listAvailable(currentUser);
+            return teams == null ? List.of() : List.copyOf(teams);
         } catch (Phase2ContractException error) {
             throw new AgentBridgeException(error.errorCode(), error.getMessage(), error);
         } catch (RuntimeException error) {

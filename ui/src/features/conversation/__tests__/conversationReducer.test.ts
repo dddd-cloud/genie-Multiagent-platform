@@ -81,6 +81,22 @@ describe('conversationReducer', () => {
     expect(next.items[0].title).toBe('Updated');
   });
 
+  it('UPSERT moves an item to the front when lastMessageAt becomes set', () => {
+    const prev = {
+      ...initialConversationListState,
+      items: [item('a'), item('b')],
+    };
+    const next = conversationReducer(prev, {
+      type: 'UPSERT',
+      item: {
+        ...item('b'),
+        lastMessageAt: '2026-08-21T00:00:00Z',
+      },
+    });
+    expect(next.items.map((i) => i.id)).toEqual(['b', 'a']);
+    expect(next.items[0].lastMessageAt).toBe('2026-08-21T00:00:00Z');
+  });
+
   it('REMOVE deletes by id', () => {
     const prev = {
       ...initialConversationListState,

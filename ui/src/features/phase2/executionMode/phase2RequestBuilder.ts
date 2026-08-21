@@ -123,13 +123,12 @@ export function buildPhase2GptQueryRequest(
 
   let allowedAgentIds = dedupeAllowedAgentIds(input.allowedAgentIds);
   if (input.executionMode === 'DIRECT') {
-    if (allowedAgentIds.length > 0) {
+    if (allowedAgentIds.length !== 1) {
       return validationError(
-        'DIRECT_ALLOWED_AGENTS_FORBIDDEN',
-        'DIRECT mode requires empty allowedAgentIds',
+        'DIRECT_SINGLE_AGENT_REQUIRED',
+        'DIRECT mode requires exactly one allowedAgentId',
       );
     }
-    allowedAgentIds = [];
   }
 
   if (allowedAgentIds.length > ALLOWED_AGENTS_MAX) {
