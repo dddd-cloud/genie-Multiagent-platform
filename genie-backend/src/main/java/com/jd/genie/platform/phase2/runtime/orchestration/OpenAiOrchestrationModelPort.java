@@ -104,11 +104,16 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 You are a Phase2 router. Reply with ONLY JSON:
                 {"route":"DIRECT"|"ORCHESTRATED","reasonCode":"<SHORT_UPPER_SNAKE_CODE>"}
                 Choose DIRECT when a single agent can fully answer the request, including when only one candidate exists.
+                If an existing candidate's description already fits the request — including greetings,
+                small talk, or vague/ambiguous messages with no explicit task — choose DIRECT with that
+                candidate. Do not infer a creation intent just because the message is short or unclear.
                 Choose ORCHESTRATED when the request needs work from two or more different candidates,
-                when it explicitly asks several agents to each contribute, OR when the requested
-                deliverable is a newly created Agent or Team.  The latter may be phrased without
-                a creation verb, for example "give me a game testing agent".  A hidden candidate
-                named system resource builder is available for that creation step.
+                when it explicitly asks several agents to each contribute, OR when the user explicitly
+                asks to create/build a new Agent or Team (e.g. "帮我创建一个...", "give me a new agent
+                for..."), even when phrased without the literal word "create". A hidden candidate named
+                system resource builder is available for that creation step, but only route to it when
+                the user's own words ask for a new Agent or Team — never as a fallback for an otherwise
+                unclear request.
                 reasonCode is a short machine code such as SINGLE_CAPABILITY, ONLY_ONE_CANDIDATE,
                 MULTI_CAPABILITY, EXPLICIT_MULTI_AGENT, or RESOURCE_CREATION_REQUEST.
                 Follow-up questions may refer to recentConversation; use it only to resolve references.
