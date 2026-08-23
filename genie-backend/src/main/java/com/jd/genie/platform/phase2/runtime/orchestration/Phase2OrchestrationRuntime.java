@@ -388,7 +388,8 @@ public final class Phase2OrchestrationRuntime {
                     traces,
                     1,
                     observer,
-                    fileSessionId
+                    fileSessionId,
+                    true
             );
             Map<String, String> successes = new LinkedHashMap<>();
             Map<String, String> failures = new LinkedHashMap<>();

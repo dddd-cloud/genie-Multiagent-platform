@@ -55,8 +55,10 @@ class ConfiguredAgentPrinterTest {
 
     @Test
     void formatsDeepSearchProgressWithoutDumpingReport() {
+        // "start" duplicates the "准备联网搜索：X" intent ReactImplAgent already sent;
+        // suppressed so the same sentence doesn't appear twice in a row.
         assertEquals(
-                "正在联网搜索：贵州茅台2024营收",
+                null,
                 ConfiguredAgentPrinter.formatDeepSearchProgress(Map.of(
                         "messageType", "start",
                         "query", "贵州茅台2024营收"

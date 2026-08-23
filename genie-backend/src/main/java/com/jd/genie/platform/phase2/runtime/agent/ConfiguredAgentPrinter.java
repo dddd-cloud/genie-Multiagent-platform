@@ -337,6 +337,11 @@ public final class ConfiguredAgentPrinter implements Printer {
         return trimmed.startsWith("{") && trimmed.contains("\"");
     }
 
+    // ReactImplAgent already announces intent ("准备联网搜索：X" / "准备运行代码" / ...)
+    // right before dispatching each tool call. Once a tool's own progress callback
+    // fires for that same start, repeating the identical sentence in "正在…" tense
+    // adds no information — only genuinely new progress (search results, a split
+    // search plan, a final "done" state) is worth a second line.
     static String formatToolProgress(String messageType, Object message) {
         if ("deep_search".equals(messageType)) {
             return formatDeepSearchProgress(message);
@@ -345,16 +350,16 @@ public final class ConfiguredAgentPrinter implements Printer {
             if (message instanceof CodeInterpreterResponse response && Boolean.TRUE.equals(response.getIsFinal())) {
                 return "代码执行完成";
             }
-            return "正在运行代码";
+            return null;
         }
         if ("data_analysis".equals(messageType)) {
             if (message instanceof DataAnalysisResponse response && Boolean.TRUE.equals(response.getIsFinal())) {
                 return "数据分析完成";
             }
-            return "正在分析数据";
+            return null;
         }
         if ("file".equals(messageType)) {
-            return "正在处理文件";
+            return null;
         }
         if (message instanceof Map<?, ?> map) {
             Object query = map.get("query");
@@ -368,12 +373,8 @@ public final class ConfiguredAgentPrinter implements Printer {
     static String formatDeepSearchProgress(Object message) {
         if (message instanceof Map<?, ?> map) {
             String type = stringOf(map.get("messageType"));
-            String query = stringOf(map.get("query"));
             if ("start".equals(type)) {
-                if (query != null && !query.isBlank()) {
-                    return "正在联网搜索：" + truncate(query, 80);
-                }
-                return "正在联网搜索";
+                return null;
             }
         }
         if (message instanceof DeepSearchrResponse response) {
