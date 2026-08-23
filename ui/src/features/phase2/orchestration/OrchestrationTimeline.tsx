@@ -21,10 +21,11 @@ export interface OrchestrationTimelineProps {
   onToggleMaster?: () => void;
 }
 
-function Spinner() {
+function Spinner({ size = 12 }: { size?: number }) {
   return (
     <span
-      className="inline-block size-[12px] shrink-0 rounded-full border-[1.5px] border-black/10 border-t-black/65 animate-spin"
+      className="inline-block shrink-0 rounded-full border-[1.5px] border-black/[0.08] border-t-brand animate-spin"
+      style={{ width: size, height: size }}
       aria-hidden
     />
   );
@@ -35,7 +36,7 @@ function Chevron({ open }: { open: boolean }) {
     <svg
       viewBox="0 0 12 12"
       className={classNames(
-        'size-12 shrink-0 text-[#C7C7CC] transition-transform duration-200',
+        'size-12 shrink-0 text-text-tertiary transition-transform duration-200',
         open ? 'rotate-180' : 'rotate-0',
       )}
       aria-hidden
@@ -155,12 +156,12 @@ function headerCopy(
     return '查看思考过程';
   }
   if (terminal === 'FAILED') {
-    return '查看思考过程';
+    return '思考过程 · 未完成';
   }
   if (terminal === 'INTERRUPTED') {
-    return '查看思考过程';
+    return '思考过程 · 已中断';
   }
-  return '查看思考过程';
+  return '思考过程';
 }
 
 function AgentAvatar({
@@ -176,20 +177,48 @@ function AgentAvatar({
     <span className="relative mt-2 inline-flex shrink-0 items-center">
       <span
         className={classNames(
-          'inline-flex size-[28px] items-center justify-center rounded-full text-[12px] font-medium',
+          'inline-flex size-[30px] items-center justify-center rounded-full text-[12.5px] font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1',
           tone === 'main'
-            ? 'bg-[#1D1D1F] text-white'
-            : 'bg-[#EEF2FF] text-[#4338CA]',
+            ? 'bg-brand text-white ring-black/[0.06]'
+            : 'bg-[#EEF2FF] text-[#4338CA] ring-[#4338CA]/[0.08]',
         )}
         aria-hidden
       >
         {avatarInitial(name, tone === 'main' ? 'main' : 'expert')}
       </span>
       {thinking ? (
-        <span className="ml-6" data-testid="agent-thinking-spinner">
-          <Spinner />
+        <span
+          className="absolute -bottom-2 -right-2 flex size-[16px] items-center justify-center rounded-full bg-surface shadow-[0_0_0_2px_var(--color-surface)]"
+          data-testid="agent-thinking-spinner"
+        >
+          <Spinner size={10} />
         </span>
       ) : null}
+    </span>
+  );
+}
+
+const STATUS_CHIP_STYLES: Record<ThoughtPhase, string> = {
+  thinking: 'bg-[#EEF2FF] text-[#4338CA]',
+  waiting: 'bg-black/[0.04] text-text-tertiary',
+  done: 'bg-black/[0.04] text-text-tertiary',
+  failed: 'bg-danger-soft text-danger',
+  skipped: 'bg-black/[0.04] text-text-tertiary',
+  degraded: 'bg-black/[0.04] text-warning',
+};
+
+function StatusChip({ phase }: { phase: ThoughtPhase }) {
+  return (
+    <span
+      className={classNames(
+        'inline-flex items-center gap-4 rounded-full px-6 py-[2px] text-[11px] font-medium leading-[16px]',
+        STATUS_CHIP_STYLES[phase],
+      )}
+    >
+      {phase === 'thinking' ? (
+        <span className="size-4 shrink-0 rounded-full bg-[#4338CA] animate-pulse" aria-hidden />
+      ) : null}
+      {thoughtPhaseLabel(phase)}
     </span>
   );
 }
@@ -262,28 +291,21 @@ function ChatMessage({
   }, [blocks, thinking]);
 
   return (
-    <div className="flex items-start gap-10 py-10" data-testid={testId}>
+    <div className="flex items-start gap-12 py-12" data-testid={testId}>
       <AgentAvatar name={name} tone={tone} thinking={thinking} />
-      <div className="min-w-0 flex-1">
-        <div className="mb-4 flex flex-wrap items-center gap-6 text-[12px] leading-[18px]">
+      <div className="min-w-0 flex-1 pt-2">
+        <div className="mb-6 flex flex-wrap items-center gap-8 text-[13px] leading-[18px]">
           <span className="font-medium text-text-primary">{name}</span>
-          <span
-            className={thinking ? 'text-[#4338CA]' : 'text-text-tertiary'}
-            data-testid={`${testId}-status`}
-          >
-            {thoughtPhaseLabel(phase)}
+          <span data-testid={`${testId}-status`}>
+            <StatusChip phase={phase} />
           </span>
         </div>
         <div ref={scrollerRef} className="max-h-[320px] overflow-auto pr-4">
           {blocks.length === 0 ? (
             thinking ? (
-              <div className="text-[13px] leading-[22px] text-text-tertiary">
-                正在思考
-              </div>
+              <ThinkingPlaceholder label="正在思考" />
             ) : waiting ? (
-              <div className="text-[13px] leading-[22px] text-text-tertiary">
-                排队等待
-              </div>
+              <ThinkingPlaceholder label="排队等待" muted />
             ) : null
           ) : (
             blocks.map((block, index) => {
@@ -292,9 +314,10 @@ function ChatMessage({
                 return (
                   <div
                     key={`status-${index}`}
-                    className="mb-6 last:mb-0 text-[12px] leading-[20px] text-text-tertiary"
+                    className="mb-8 last:mb-0 flex items-start gap-6 text-[12px] leading-[20px] text-text-tertiary"
                   >
-                    {block.text}
+                    <span className="mt-[7px] size-4 shrink-0 rounded-full bg-black/15" aria-hidden />
+                    <span>{block.text}</span>
                   </div>
                 );
               }
@@ -302,14 +325,15 @@ function ChatMessage({
                 return (
                   <div
                     key={`error-${index}`}
-                    className="mb-6 last:mb-0 text-[13px] leading-[22px] text-text-secondary"
+                    className="mb-8 last:mb-0 flex items-start gap-6 rounded-lg bg-black/[0.03] px-10 py-8 text-[13px] leading-[22px] text-text-secondary"
                   >
-                    {block.text}
+                    <span className="mt-[6px] size-6 shrink-0 rounded-full bg-warning/70" aria-hidden />
+                    <span>{block.text}</span>
                   </div>
                 );
               }
               return (
-                <div key={`md-${index}`} className="mb-6 last:mb-0">
+                <div key={`md-${index}`} className="mb-8 last:mb-0">
                   <ThoughtMarkdown text={block.text} />
                   {last && thinking ? (
                     <span className="ml-3 inline-block h-[12px] w-[1.5px] translate-y-[1px] bg-black/40 animate-pulse" />
@@ -324,13 +348,32 @@ function ChatMessage({
   );
 }
 
+function ThinkingPlaceholder({ label, muted }: { label: string; muted?: boolean }) {
+  return (
+    <div className="flex items-center gap-6 text-[13px] leading-[22px] text-text-tertiary">
+      <span>{label}</span>
+      {muted ? null : (
+        <span className="inline-flex items-center gap-3" aria-hidden>
+          <span className="size-4 rounded-full bg-text-tertiary/50 animate-bounce [animation-delay:-0.3s]" />
+          <span className="size-4 rounded-full bg-text-tertiary/50 animate-bounce [animation-delay:-0.15s]" />
+          <span className="size-4 rounded-full bg-text-tertiary/50 animate-bounce" />
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Notice({ children, testId }: { children: ReactNode; testId: string }) {
   return (
     <div
-      className="py-4 text-center text-[12px] leading-[18px] text-text-tertiary"
+      className="my-4 flex items-center gap-10 py-2"
       data-testid={testId}
     >
-      {children}
+      <span className="h-[1px] flex-1 bg-border" aria-hidden />
+      <span className="shrink-0 text-center text-[11.5px] leading-[16px] text-text-tertiary">
+        {children}
+      </span>
+      <span className="h-[1px] flex-1 bg-border" aria-hidden />
     </div>
   );
 }
@@ -378,15 +421,15 @@ export default function OrchestrationTimeline({
     >
       <button
         type="button"
-        className="flex w-full items-center gap-10 py-4 text-left"
+        className="group flex w-full items-center gap-10 rounded-lg px-6 py-6 -mx-6 text-left transition-colors hover:bg-black/[0.025]"
         onClick={onToggleMaster}
         aria-expanded={state.masterOpen}
         data-testid="orchestration-master-toggle"
       >
-        {thinking && state.masterOpen ? <Spinner /> : null}
+        {thinking ? <Spinner /> : null}
         <span className="min-w-0 flex-1">
           <span
-            className="block text-[13px] text-text-secondary"
+            className="block text-[13px] font-medium text-text-secondary group-hover:text-text-primary"
             data-testid="orchestration-completion-status"
           >
             {header}
@@ -401,10 +444,12 @@ export default function OrchestrationTimeline({
       </button>
 
       {state.masterOpen ? (
-        <div
-          className="mt-4"
-          data-testid="orchestration-master-body"
-        >
+        <div className="mt-6" data-testid="orchestration-master-body-wrap">
+          <div className="h-[1px] bg-border" aria-hidden />
+          <div
+            className="pt-10"
+            data-testid="orchestration-master-body"
+          >
           {showMain ? (
             <ChatMessage
               name="主规划"
@@ -498,6 +543,7 @@ export default function OrchestrationTimeline({
                 : '主规划已开始回复你'}
             </Notice>
           ) : null}
+          </div>
         </div>
       ) : null}
     </div>
