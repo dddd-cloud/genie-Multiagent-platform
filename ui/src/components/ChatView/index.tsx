@@ -100,6 +100,13 @@ interface ChatViewProps {
    * into every unrelated conversation.
    */
   workspaceBound?: boolean;
+  /**
+   * Builds the URL to replace-navigate to once a brand-new conversation gets
+   * its id from the first send. Defaults to the ordinary chat route; the
+   * workspace page supplies a workspace-scoped path so the send does not
+   * bounce the user out of the three-pane workspace shell.
+   */
+  resolveChatPath?: (conversationId: string) => string;
 }
 
 const QUERY_MIN = 1;
@@ -323,6 +330,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     onTeamIdChange,
     onEnsureConversation,
     workspaceBound = false,
+    resolveChatPath = (id: string) => `/app/chat/${id}`,
   } = props;
 
   const sessionId = conversationId ?? '';
@@ -1083,7 +1091,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
       sseHandleRef.current = handle;
       patchLiveChatRun(sessionId, { handle });
       if (!conversationId) {
-        navigate(`/app/chat/${sessionId}`, { replace: true });
+        navigate(resolveChatPath(sessionId), { replace: true });
       }
 
       const result = await handle.done;

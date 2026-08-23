@@ -3,26 +3,26 @@ import { DownOutlined, RightOutlined } from '@ant-design/icons';
 import { message } from 'antd';
 import type { UserWorkspace } from '@/platform/workspace/catalog';
 import type { WorkspaceFile } from '@/platform/workspace/types';
-import { useWorkspaceFiles } from './useWorkspaceFiles';
+import { useWorkspaceFiles, type WorkspaceFilesState } from './useWorkspaceFiles';
+import { useWorkspace } from './useWorkspace';
 import { WorkspaceFileTree } from './WorkspaceFileTree';
 import { WorkspaceFilePreviewModal } from './WorkspaceFilePreviewModal';
 import { runWorkspacePython } from './workspacePythonRuntime';
 
-export interface WorkspaceFilesSectionProps {
-  readonly userId: string;
-  readonly workspace: UserWorkspace;
+export interface WorkspaceFilesSectionViewProps {
+  readonly workspaceName: string;
+  readonly workspaceState: WorkspaceFilesState;
   readonly defaultExpanded: boolean;
   readonly isActive: boolean;
 }
 
-export function WorkspaceFilesSection({
-  userId,
-  workspace,
+function WorkspaceFilesSectionView({
+  workspaceName,
+  workspaceState,
   defaultExpanded,
   isActive,
-}: WorkspaceFilesSectionProps) {
+}: WorkspaceFilesSectionViewProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const workspaceState = useWorkspaceFiles(userId, workspace.id);
   const [previewFile, setPreviewFile] = useState<WorkspaceFile | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -60,7 +60,7 @@ export function WorkspaceFilesSection({
         onClick={() => setExpanded((value) => !value)}
       >
         {expanded ? <DownOutlined className="text-[10px] text-text-secondary" /> : <RightOutlined className="text-[10px] text-text-secondary" />}
-        <span className="min-w-0 flex-1 truncate text-left">{workspace.name}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{workspaceName}</span>
         {isActive ? <span className="rounded-[4px] bg-[#EFF3FF] px-6 py-1 text-[10px] text-[#3562FA]">当前</span> : null}
       </button>
       {expanded ? (
@@ -86,6 +86,75 @@ export function WorkspaceFilesSection({
         running={running}
       />
     </div>
+  );
+}
+
+export interface WorkspaceFilesSectionProps {
+  readonly userId: string;
+  readonly workspace: UserWorkspace;
+  readonly defaultExpanded: boolean;
+  readonly isActive: boolean;
+}
+
+/** A workspace that is not the active chat target: reads IndexedDB through its own hook instance. */
+export function WorkspaceFilesSection({
+  userId,
+  workspace,
+  defaultExpanded,
+  isActive,
+}: WorkspaceFilesSectionProps) {
+  const workspaceState = useWorkspaceFiles(userId, workspace.id);
+  return (
+    <WorkspaceFilesSectionView
+      workspaceName={workspace.name}
+      workspaceState={workspaceState}
+      defaultExpanded={defaultExpanded}
+      isActive={isActive}
+    />
+  );
+}
+
+/**
+ * The active workspace: must read through the same `WorkspaceProvider` context
+ * instance that binds chat's execution context, not a second independent hook.
+ * Two separate instances pointed at the same IndexedDB scope would drift —
+ * a file uploaded here would never show up in the file index sent to chat.
+ */
+export function ActiveWorkspaceFilesSection({
+  defaultExpanded,
+}: {
+  readonly defaultExpanded: boolean;
+}) {
+  const context = useWorkspace();
+  const workspaceState: WorkspaceFilesState = {
+    status: context.status,
+    files: context.files,
+    folders: context.folders,
+    error: context.error,
+    refresh: context.refresh,
+    readFile: context.readFile,
+    uploadFiles: async (items, parentId) => {
+      const failures = await context.uploadFiles(items, parentId ?? undefined);
+      return failures.map((failure) => `${failure.name}：${failure.message}`);
+    },
+    saveRuntimeFiles: context.saveRuntimeFiles,
+    removeFile: context.removeFile,
+    renameFile: context.renameFile,
+    moveFile: context.moveFile,
+    createFolder: async (name, parentId) => {
+      await context.createFolder(name, parentId);
+    },
+    renameFolder: context.renameFolder,
+    moveFolder: context.moveFolder,
+    deleteFolder: context.deleteFolder,
+  };
+  return (
+    <WorkspaceFilesSectionView
+      workspaceName={context.activeWorkspace.name}
+      workspaceState={workspaceState}
+      defaultExpanded={defaultExpanded}
+      isActive
+    />
   );
 }
 

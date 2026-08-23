@@ -383,7 +383,7 @@ const ConversationLayout: GenieType.FC = memo(() => {
   const layout = (
     <ConversationLayoutContext.Provider value={contextValue}>
       <div className="h-full w-full flex bg-page">
-        {sidebarCollapsed ? (
+        {pathname.startsWith('/app/workspace') ? null : sidebarCollapsed ? (
           <div className="h-full w-[52px] shrink-0 flex flex-col items-center gap-4 bg-sidebar border-r border-border py-12">
             <Tooltip title="展开侧边栏" placement="right">
               <button

@@ -180,7 +180,7 @@ export function WorkspaceFileTree({
     return (
       <div key={folder.id}>
         <div
-          className={`group flex items-center gap-4 rounded-[6px] px-4 py-4 text-[13px] hover:bg-[#F5F5F7] ${isDragOver ? 'bg-[#EFF3FF]' : ''}`}
+          className={`group flex w-full items-center gap-4 rounded-[6px] px-4 py-4 text-[13px] hover:bg-[#F5F5F7] ${isDragOver ? 'bg-[#EFF3FF]' : ''}`}
           style={{ paddingLeft: 8 + depth * 16 }}
           draggable={!readOnly}
           onDragStart={(event) => {
@@ -244,7 +244,7 @@ export function WorkspaceFileTree({
     return (
       <div
         key={file.id}
-        className={`group flex items-center gap-4 rounded-[6px] px-4 py-4 text-[13px] hover:bg-[#F5F5F7] ${isSelected ? 'bg-[#EFF3FF]' : ''}`}
+        className={`group flex w-full items-center gap-4 rounded-[6px] px-4 py-4 text-[13px] hover:bg-[#F5F5F7] ${isSelected ? 'bg-[#EFF3FF]' : ''}`}
         style={{ paddingLeft: 8 + depth * 16 + 16 }}
         draggable={!readOnly}
         onDragStart={(event) => {

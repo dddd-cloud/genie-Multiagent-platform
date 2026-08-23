@@ -527,13 +527,18 @@ public class GptProcessServiceImpl implements IGptProcessService {
                     currentUser.userId(),
                     request.trustedRequest().getSessionId()
             );
+            // The on-disk snapshot is long-term memory only; a per-request runtime context
+            // (e.g. the bounded browser-workspace file index) must survive alongside it, not
+            // be replaced by it.
+            String diskSummary = snapshot.conversationSummary() == null ? "" : snapshot.conversationSummary();
+            String requestSummary = request.localContext().conversationSummary();
             return new LocalContextSnapshot(
                     snapshot.longTermMemory() == null ? "" : snapshot.longTermMemory(),
-                    snapshot.conversationSummary() == null ? "" : snapshot.conversationSummary()
+                    appendRuntimeContext(diskSummary, requestSummary)
             );
         } catch (RuntimeException ex) {
             log.warn("Disk memory unavailable, conversationId={}", request.trustedRequest().getSessionId());
-            return new LocalContextSnapshot("", "");
+            return request.localContext();
         }
     }
 

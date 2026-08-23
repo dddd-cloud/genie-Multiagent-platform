@@ -669,7 +669,12 @@ const ConversationPage: GenieType.FC = memo(() => {
         onReloadMessages={onReloadMessages}
         onConversationChanged={refreshConversationMeta}
         onEnsureConversation={conversationId ? undefined : ensureConversation}
-        workspaceBound={!!conversation?.workspaceId}
+        workspaceBound={!!workspaceId || !!conversation?.workspaceId}
+        resolveChatPath={
+          workspaceId
+            ? (id) => `/app/workspace/${workspaceId}/chat/${id}`
+            : undefined
+        }
       />
     </div>
   );

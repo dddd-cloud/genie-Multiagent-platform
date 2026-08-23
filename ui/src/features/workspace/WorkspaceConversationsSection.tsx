@@ -103,7 +103,7 @@ export function WorkspaceConversationsSection({
 
   return (
     <div className="border-b border-border last:border-b-0">
-      <div className={`group flex items-center gap-6 px-8 py-8 hover:bg-[#F5F5F7] ${isActive ? 'bg-[#F5F7FF]' : ''}`}>
+      <div className={`group flex w-full items-center gap-6 px-8 py-8 hover:bg-[#F5F5F7] ${isActive ? 'bg-[#F5F7FF]' : ''}`}>
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-6 text-left text-[13px] font-medium text-text-primary"
@@ -158,7 +158,7 @@ export function WorkspaceConversationsSection({
               return (
                 <div
                   key={item.id}
-                  className={`group flex items-center gap-6 px-24 py-6 text-[13px] hover:bg-[#F5F5F7] ${active ? 'bg-[#EFF3FF] text-[#3562FA]' : 'text-text-primary'}`}
+                  className={`group flex w-full items-center gap-6 px-24 py-6 text-[13px] hover:bg-[#F5F5F7] ${active ? 'bg-[#EFF3FF] text-[#3562FA]' : 'text-text-primary'}`}
                 >
                   <MessageOutlined className="shrink-0 text-[12px] text-text-secondary" />
                   {isRenaming ? (
