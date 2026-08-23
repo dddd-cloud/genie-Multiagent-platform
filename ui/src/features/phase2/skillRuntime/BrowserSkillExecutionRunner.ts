@@ -142,6 +142,10 @@ export class BrowserSkillExecutionRunner {
       if (bridge && workerMsg.type === 'result' && workerMsg.outputFiles?.length) {
         try {
           await bridge.saveOutputFiles(signal, workerMsg.outputFiles, controller.signal);
+          // The bridge writes straight to the store, bypassing WorkspaceProvider's
+          // own state — without this the file tree and chat's file index go stale
+          // until something else happens to trigger a refresh.
+          await bind?.refresh?.();
         } catch {
           // Output persistence must not hide a successful Python result.
         }
