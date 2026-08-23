@@ -33,9 +33,14 @@ public final class OrchestrationTraceChannel {
     private final String runId;
     private final AtomicLong sequence;
     private final String mainDisplayName;
-    // PARALLEL_AGENTS subtasks share one channel across worker threads.
+    // PARALLEL_AGENTS subtasks share one channel across worker threads. Budget
+    // bookkeeping is per-key atomic (ConcurrentHashMap#compute) rather than a
+    // single global lock, so one subtask's high-frequency token deltas never
+    // wait on another subtask's budget check. sendOrderLock guards only the
+    // sequence-assign + send tail, since all subtasks share one ordered SSE
+    // connection and readers depend on non-decreasing sequence numbers.
     private final Map<String, Integer> stepEmittedChars = new ConcurrentHashMap<>();
-    private final Object emitLock = new Object();
+    private final Object sendOrderLock = new Object();
 
     public OrchestrationTraceChannel(
             ConversationStreamObserver observer,
@@ -108,23 +113,6 @@ public final class OrchestrationTraceChannel {
             String text,
             boolean append
     ) {
-        synchronized (emitLock) {
-            emitLocked(scope, attemptNo, retryNo, stepId, subTaskId, agentId, agentName, kind, text, append);
-        }
-    }
-
-    private void emitLocked(
-            String scope,
-            Integer attemptNo,
-            Integer retryNo,
-            String stepId,
-            String subTaskId,
-            String agentId,
-            String agentName,
-            String kind,
-            String text,
-            boolean append
-    ) {
         if (observer.isTerminal()) {
             return;
         }
@@ -132,29 +120,43 @@ public final class OrchestrationTraceChannel {
         String raw = text == null ? "" : text;
         String budgetKey = scope + ":" + (stepId == null ? "main" : stepId) +
                           ":" + (subTaskId == null ? "" : subTaskId) + ":" + safeKind;
-        int emitted = stepEmittedChars.getOrDefault(budgetKey, 0);
-        if (emitted >= MAX_STEP_CHARS) {
+
+        // Reserve this chunk's share of the per-key budget atomically, scoped to
+        // one ConcurrentHashMap bin, so concurrent subtasks never wait on a
+        // budget key that isn't their own.
+        Reservation reservation = new Reservation();
+        stepEmittedChars.compute(budgetKey, (key, current) -> {
+            int emitted = current == null ? 0 : current;
+            if (emitted >= MAX_STEP_CHARS) {
+                reservation.skip = true;
+                return emitted;
+            }
+            String chunk = raw;
+            boolean truncated = false;
+            int remaining = MAX_STEP_CHARS - emitted;
+            if (chunk.length() > MAX_CHUNK_CHARS) {
+                chunk = chunk.substring(0, MAX_CHUNK_CHARS);
+                truncated = true;
+            }
+            if (chunk.length() > remaining) {
+                chunk = chunk.substring(0, Math.max(0, remaining));
+                truncated = true;
+            }
+            reservation.chunk = chunk;
+            reservation.truncated = truncated;
+            return emitted + chunk.length();
+        });
+        if (reservation.skip) {
             return;
         }
-        boolean truncated = false;
-        String chunk = raw;
-        int remaining = MAX_STEP_CHARS - emitted;
-        if (chunk.length() > MAX_CHUNK_CHARS) {
-            chunk = chunk.substring(0, MAX_CHUNK_CHARS);
-            truncated = true;
-        }
-        if (chunk.length() > remaining) {
-            chunk = chunk.substring(0, Math.max(0, remaining));
-            truncated = true;
-        }
+        String chunk = reservation.chunk;
+        boolean truncated = reservation.truncated;
         if (chunk.isEmpty() && !KIND_STATUS.equals(safeKind) && !KIND_ERROR.equals(safeKind)) {
             return;
         }
-        stepEmittedChars.put(budgetKey, emitted + chunk.length());
 
         Map<String, Object> trace = new LinkedHashMap<>();
         trace.put("schemaVersion", 2);
-        trace.put("sequence", sequence.incrementAndGet());
         trace.put("requestId", requestId);
         trace.put("runId", runId);
         trace.put("scope", scope);
@@ -177,11 +179,26 @@ public final class OrchestrationTraceChannel {
                 .packageType(PACKAGE_TYPE)
                 .resultMap(Map.of("orchestrationTrace", trace))
                 .build();
-        // Thoughts are progress-only; a transient write failure must not abort the run.
-        if (KIND_THOUGHT.equals(safeKind)) {
-            observer.onEventBestEffort(packet);
-        } else {
-            observer.onEvent(packet);
+        // Sequence assignment and the send must stay one atomic step: readers
+        // rely on events arriving in non-decreasing sequence order. Everything
+        // above (budget bookkeeping, JSON map construction) is pure per-call
+        // work with no cross-thread ordering requirement, so it stays outside
+        // this lock — only the truly order-sensitive tail is serialized here.
+        synchronized (sendOrderLock) {
+            trace.put("sequence", sequence.incrementAndGet());
+            // Thoughts are progress-only; a transient write failure must not abort the run.
+            if (KIND_THOUGHT.equals(safeKind)) {
+                observer.onEventBestEffort(packet);
+            } else {
+                observer.onEvent(packet);
+            }
         }
+    }
+
+    /** Mutable out-parameter for the compute() budget reservation below. */
+    private static final class Reservation {
+        boolean skip;
+        String chunk = "";
+        boolean truncated;
     }
 }
