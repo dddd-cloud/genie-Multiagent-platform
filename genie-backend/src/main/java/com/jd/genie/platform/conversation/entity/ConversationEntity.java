@@ -16,6 +16,8 @@ public class ConversationEntity implements Serializable {
     private String ownerId;
     private String title;
     private Boolean privacyMode;
+    /** Opaque browser-workspace id (see the UI's platform/workspace catalog); null for ordinary chat. */
+    private String workspaceId;
     private Long nextTurnNo;
     private Instant lastMessageAt;
     private Instant createdAt;

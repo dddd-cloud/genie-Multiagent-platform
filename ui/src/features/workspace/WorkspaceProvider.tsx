@@ -13,9 +13,12 @@ import {
 } from '@/platform/workspace/IndexedDbWorkspaceFileStore';
 import {
   WORKSPACE_LIMITS,
+  type WorkspaceBinaryFile,
   type WorkspaceFileStore,
+  type WorkspaceFolder,
   type WorkspaceRemoteFile,
 } from '@/platform/workspace/types';
+import type { UserWorkspace } from '@/platform/workspace/catalog';
 import {
   WorkspaceService,
 } from '@/services/workspace/workspaceService';
@@ -35,6 +38,20 @@ export interface WorkspaceProviderProps {
   readonly children: ReactNode;
   readonly store?: WorkspaceFileStore;
   readonly remoteAdapter?: WorkspaceRemoteAdapter | null;
+  readonly workspaces: readonly UserWorkspace[];
+  readonly activeWorkspace: UserWorkspace;
+  readonly selectWorkspace: (workspaceId: string) => void;
+  readonly createWorkspace: (name: string) => void;
+  readonly renameWorkspace: (name: string) => void;
+  readonly deleteWorkspace: () => void;
+}
+
+function mimeForTextFile(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.py')) return 'text/x-python';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (/\.(md|markdown|mdown)$/.test(lower)) return 'text/markdown';
+  return 'text/plain';
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -52,6 +69,12 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
   children,
   store: injectedStore,
   remoteAdapter,
+  workspaces,
+  activeWorkspace,
+  selectWorkspace,
+  createWorkspace,
+  renameWorkspace,
+  deleteWorkspace: onDeleteWorkspace,
 }: WorkspaceProviderProps) {
   const scope = useMemo(
     () => buildWorkspaceScope(userId, workspaceId, conversationId),
@@ -66,7 +89,8 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
     }
   }, [injectedStore]);
   const service = useMemo(
-    () => (defaultStore ? new WorkspaceService(defaultStore, remoteAdapter) : null),
+    // Browser workspaces are deliberately independent from chat uploads.
+    () => (defaultStore ? new WorkspaceService(defaultStore, remoteAdapter ?? null) : null),
     [defaultStore, remoteAdapter],
   );
   const activeScopeKey = useRef(scope.key);
@@ -74,6 +98,7 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
   activeScopeKey.current = scope.key;
   const [status, setStatus] = useState<WorkspaceStatus>('loading');
   const [files, setFiles] = useState<WorkspaceContextValue['files']>([]);
+  const [folders, setFolders] = useState<WorkspaceFolder[]>([]);
   const [remoteFiles, setRemoteFiles] = useState<WorkspaceRemoteFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -96,9 +121,9 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
       setError(null);
       setRemoteError(null);
     }
-    const [localResult, remoteResult] = await Promise.allSettled([
+    const [localResult, folderResult] = await Promise.allSettled([
       service.list(scope),
-      service.listRemote(scope),
+      service.listFolders(scope),
     ]);
     if (!isCurrent()) return;
     if (localResult.status === 'rejected') {
@@ -107,12 +132,8 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
       return;
     }
     setFiles(localResult.value);
-    if (remoteResult.status === 'fulfilled') {
-      setRemoteFiles(remoteResult.value);
-    } else {
-      setRemoteFiles([]);
-      setRemoteError(errorMessage(remoteResult.reason, '远端文件同步不可用'));
-    }
+    setFolders(folderResult.status === 'fulfilled' ? folderResult.value : []);
+    setRemoteFiles([]);
     setStatus('ready');
   }, [scope, service]);
 
@@ -121,7 +142,7 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
   }, [refresh]);
 
   const uploadFiles = useCallback(
-    async (items: File[]): Promise<WorkspaceOperationFailure[]> => {
+    async (items: File[], parentId: string | null = null): Promise<WorkspaceOperationFailure[]> => {
       if (!service) {
         return [{ name: 'workspace', message: '当前浏览器不支持持久化工作区' }];
       }
@@ -141,6 +162,7 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
             mimeType: item.type,
             bytes,
             source: 'user',
+            parentId,
           });
         } catch (failure) {
           failures.push({
@@ -207,6 +229,95 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
     [refresh, scope, service],
   );
 
+  const writeTextFile = useCallback(
+    async (fileId: string | undefined, name: string, content: string, parentId: string | null = null) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      const file = await service.write(scope, {
+        id: fileId,
+        name,
+        mimeType: mimeForTextFile(name),
+        bytes: new TextEncoder().encode(content).buffer as ArrayBuffer,
+        source: 'user',
+        parentId,
+      });
+      await refresh();
+      return file;
+    },
+    [refresh, scope, service],
+  );
+
+  const moveFile = useCallback(
+    async (fileId: string, parentId: string | null) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      await service.moveFile(scope, fileId, parentId);
+      await refresh();
+    },
+    [refresh, scope, service],
+  );
+
+  const createFolder = useCallback(
+    async (name: string, parentId: string | null) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      const folder = await service.createFolder(scope, name, parentId);
+      await refresh();
+      return folder;
+    },
+    [refresh, scope, service],
+  );
+
+  const renameFolder = useCallback(
+    async (folderId: string, name: string) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      await service.renameFolder(scope, folderId, name);
+      await refresh();
+    },
+    [refresh, scope, service],
+  );
+
+  const moveFolder = useCallback(
+    async (folderId: string, parentId: string | null) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      await service.moveFolder(scope, folderId, parentId);
+      await refresh();
+    },
+    [refresh, scope, service],
+  );
+
+  const deleteFolder = useCallback(
+    async (folderId: string) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      await service.deleteFolder(scope, folderId);
+      await refresh();
+    },
+    [refresh, scope, service],
+  );
+
+  const saveRuntimeFiles = useCallback(
+    async (items: readonly WorkspaceBinaryFile[]) => {
+      if (!service) throw new Error('当前浏览器不支持持久化工作区');
+      for (const item of items) {
+        await service.upsertByName(scope, { ...item, source: 'assistant' });
+      }
+      await refresh();
+    },
+    [refresh, scope, service],
+  );
+
+  const deleteWorkspace = useCallback(async () => {
+    if (service) {
+      const [listed, listedFolders] = await Promise.all([
+        service.list(scope),
+        service.listFolders(scope),
+      ]);
+      await Promise.all(listed.map((file) => service.remove(scope, file.id)));
+      // Only remove root folders — deleteFolder already cascades to descendants.
+      await Promise.all(
+        listedFolders.filter((folder) => folder.parentId === null).map((folder) => service.deleteFolder(scope, folder.id)),
+      );
+    }
+    onDeleteWorkspace();
+  }, [onDeleteWorkspace, scope, service]);
+
   useEffect(() => {
     if (!service) {
       bindWorkspaceExecutionContext(null);
@@ -216,9 +327,10 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
       service,
       scope,
       fileIds: files.map((file) => file.id),
+      refresh,
     });
     return () => bindWorkspaceExecutionContext(null);
-  }, [files, scope, service]);
+  }, [files, refresh, scope, service]);
 
   const importedRemoteKeys = useMemo(
     () => new Set(files.flatMap((file) => (file.remote ? [remoteKey(file.remote)] : []))),
@@ -230,9 +342,16 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
   );
   const value = useMemo<WorkspaceContextValue>(
     () => ({
+      workspaces,
+      activeWorkspace,
+      selectWorkspace,
+      createWorkspace,
+      renameWorkspace,
+      deleteWorkspace,
       scope,
       status,
       files,
+      folders,
       remoteFiles: availableRemoteFiles,
       error,
       remoteError,
@@ -243,21 +362,42 @@ export const WorkspaceProvider = memo(function WorkspaceProvider({
       readFile,
       removeFile,
       renameFile,
+      writeTextFile,
+      saveRuntimeFiles,
+      moveFile,
+      createFolder,
+      renameFolder,
+      moveFolder,
+      deleteFolder,
     }),
     [
       availableRemoteFiles,
+      activeWorkspace,
+      createFolder,
+      createWorkspace,
+      deleteFolder,
+      deleteWorkspace,
       error,
       files,
+      folders,
       importRemoteFile,
       importRemoteFiles,
+      moveFile,
+      moveFolder,
       readFile,
       remoteError,
       refresh,
       removeFile,
       renameFile,
+      renameFolder,
+      renameWorkspace,
       scope,
       status,
+      selectWorkspace,
       uploadFiles,
+      workspaces,
+      writeTextFile,
+      saveRuntimeFiles,
     ],
   );
 

@@ -1,8 +1,8 @@
 package com.jd.genie.platform.conversation.dto;
 
-public record ConversationCreateRequest(String title, Boolean privacyMode) {
+public record ConversationCreateRequest(String title, Boolean privacyMode, String workspaceId) {
     public ConversationCreateRequest(String title) {
-        this(title, false);
+        this(title, false, null);
     }
 
     public boolean privacyModeEnabled() {

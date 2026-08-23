@@ -15,9 +15,12 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 
@@ -121,7 +124,12 @@ public abstract class BaseAgent {
         try {
             // 解析参数
             ObjectMapper mapper = new ObjectMapper();
-            Object args = mapper.readValue(command.getFunction().getArguments(), Object.class);
+            String normalizedArguments = normalizeToolArgumentsJson(
+                    mapper,
+                    command.getFunction().getArguments()
+            );
+            command.getFunction().setArguments(normalizedArguments);
+            Object args = mapper.readValue(normalizedArguments, Object.class);
 
             // 执行工具
             Object result = availableTools.execute(name, args);
@@ -133,6 +141,50 @@ public abstract class BaseAgent {
             log.error("{} execute tool {} failed ", context.getRequestId(), name, e);
         }
         return "Tool" + name + " Error.";
+    }
+
+    /**
+     * Some OpenAI-compatible gateways occasionally wrap otherwise valid tool
+     * arguments with one duplicated opening or closing brace. Keep recovery
+     * deliberately narrow: accept only a JSON object after removing exactly
+     * one redundant boundary brace, and reject every other malformed value.
+     */
+    static String normalizeToolArgumentsJson(ObjectMapper mapper, String arguments) throws Exception {
+        Objects.requireNonNull(mapper, "mapper");
+        String raw = arguments == null ? "" : arguments.trim();
+        Exception original;
+        try {
+            return canonicalToolArgumentsJson(mapper, raw);
+        } catch (Exception error) {
+            original = error;
+        }
+
+        Set<String> candidates = new LinkedHashSet<>();
+        if (raw.startsWith("{{")) {
+            candidates.add(raw.substring(1));
+        }
+        if (raw.endsWith("}}")) {
+            candidates.add(raw.substring(0, raw.length() - 1));
+        }
+        if (raw.startsWith("{{") && raw.endsWith("}}") && raw.length() > 2) {
+            candidates.add(raw.substring(1, raw.length() - 1));
+        }
+        for (String candidate : candidates) {
+            try {
+                return canonicalToolArgumentsJson(mapper, candidate);
+            } catch (Exception ignored) {
+                // Try only the bounded candidates above, then preserve the original failure.
+            }
+        }
+        throw original;
+    }
+
+    private static String canonicalToolArgumentsJson(ObjectMapper mapper, String arguments) throws Exception {
+        Object value = mapper.readValue(arguments, Object.class);
+        if (!(value instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("tool arguments must be a JSON object");
+        }
+        return mapper.writeValueAsString(value);
     }
 
     private static final int MAX_TOOL_RESULT_CHARS = 8000;
@@ -161,6 +213,7 @@ public abstract class BaseAgent {
      * @return 返回工具执行结果映射，key为工具ID，value为执行结果
      */
     public Map<String, String> executeTools(List<ToolCall> commands) {
+        ensureUniqueToolCallIds(commands);
         Map<String, String> result = new ConcurrentHashMap<>();
         CountDownLatch taskCount = ThreadUtil.getCountDownLatch(commands.size());
         for (ToolCall tooCall : commands) {
@@ -174,6 +227,26 @@ public abstract class BaseAgent {
         return result;
     }
 
-
+    /** Provider tool-call ids are optional in practice, but the observation map requires unique keys. */
+    static void ensureUniqueToolCallIds(List<ToolCall> commands) {
+        if (commands == null || commands.isEmpty()) {
+            return;
+        }
+        Set<String> used = new LinkedHashSet<>();
+        for (int index = 0; index < commands.size(); index++) {
+            ToolCall command = commands.get(index);
+            if (command == null) {
+                continue;
+            }
+            String id = command.getId() == null ? "" : command.getId().trim();
+            if (id.isEmpty() || used.contains(id)) {
+                do {
+                    id = "tool-call-" + (index + 1) + "-" + UUID.randomUUID();
+                } while (used.contains(id));
+                command.setId(id);
+            }
+            used.add(id);
+        }
+    }
 
 }

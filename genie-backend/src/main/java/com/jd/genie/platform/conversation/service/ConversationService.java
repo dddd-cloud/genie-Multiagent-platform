@@ -47,6 +47,7 @@ public class ConversationService {
         boolean privacyMode = request != null && request.privacyModeEnabled();
         entity.setTitle(normalizeOptionalTitle(request == null ? null : request.title()));
         entity.setPrivacyMode(privacyMode);
+        entity.setWorkspaceId(request == null ? null : normalizeOptionalWorkspaceId(request.workspaceId()));
         entity.setNextTurnNo(1L);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -56,14 +57,24 @@ public class ConversationService {
 
     @Transactional(readOnly = true)
     public PageResponse<ConversationListItemResponse> listConversations(CurrentUser user, Integer page, Integer pageSize) {
+        return listConversations(user, page, pageSize, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ConversationListItemResponse> listConversations(
+        CurrentUser user, Integer page, Integer pageSize, String workspaceId
+    ) {
         int validPage = page == null ? 1 : page;
         int validPageSize = pageSize == null ? 20 : pageSize;
         validatePage(validPage, validPageSize);
 
         int limit = validPageSize + 1;
         int offset = (validPage - 1) * validPageSize;
-        List<ConversationEntity> rows = conversationMapper.selectOwnedConversationPage(
-            user.tenantId(), user.userId(), limit, offset);
+        String normalizedWorkspaceId = normalizeOptionalWorkspaceId(workspaceId);
+        List<ConversationEntity> rows = normalizedWorkspaceId == null
+            ? conversationMapper.selectOwnedConversationPage(user.tenantId(), user.userId(), limit, offset)
+            : conversationMapper.selectOwnedConversationPageForWorkspace(
+                user.tenantId(), user.userId(), normalizedWorkspaceId, limit, offset);
         boolean hasMore = rows.size() > validPageSize;
         List<ConversationEntity> pageRows = hasMore ? rows.subList(0, validPageSize) : rows;
         Map<String, String> previews = loadLatestUserPreviews(user, pageRows);
@@ -73,6 +84,7 @@ public class ConversationService {
                 row.getId(),
                 row.getTitle(),
                 Boolean.TRUE.equals(row.getPrivacyMode()),
+                row.getWorkspaceId(),
                 row.getLastMessageAt(),
                 row.getCreatedAt(),
                 row.getUpdatedAt(),
@@ -172,6 +184,7 @@ public class ConversationService {
             entity.getId(),
             entity.getTitle(),
             Boolean.TRUE.equals(entity.getPrivacyMode()),
+            entity.getWorkspaceId(),
             entity.getLastMessageAt(),
             entity.getCreatedAt(),
             entity.getUpdatedAt()
@@ -225,6 +238,23 @@ public class ConversationService {
         if (title.codePointCount(0, title.length()) > MAX_TITLE_CODE_POINTS) {
             throw validationError();
         }
+    }
+
+    private static final int MAX_WORKSPACE_ID_LENGTH = 36;
+
+    /** The browser workspace id is opaque, client-generated metadata — trim and length-check only. */
+    private String normalizeOptionalWorkspaceId(String rawWorkspaceId) {
+        if (rawWorkspaceId == null) {
+            return null;
+        }
+        String workspaceId = rawWorkspaceId.trim();
+        if (workspaceId.isEmpty()) {
+            return null;
+        }
+        if (workspaceId.length() > MAX_WORKSPACE_ID_LENGTH) {
+            throw validationError();
+        }
+        return workspaceId;
     }
 
     private void validatePage(int page, int pageSize) {

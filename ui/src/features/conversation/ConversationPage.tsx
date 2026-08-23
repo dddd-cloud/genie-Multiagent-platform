@@ -63,7 +63,11 @@ function isAuthRequired(err: unknown): err is MvpApiError {
 }
 
 const ConversationPage: GenieType.FC = memo(() => {
-  const { conversationId } = useParams<{ conversationId?: string }>();
+  const { conversationId, workspaceId } = useParams<{
+    conversationId?: string;
+    /** Present only under the /app/workspace/:workspaceId/* route tree. */
+    workspaceId?: string;
+  }>();
   const navigate = useNavigate();
   const location = useLocation();
   const layout = useConversationLayout();
@@ -309,7 +313,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     const pending = (async () => {
       try {
         await layout?.discardUnusedDrafts?.();
-        const created = await createConversation(null, composerPrivacy);
+        const created = await createConversation(null, composerPrivacy, workspaceId ?? null);
         if (!created) {
           message.error('创建会话失败');
           return null;
@@ -345,7 +349,7 @@ const ConversationPage: GenieType.FC = memo(() => {
     } finally {
       ensuringPromiseRef.current = null;
     }
-  }, [composerPrivacy, conversationId, layout]);
+  }, [composerPrivacy, conversationId, layout, workspaceId]);
 
   const prevComposerEpochRef = useRef(layout?.composerEpoch);
   useEffect(() => {
@@ -665,6 +669,7 @@ const ConversationPage: GenieType.FC = memo(() => {
         onReloadMessages={onReloadMessages}
         onConversationChanged={refreshConversationMeta}
         onEnsureConversation={conversationId ? undefined : ensureConversation}
+        workspaceBound={!!conversation?.workspaceId}
       />
     </div>
   );

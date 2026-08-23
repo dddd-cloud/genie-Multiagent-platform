@@ -1,10 +1,8 @@
 import type { BrowserSkillExecutionSignal } from '@/contracts';
 import {
-  WORKSPACE_LIMITS,
   WorkspaceError,
   assertFileBytes,
   assertWorkspaceFileId,
-  fileExtension,
   normalizeFileName,
   type WorkspaceBinaryFile,
   type WorkspaceFile,
@@ -22,6 +20,11 @@ export interface WorkspaceExecutionFileBridge {
     files: readonly WorkspaceBinaryFile[],
     abortSignal?: AbortSignal,
   ): Promise<readonly WorkspaceFile[]>;
+  deleteFilesByName(
+    signal: BrowserSkillExecutionSignal,
+    names: readonly string[],
+    abortSignal?: AbortSignal,
+  ): Promise<readonly string[]>;
 }
 
 export interface WorkspaceExecutionFileBridgeOptions {
@@ -53,24 +56,22 @@ function grantedIds(fileIds: readonly string[]): readonly string[] {
   return ids;
 }
 
-function uniqueName(name: string, occupied: Set<string>): string {
-  const normalized = normalizeFileName(name);
-  if (!occupied.has(normalized)) return normalized;
-  const extension = fileExtension(normalized);
-  const suffix = extension ? `.${extension}` : '';
-  const stem = extension ? normalized.slice(0, -(extension.length + 1)) : normalized;
-  for (let index = 1; index <= WORKSPACE_LIMITS.MAX_FILES; index += 1) {
-    const candidate = normalizeFileName(`${stem} (${index})${suffix}`);
-    if (!occupied.has(candidate)) return candidate;
-  }
-  throw new WorkspaceError('DUPLICATE_FILE_NAME', '无法为 Python 产物分配文件名');
-}
-
-function outputFile(file: WorkspaceBinaryFile, occupied: Set<string>): WorkspaceBinaryFile {
+function outputFile(file: WorkspaceBinaryFile): WorkspaceBinaryFile {
   assertFileBytes(file.bytes);
-  const name = uniqueName(file.name, occupied);
+  const name = normalizeFileName(file.name);
   const mimeType = file.mimeType.trim() || 'application/octet-stream';
   return { name, mimeType, bytes: file.bytes.slice(0) };
+}
+
+function deletedFileNames(names: readonly string[]): readonly string[] {
+  if (names.length > EXECUTION_LIMITS.MAX_INPUT_FILES) {
+    throw new WorkspaceError('FILE_COUNT_LIMIT', 'Python 删除文件数量超过上限');
+  }
+  const normalized = names.map(normalizeFileName);
+  if (new Set(normalized).size !== normalized.length) {
+    throw new WorkspaceError('INVALID_FILE', 'Python 删除文件列表包含重复文件');
+  }
+  return normalized;
 }
 
 /**
@@ -110,25 +111,42 @@ export function createWorkspaceExecutionFileBridge(
       if (files.length > EXECUTION_LIMITS.MAX_OUTPUT_FILES) {
         throw new WorkspaceError('FILE_COUNT_LIMIT', 'Python 产物数量超过上限');
       }
-      const occupied = new Set((await service.list(scope)).map((file) => file.name));
       const saved: WorkspaceFile[] = [];
       let totalBytes = 0;
       for (const candidate of files) {
         assertNotAborted(abortSignal);
-        const file = outputFile(candidate, occupied);
+        const file = outputFile(candidate);
         totalBytes += file.bytes.byteLength;
         if (totalBytes > EXECUTION_LIMITS.MAX_OUTPUT_BYTES) {
           throw new WorkspaceError('WORKSPACE_SIZE_LIMIT', 'Python 产物总大小超过上限');
         }
-        const outcome = await service.upload(
+        const savedFile = await service.upsertByName(
           scope,
           { ...file, source: 'assistant' },
-          abortSignal,
         );
-        occupied.add(outcome.file.name);
-        saved.push(outcome.file);
+        saved.push(savedFile);
       }
       return saved;
+    },
+
+    async deleteFilesByName(_signal, names, abortSignal) {
+      const requestedNames = deletedFileNames(names);
+      const granted = new Set(fileIds);
+      const currentByName = new Map(
+        (await service.list(scope)).map((file) => [file.name, file]),
+      );
+      const deleted: string[] = [];
+      for (const name of requestedNames) {
+        assertNotAborted(abortSignal);
+        const file = currentByName.get(name);
+        if (!file) continue;
+        if (!granted.has(file.id)) {
+          throw new WorkspaceError('SCOPE_MISMATCH', 'Python 无权删除未挂载的工作区文件');
+        }
+        await service.remove(scope, file.id);
+        deleted.push(name);
+      }
+      return deleted;
     },
   };
 }

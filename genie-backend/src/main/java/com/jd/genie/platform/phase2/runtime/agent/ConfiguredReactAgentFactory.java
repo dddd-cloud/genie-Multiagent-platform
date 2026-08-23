@@ -5,6 +5,7 @@ import com.jd.genie.agent.agent.ReactImplAgent;
 import com.jd.genie.agent.llm.LLM;
 import com.jd.genie.agent.printer.Printer;
 import com.jd.genie.agent.tool.ToolCollection;
+import com.jd.genie.platform.phase2.runtime.context.BrowserWorkspaceContextPolicy;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2.skillruntime.packageinfo.SkillPackageHasher;
 
@@ -30,6 +31,18 @@ public final class ConfiguredReactAgentFactory {
             Do not discuss which other agents are available, and do not rewrite the whole multi-agent plan.
             If the user or your step asks for an html, markdown, or downloadable file, you MUST call file_tool with command=upload, a filename ending in .html or .md, description, and the full file content BEFORE the SUCCESS JSON. Put the returned file link into output.
             If a skill tool already returned token/previewFile/uploaded, do NOT paste html into output and do NOT call file_tool. Finish with SUCCESS whose output is one short sentence containing the token.
+            """;
+
+    /** Appended only when this request carries a bound browser-workspace snapshot — see {@link BrowserWorkspaceContextPolicy}. */
+    private static final String BROWSER_WORKSPACE_INSTRUCTIONS = """
+
+            The browser workspace context contains only a lightweight file index and summaries, never full file bodies.
+            Use browser_workspace_python command=read_file only when the answer truly needs one selected file's content;
+            do not read unrelated files. Use list_files only when the supplied index is truncated or insufficient.
+            Use run_script/run_code only for actual Python execution, computation, transformation, or workspace changes.
+            To run an existing workspace script, call browser_workspace_python with command=run_script and its exact
+            /workspace/<filename>.py path. Use command=run_code only for new inline code. Never translate /workspace
+            paths into input/ or output/ paths; changed and newly created workspace files are synchronized automatically.
             """;
 
     /** Short nudge only — never re-inject the full system prompt (skills) each step. */
@@ -68,7 +81,8 @@ public final class ConfiguredReactAgentFactory {
         ReactImplAgent agent = new ReactImplAgent(context);
         String prompt = (profile.compiledSystemPromptTemplate() == null ? "" : profile.compiledSystemPromptTemplate())
                 + skillToolMapping(profile)
-                + RESULT_CONTRACT;
+                + RESULT_CONTRACT
+                + (BrowserWorkspaceContextPolicy.hasSnapshot(context.getQuery()) ? BROWSER_WORKSPACE_INSTRUCTIONS : "");
         agent.setSystemPrompt(prompt);
         agent.setSystemPromptSnapshot(prompt);
         agent.setNextStepPrompt(NEXT_STEP_NUDGE);

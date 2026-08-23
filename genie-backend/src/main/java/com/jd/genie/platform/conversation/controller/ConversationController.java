@@ -45,10 +45,11 @@ public class ConversationController {
     @GetMapping
     public ApiResponse<PageResponse<ConversationListItemResponse>> list(
         @RequestParam(defaultValue = "1") Integer page,
-        @RequestParam(defaultValue = "20") Integer pageSize
+        @RequestParam(defaultValue = "20") Integer pageSize,
+        @RequestParam(required = false) String workspaceId
     ) {
         CurrentUser user = currentUser();
-        return success(conversationService.listConversations(user, page, pageSize));
+        return success(conversationService.listConversations(user, page, pageSize, workspaceId));
     }
 
     @GetMapping("/{conversationId}")

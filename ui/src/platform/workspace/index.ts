@@ -30,5 +30,14 @@ export {
   createWorkspaceRemoteRequestId,
   isWorkspaceScopeKey,
 } from './scope';
+export {
+  createUserWorkspace,
+  deleteUserWorkspace,
+  loadActiveWorkspaceId,
+  loadUserWorkspaces,
+  renameUserWorkspace,
+  selectUserWorkspace,
+} from './catalog';
+export type { UserWorkspace } from './catalog';
 export { IndexedDbWorkspaceFileStore, createIndexedDbWorkspaceFileStore, clearWorkspaceForUser } from './IndexedDbWorkspaceFileStore';
 export { MemoryWorkspaceFileStore } from './MemoryWorkspaceFileStore';

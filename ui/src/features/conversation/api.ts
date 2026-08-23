@@ -10,10 +10,15 @@ import { requestMvp } from '@/services/mvp';
 
 const BASE = '/api/v1/conversations';
 
-export function createConversation(title?: string | null, privacyMode = false) {
+export function createConversation(
+  title?: string | null,
+  privacyMode = false,
+  workspaceId?: string | null,
+) {
   const data: CreateConversationRequest = {
     title: title ?? null,
     privacyMode,
+    workspaceId: workspaceId ?? null,
   };
   return requestMvp<ConversationResponse>({
     method: 'POST',
@@ -22,13 +27,14 @@ export function createConversation(title?: string | null, privacyMode = false) {
   });
 }
 
-export function listConversations(page: number, pageSize: number) {
+export function listConversations(page: number, pageSize: number, workspaceId?: string | null) {
   return requestMvp<PageResponse<ConversationListItem>>({
     method: 'GET',
     url: BASE,
     params: {
       page,
-      pageSize
+      pageSize,
+      workspaceId: workspaceId ?? undefined,
     },
   });
 }

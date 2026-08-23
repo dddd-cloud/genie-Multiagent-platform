@@ -35,6 +35,8 @@ export interface WorkspaceFile {
   readonly id: string;
   readonly scopeKey: string;
   readonly name: string;
+  /** Containing folder id, or null when the file sits at the workspace root. */
+  readonly parentId: string | null;
   readonly size: number;
   readonly mimeType: string;
   readonly kind: WorkspacePreviewKind;
@@ -47,6 +49,16 @@ export interface WorkspaceFile {
 
 export interface WorkspaceFileRecord extends WorkspaceFile {
   readonly bytes: ArrayBuffer;
+}
+
+/** A folder is metadata-only; its contents are files/folders whose `parentId` points to it. */
+export interface WorkspaceFolder {
+  readonly id: string;
+  readonly scopeKey: string;
+  readonly name: string;
+  readonly parentId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
 /**
@@ -74,6 +86,13 @@ export interface WorkspaceFileStore {
   ): Promise<WorkspaceFile | null>;
   remove(scope: WorkspaceScope, fileId: string): Promise<void>;
   rename(scope: WorkspaceScope, fileId: string, name: string): Promise<WorkspaceFile>;
+  moveFile(scope: WorkspaceScope, fileId: string, parentId: string | null): Promise<WorkspaceFile>;
+  listFolders(scope: WorkspaceScope): Promise<WorkspaceFolder[]>;
+  createFolder(scope: WorkspaceScope, name: string, parentId: string | null): Promise<WorkspaceFolder>;
+  renameFolder(scope: WorkspaceScope, folderId: string, name: string): Promise<WorkspaceFolder>;
+  moveFolder(scope: WorkspaceScope, folderId: string, parentId: string | null): Promise<WorkspaceFolder>;
+  /** Cascades: every descendant folder and file is removed too. */
+  deleteFolder(scope: WorkspaceScope, folderId: string): Promise<void>;
 }
 
 export interface WorkspaceFileInput {
@@ -84,6 +103,7 @@ export interface WorkspaceFileInput {
   readonly syncStatus?: WorkspaceSyncStatus;
   readonly remote?: WorkspaceRemoteFile;
   readonly id?: string;
+  readonly parentId?: string | null;
 }
 
 export class WorkspaceError extends Error {
@@ -333,6 +353,7 @@ export function normalizeWorkspaceFileRecord(
     id,
     scopeKey,
     name,
+    parentId: normalizeParentId(value.parentId),
     size,
     mimeType,
     kind: previewKind(name, mimeType),
@@ -342,6 +363,63 @@ export function normalizeWorkspaceFileRecord(
     createdAt: assertTimestamp(value.createdAt, '创建时间'),
     updatedAt: assertTimestamp(value.updatedAt, '更新时间'),
     bytes: bytes.slice(0),
+  };
+}
+
+/** Records written before folders existed have no `parentId`; treat them as workspace-root. */
+function normalizeParentId(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return assertWorkspaceFileId(String(value));
+}
+
+export function assertFolderName(name: string): string {
+  // Folders share the same naming rules as files (no path separators, no control characters).
+  return normalizeFileName(name);
+}
+
+export function normalizeWorkspaceFolder(
+  value: unknown,
+  expectedScopeKey?: string,
+): WorkspaceFolder {
+  if (!isRecord(value)) {
+    throw new WorkspaceError('INVALID_FOLDER', '工作区文件夹记录无效');
+  }
+  const scopeKey = value.scopeKey;
+  if (typeof scopeKey !== 'string' || !scopeKey) {
+    throw new WorkspaceError('INVALID_FOLDER', '工作区文件夹作用域无效');
+  }
+  if (expectedScopeKey && scopeKey !== expectedScopeKey) {
+    throw new WorkspaceError('SCOPE_MISMATCH', '文件夹不属于当前工作区');
+  }
+  const id = typeof value.id === 'string' ? assertWorkspaceFileId(value.id) : (() => {
+    throw new WorkspaceError('INVALID_FOLDER', '文件夹标识无效');
+  })();
+  const name = typeof value.name === 'string' ? assertFolderName(value.name) : (() => {
+    throw new WorkspaceError('INVALID_FOLDER', '文件夹名无效');
+  })();
+  return {
+    id,
+    scopeKey,
+    name,
+    parentId: normalizeParentId(value.parentId),
+    createdAt: assertTimestamp(value.createdAt, '创建时间'),
+    updatedAt: assertTimestamp(value.updatedAt, '更新时间'),
+  };
+}
+
+export function createWorkspaceFolderRecord(
+  scope: WorkspaceScope,
+  name: string,
+  parentId: string | null,
+  now = new Date().toISOString(),
+): WorkspaceFolder {
+  return {
+    id: createWorkspaceFileId(),
+    scopeKey: scope.key,
+    name: assertFolderName(name),
+    parentId: parentId === null ? null : assertWorkspaceFileId(parentId),
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -371,6 +449,7 @@ export function createWorkspaceRecord(
     id,
     scopeKey: scope.key,
     name,
+    parentId: input.parentId === undefined ? null : normalizeParentId(input.parentId),
     size: bytes.byteLength,
     mimeType,
     kind: previewKind(name, mimeType),

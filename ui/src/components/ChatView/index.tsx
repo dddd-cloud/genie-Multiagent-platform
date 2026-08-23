@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Drawer, Modal, message } from 'antd';
-import { FolderOpenOutlined } from '@ant-design/icons';
+import { Button, Modal, message } from 'antd';
 import type { HookAPI } from 'antd/es/modal/useModal';
 import classNames from 'classnames';
 import { useMemoizedFn } from 'ahooks';
@@ -59,8 +58,11 @@ import Dialogue from '@/components/Dialogue';
 import GeneralInput from '@/components/GeneralInput';
 import ActionView from '@/components/ActionView';
 import PrivacyModeToggle from '@/features/conversation/PrivacyModeToggle';
-import { WorkspacePanel } from '@/features/workspace';
-import WorkspaceMount from '@/layout/mounts/WorkspaceMount';
+import {
+  buildBoundWorkspaceChatContext,
+  getBoundWorkspaceExecutionContext,
+  saveGeneratedFilesToWorkspace,
+} from '@/features/workspace/executionBind';
 import StreamStatusBar from './StreamStatusBar';
 import { useStreamingText } from './useStreamingText';
 
@@ -90,6 +92,14 @@ interface ChatViewProps {
   onTeamIdChange?: (teamId: string | null) => void;
   /** Create a conversation on first send and return its id. ChatView then sends in place. */
   onEnsureConversation?: () => Promise<string | null>;
+  /**
+   * Only set from the dedicated workspace page. When true, the currently bound
+   * workspace (see `@/features/workspace/executionBind`) is read and its file
+   * index is attached to outgoing requests. Ordinary Auto/Agent/Team chat must
+   * never set this — that is what previously injected workspace file context
+   * into every unrelated conversation.
+   */
+  workspaceBound?: boolean;
 }
 
 const QUERY_MIN = 1;
@@ -312,6 +322,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
     onAllowedAgentIdsChange,
     onTeamIdChange,
     onEnsureConversation,
+    workspaceBound = false,
   } = props;
 
   const sessionId = conversationId ?? '';
@@ -342,7 +353,6 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   const [reconcileHint, setReconcileHint] = useState<string | null>(null);
   const [needManualRefresh, setNeedManualRefresh] = useState(false);
   const [reconciling, setReconciling] = useState(false);
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const actionViewRef = ActionView.useActionView();
@@ -693,6 +703,29 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
 
       const usePhase2 = isPhase2Enabled();
       let phase2Body: Record<string, unknown> | null = null;
+      const workspaceExecution = workspaceBound ? getBoundWorkspaceExecutionContext() : null;
+      const copiedGeneratedFiles = new Set<string>();
+      const copyGeneratedFilesToWorkspace = (files: readonly CHAT.TFile[]) => {
+        if (!workspaceExecution || files.length === 0) return;
+        const pending = files.filter((file) => {
+          const key = `${file.name} ${file.url} ${file.size}`;
+          if (copiedGeneratedFiles.has(key)) return false;
+          copiedGeneratedFiles.add(key);
+          return true;
+        });
+        if (!pending.length) return;
+        void saveGeneratedFilesToWorkspace(workspaceExecution, pending)
+          .then((result) => {
+            if (result.failures.length) {
+              message.warning(
+                `${result.failures.length} 个生成文件未能写入工作区，可在对话附件中重试下载`,
+              );
+            }
+          })
+          .catch(() => {
+            message.warning('生成文件已保留在对话附件中，但工作区刷新失败');
+          });
+      };
 
       if (usePhase2) {
         const memoryCheck = await ensureLocalMemoryUsable(
@@ -728,7 +761,10 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
         }
 
         // Memory text stays empty on purpose: the backend injects the on-disk
-        // snapshot for non-privacy conversations.
+        // snapshot for non-privacy conversations. Browser workspace files live
+        // in IndexedDB, so — only for a workspace-bound conversation — pass a
+        // bounded untrusted snapshot separately via conversationSummary.
+        const workspaceContext = workspaceBound ? await buildBoundWorkspaceChatContext() : '';
         const built = buildPhase2GptQueryRequest({
           sessionId,
           requestId,
@@ -739,7 +775,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           allowedAgentIds: allowedAgentIdsForRequest,
           teamId: teamIdRef.current,
           longTermMemory: '',
-          conversationSummary: '',
+          conversationSummary: workspaceContext,
           attachmentIds: inputInfo.attachmentIds ?? [],
           modelName: inputInfo.modelName ?? undefined,
         });
@@ -841,6 +877,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           const generated = extractGeneratedFiles(resultMap);
           if (generated.length) {
             working.generatedFiles = generated;
+            copyGeneratedFilesToWorkspace(generated);
           }
           working.loading = false;
         }
@@ -945,6 +982,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
               const generated = extractGeneratedFiles(resultMap);
               if (generated.length) {
                 working.generatedFiles = generated;
+                copyGeneratedFilesToWorkspace(generated);
               }
               working.loading = false;
               if (working.orchestration) {
@@ -1192,7 +1230,6 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
   }, []);
 
   return (
-    <WorkspaceMount conversationId={conversationId}>
     <div className="h-full w-full flex bg-surface" onWheel={relayWheelToChat}>
       {modalContextHolder}
       <div
@@ -1226,14 +1263,6 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
                 enabled={privacyMode}
                 onToggle={() => onPrivacyModeChange?.()}
               />
-              <Button
-                size="small"
-                icon={<FolderOpenOutlined />}
-                onClick={() => setWorkspaceOpen(true)}
-                data-testid="workspace-drawer-open"
-              >
-                工作区
-              </Button>
             </div>
           </div>
         </div>
@@ -1431,18 +1460,7 @@ const ChatView: GenieType.FC<ChatViewProps> = (props) => {
           onClose={() => changeActionStatus(false)}
         />
       </div>
-      <Drawer
-        title="工作区"
-        placement="right"
-        width={420}
-        open={workspaceOpen}
-        onClose={() => setWorkspaceOpen(false)}
-        destroyOnClose={false}
-      >
-        <WorkspacePanel />
-      </Drawer>
     </div>
-    </WorkspaceMount>
   );
 };
 

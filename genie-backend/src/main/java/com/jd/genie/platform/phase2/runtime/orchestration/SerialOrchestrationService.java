@@ -13,8 +13,10 @@ import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentExecutor;
 import com.jd.genie.platform.phase2.runtime.agent.ConfiguredAgentPrinter;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationStep;
 import com.jd.genie.platform.phase2.runtime.plan.OrchestrationSubTask;
+import com.jd.genie.platform.phase2.runtime.context.BrowserWorkspaceContextPolicy;
 import com.jd.genie.platform.phase2.runtime.resource.SystemResourceBuilder;
 import com.jd.genie.platform.phase2.runtime.trace.OrchestrationTraceChannel;
+import com.jd.genie.platform.phase2.skillruntime.execution.BrowserWorkspacePythonToolFactory;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.port.AgentRuntimeCatalogPort;
 import com.jd.genie.platform.phase2contract.port.RuntimeToolCollectionPort;
@@ -43,6 +45,7 @@ public final class SerialOrchestrationService {
     private final OrchestrationModelPort modelPort;
     private final DirectFallbackExecutor directFallbackExecutor;
     private final SystemResourceBuilder systemResourceBuilder;
+    private final BrowserWorkspacePythonToolFactory browserWorkspacePythonToolFactory;
     private final ThreadLocal<AtomicReference<String>> requestRunningStep = new ThreadLocal<>();
     private final int maxAgentSteps;
 
@@ -98,6 +101,21 @@ public final class SerialOrchestrationService {
             DirectFallbackExecutor directFallbackExecutor,
             SystemResourceBuilder systemResourceBuilder
     ) {
+        this(catalogPort, toolCollectionPort, skillRuntimePort, executor, maxAgentSteps, modelPort,
+                directFallbackExecutor, systemResourceBuilder, null);
+    }
+
+    public SerialOrchestrationService(
+            AgentRuntimeCatalogPort catalogPort,
+            RuntimeToolCollectionPort toolCollectionPort,
+            SkillRuntimePort skillRuntimePort,
+            ConfiguredAgentExecutor executor,
+            int maxAgentSteps,
+            OrchestrationModelPort modelPort,
+            DirectFallbackExecutor directFallbackExecutor,
+            SystemResourceBuilder systemResourceBuilder,
+            BrowserWorkspacePythonToolFactory browserWorkspacePythonToolFactory
+    ) {
         this.catalogPort = catalogPort;
         this.toolCollectionPort = toolCollectionPort;
         this.skillRuntimePort = skillRuntimePort;
@@ -106,6 +124,7 @@ public final class SerialOrchestrationService {
         this.modelPort = modelPort;
         this.directFallbackExecutor = directFallbackExecutor;
         this.systemResourceBuilder = systemResourceBuilder;
+        this.browserWorkspacePythonToolFactory = browserWorkspacePythonToolFactory;
     }
 
     public Map<String, AgentTaskResult> execute(
@@ -729,10 +748,18 @@ public final class SerialOrchestrationService {
                     .isStream(true)
                     .templateType("empty")
                     .build();
-            List<BaseTool> skillTools = skillRuntimePort == null
-                    ? List.of()
-                    : skillRuntimePort.buildRuntimeTools(user, profile, context);
-            ToolCollection tools = toolCollectionPort.build(user, profile, context, skillTools);
+            List<BaseTool> runtimeTools = new ArrayList<>();
+            if (skillRuntimePort != null) {
+                runtimeTools.addAll(skillRuntimePort.buildRuntimeTools(user, profile, context));
+            }
+            // Only register the browser workspace tool when this request actually carries a
+            // bound workspace snapshot — otherwise every ordinary chat would pay for an unused
+            // tool schema and its system-prompt instructions on every single turn.
+            if (browserWorkspacePythonToolFactory != null
+                    && BrowserWorkspaceContextPolicy.hasSnapshot(context.getQuery())) {
+                runtimeTools.add(browserWorkspacePythonToolFactory.create(user, context));
+            }
+            ToolCollection tools = toolCollectionPort.build(user, profile, context, runtimeTools);
             context.setToolCollection(tools);
             if (cancellationRequested.getAsBoolean()) {
                 throw new AgentBridgeException(MvpErrorCode.CLIENT_DISCONNECTED, "Orchestration cancelled before Agent launch");

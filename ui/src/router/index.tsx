@@ -26,8 +26,11 @@ const AdminUsersPage = React.lazy(
 const AdminUsagePage = React.lazy(
   () => import('@/features/admin/AdminUsagePage'),
 );
-const WorkspaceMount = React.lazy(
-  () => import('@/layout/mounts/WorkspaceMount'),
+const WorkspaceHomePage = React.lazy(
+  () => import('@/features/workspace/WorkspaceHomePage'),
+);
+const ConversationPage = React.lazy(
+  () => import('@/features/conversation/ConversationPage'),
 );
 const MarketplaceMount = React.lazy(
   () => import('@/layout/mounts/MarketplaceMount'),
@@ -82,7 +85,17 @@ const router = createBrowserRouter([
               },
               {
                 path: 'workspace',
-                element: Page(<WorkspaceMount />),
+                element: Page(<WorkspaceHomePage />),
+                children: [
+                  {
+                    path: ':workspaceId',
+                    element: Page(<ConversationPage />),
+                  },
+                  {
+                    path: ':workspaceId/chat/:conversationId',
+                    element: Page(<ConversationPage />),
+                  },
+                ],
               },
               {
                 path: 'marketplace',

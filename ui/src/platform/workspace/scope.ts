@@ -40,7 +40,9 @@ export function buildWorkspaceScope(
     conversationId === undefined
       ? undefined
       : validateScopePart(conversationId, 'conversationId');
-  const key = [user, workspace, conversation ?? 'workspace']
+  // A workspace belongs to the user, not to a chat. conversationId is retained
+  // only as optional compatibility metadata for legacy attachment adapters.
+  const key = [user, workspace]
     .map((part) => encodeURIComponent(part))
     .join(':');
   return {

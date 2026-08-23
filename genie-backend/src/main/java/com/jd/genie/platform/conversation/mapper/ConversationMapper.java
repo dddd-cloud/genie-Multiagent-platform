@@ -44,6 +44,7 @@ public interface ConversationMapper extends BaseMapper<ConversationEntity> {
         WHERE tenant_id = #{tenantId}
           AND owner_id = #{ownerId}
           AND deleted_at IS NULL
+          AND workspace_id IS NULL
         ORDER BY (last_message_at IS NULL) ASC,
                  last_message_at DESC,
                  created_at DESC,
@@ -54,6 +55,26 @@ public interface ConversationMapper extends BaseMapper<ConversationEntity> {
                                                          @Param("ownerId") String ownerId,
                                                          @Param("limit") int limit,
                                                          @Param("offset") int offset);
+
+    /** Same ordering as {@link #selectOwnedConversationPage}, but scoped to one browser workspace. */
+    @Select("""
+        SELECT *
+        FROM conversation
+        WHERE tenant_id = #{tenantId}
+          AND owner_id = #{ownerId}
+          AND deleted_at IS NULL
+          AND workspace_id = #{workspaceId}
+        ORDER BY (last_message_at IS NULL) ASC,
+                 last_message_at DESC,
+                 created_at DESC,
+                 id DESC
+        LIMIT #{limit} OFFSET #{offset}
+        """)
+    List<ConversationEntity> selectOwnedConversationPageForWorkspace(@Param("tenantId") String tenantId,
+                                                                     @Param("ownerId") String ownerId,
+                                                                     @Param("workspaceId") String workspaceId,
+                                                                     @Param("limit") int limit,
+                                                                     @Param("offset") int offset);
 
     @Update("""
         UPDATE conversation

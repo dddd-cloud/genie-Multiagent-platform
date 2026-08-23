@@ -6,6 +6,7 @@ import {
   type WorkspaceFile,
   type WorkspaceFileInput,
   type WorkspaceFileStore,
+  type WorkspaceFolder,
   type WorkspaceRemoteFile,
   type WorkspaceScope,
 } from '@/platform/workspace/types';
@@ -197,5 +198,52 @@ export class WorkspaceService {
 
   rename(scope: WorkspaceScope, fileId: string, name: string): Promise<WorkspaceFile> {
     return this.store.rename(scope, fileId, name);
+  }
+
+  async write(
+    scope: WorkspaceScope,
+    input: WorkspaceFileInput,
+  ): Promise<WorkspaceFile> {
+    const record = createWorkspaceRecord(scope, {
+      ...input,
+      syncStatus: 'local',
+      remote: undefined,
+    });
+    return this.store.put(scope, record);
+  }
+
+  async upsertByName(
+    scope: WorkspaceScope,
+    input: WorkspaceFileInput,
+  ): Promise<WorkspaceFile> {
+    const parentId = input.parentId ?? null;
+    const existing = (await this.store.list(scope)).find(
+      (file) => file.name === input.name && file.parentId === parentId,
+    );
+    return this.write(scope, { ...input, id: existing?.id ?? input.id });
+  }
+
+  moveFile(scope: WorkspaceScope, fileId: string, parentId: string | null): Promise<WorkspaceFile> {
+    return this.store.moveFile(scope, fileId, parentId);
+  }
+
+  listFolders(scope: WorkspaceScope): Promise<WorkspaceFolder[]> {
+    return this.store.listFolders(scope);
+  }
+
+  createFolder(scope: WorkspaceScope, name: string, parentId: string | null): Promise<WorkspaceFolder> {
+    return this.store.createFolder(scope, name, parentId);
+  }
+
+  renameFolder(scope: WorkspaceScope, folderId: string, name: string): Promise<WorkspaceFolder> {
+    return this.store.renameFolder(scope, folderId, name);
+  }
+
+  moveFolder(scope: WorkspaceScope, folderId: string, parentId: string | null): Promise<WorkspaceFolder> {
+    return this.store.moveFolder(scope, folderId, parentId);
+  }
+
+  deleteFolder(scope: WorkspaceScope, folderId: string): Promise<void> {
+    return this.store.deleteFolder(scope, folderId);
   }
 }

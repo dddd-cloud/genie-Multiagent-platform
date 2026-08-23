@@ -6,6 +6,7 @@ public record ConversationResponse(
     String id,
     String title,
     boolean privacyMode,
+    String workspaceId,
     Instant lastMessageAt,
     Instant createdAt,
     Instant updatedAt

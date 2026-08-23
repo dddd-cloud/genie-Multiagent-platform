@@ -7,6 +7,7 @@ import com.jd.genie.agent.tool.BaseTool;
 import com.jd.genie.agent.tool.ToolCollection;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.MvpErrorCode;
+import com.jd.genie.platform.phase2.runtime.context.BrowserWorkspaceContextPolicy;
 import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import com.jd.genie.platform.phase2contract.dto.AgentRuntimeProfile;
 import com.jd.genie.platform.phase2contract.dto.ToolBindingView;
@@ -49,6 +50,13 @@ public class RuntimeToolCollectionService implements RuntimeToolCollectionPort {
         }
         if (selected.isEmpty() && requested.isEmpty()) {
             selected.add(CapabilityKeys.BUILTIN_DEEP_SEARCH);
+        }
+        // Browser workspace files exist only in the selected tab's Pyodide sandbox.
+        // Backend Python/data-analysis tools cannot see them and create an ambiguous
+        // route, so the browser runtime replaces both when a request is workspace-bound.
+        if (BrowserWorkspaceContextPolicy.hasSnapshot(context.getQuery())) {
+            selected.remove(CapabilityKeys.BUILTIN_CODE_INTERPRETER);
+            selected.remove(CapabilityKeys.BUILTIN_DATA_ANALYSIS);
         }
         List<BaseTool> tools = new ArrayList<>();
         var builtins = catalog.create(context);
