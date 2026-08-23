@@ -168,7 +168,13 @@ function writeWorkspaceInputs(
   if (!files?.length) return;
   for (const file of files) {
     const name = normalizeFileName(file.name);
-    fs.writeFile(`${root}/input/${name}`, new Uint8Array(file.bytes));
+    const relativePath = file.relativePath ? file.relativePath.split('/').map(normalizeFileName).join('/') : name;
+    const full = `${root}/input/${relativePath}`;
+    const dir = full.slice(0, full.lastIndexOf('/'));
+    if (dir) {
+      fs.mkdirTree(dir);
+    }
+    fs.writeFile(full, new Uint8Array(file.bytes));
   }
 }
 
@@ -200,8 +206,12 @@ function collectOutputFiles(
         continue;
       }
       let storedName: string;
+      let relativePath: string;
       try {
-        storedName = normalizeFileName(name);
+        const relativeToOutput = full.slice(outputRoot.length + 1);
+        const segments = relativeToOutput.split('/').map(normalizeFileName);
+        storedName = segments[segments.length - 1];
+        relativePath = segments.join('/');
       } catch {
         continue;
       }
@@ -226,6 +236,7 @@ function collectOutputFiles(
       const copy = bytes.slice();
       files.push({
         name: storedName,
+        relativePath: relativePath === storedName ? undefined : relativePath,
         mimeType: 'application/octet-stream',
         bytes: copy.buffer,
       });

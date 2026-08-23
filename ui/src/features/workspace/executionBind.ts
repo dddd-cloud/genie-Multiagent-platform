@@ -1,6 +1,7 @@
 import {
   WORKSPACE_LIMITS,
   normalizeFileName,
+  type WorkspaceFolder,
   type WorkspaceScope,
 } from '@/platform/workspace/types';
 import type { WorkspaceService } from '@/services/workspace/workspaceService';
@@ -211,6 +212,22 @@ function textFileSummary(name: string, text: string): string {
   return clipSummary(lines.slice(0, 3).join(' '));
 }
 
+/** Walks a file's parentId chain to build its '/'-joined folder path (undefined if it lives at the workspace root). */
+function relativePathOf(
+  file: { readonly name: string; readonly parentId?: string | null },
+  folderById: ReadonlyMap<string, WorkspaceFolder>,
+): string | undefined {
+  const segments: string[] = [];
+  let parentId = file.parentId ?? null;
+  while (parentId) {
+    const folder = folderById.get(parentId);
+    if (!folder) break;
+    segments.unshift(folder.name);
+    parentId = folder.parentId;
+  }
+  return segments.length ? `${segments.join('/')}/${file.name}` : undefined;
+}
+
 async function workspaceFileSummary(
   current: WorkspaceExecutionBind,
   file: Awaited<ReturnType<WorkspaceService['list']>>[number],
@@ -236,6 +253,9 @@ export async function buildBoundWorkspaceChatContext(): Promise<string> {
 
   try {
     const files = await current.service.list(current.scope);
+    const folderById = new Map(
+      (await current.service.listFolders(current.scope)).map((folder) => [folder.id, folder]),
+    );
     const visibleIds = new Set(current.fileIds);
     const visibleFiles = files
       .filter((file) => visibleIds.has(file.id))
@@ -252,9 +272,10 @@ export async function buildBoundWorkspaceChatContext(): Promise<string> {
 
     for (const file of visibleFiles) {
       const summary = await workspaceFileSummary(current, file);
+      const relativePath = relativePathOf(file, folderById) ?? file.name;
       used = appendWithinLimit(
         parts,
-        `\n- /workspace/${file.name} | ${file.mimeType} | ${file.size} bytes | 摘要: ${summary}`,
+        `\n- /workspace/${relativePath} | ${file.mimeType} | ${file.size} bytes | 摘要: ${summary}`,
         used,
       );
       if (used >= CHAT_CONTEXT_CHAR_LIMIT) break;

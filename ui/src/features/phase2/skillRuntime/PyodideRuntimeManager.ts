@@ -25,26 +25,42 @@ interface PendingExecute {
   timer: ReturnType<typeof setTimeout>;
 }
 
+/** Validates a '/'-joined relative path, rejecting '..'/empty segments; each segment must itself be a legal file name. */
+function normalizeRelativePath(rawPath: string): string {
+  const segments = rawPath.split('/').map((segment) => normalizeFileName(segment));
+  return segments.join('/');
+}
+
 function validatedWorkspaceFiles(
   files: readonly WorkspaceExecutionInputFile[] | undefined,
 ): readonly WorkspaceExecutionInputFile[] {
   if (!files || files.length === 0) return [];
   if (files.length > 32) throw new Error('too many workspace input files');
   let totalBytes = 0;
-  const names = new Set<string>();
+  const paths = new Set<string>();
   return files.map((file) => {
     if (!file || typeof file !== 'object' || typeof file.name !== 'string' || typeof file.mimeType !== 'string') {
       throw new Error('invalid workspace input file');
     }
     const name = normalizeFileName(file.name);
-    if (names.has(name)) throw new Error('duplicate workspace input file name');
-    names.add(name);
+    const relativePath =
+      typeof file.relativePath === 'string' && file.relativePath.trim()
+        ? normalizeRelativePath(file.relativePath)
+        : undefined;
+    const dedupeKey = relativePath ?? name;
+    if (paths.has(dedupeKey)) throw new Error('duplicate workspace input file path');
+    paths.add(dedupeKey);
     assertFileBytes(file.bytes);
     totalBytes += file.bytes.byteLength;
     if (totalBytes > 50 * 1024 * 1024) {
       throw new Error('workspace input files exceed execution limit');
     }
-    return { name, mimeType: file.mimeType.trim() || 'application/octet-stream', bytes: file.bytes.slice(0) };
+    return {
+      name,
+      relativePath,
+      mimeType: file.mimeType.trim() || 'application/octet-stream',
+      bytes: file.bytes.slice(0),
+    };
   });
 }
 

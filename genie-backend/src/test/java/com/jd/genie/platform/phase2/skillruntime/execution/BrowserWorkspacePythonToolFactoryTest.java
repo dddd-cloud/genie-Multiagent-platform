@@ -28,7 +28,7 @@ class BrowserWorkspacePythonToolFactoryTest {
         assertThat(tool.getName()).isEqualTo(BrowserWorkspacePythonToolFactory.TOOL_NAME);
         assertThat(tool.getDescription())
                 .contains("按需文件访问")
-                .contains("/workspace/test.py")
+                .contains("/workspace/scripts/main.py")
                 .contains("自动同步")
                 .doesNotContain("input/<文件名>", "output/<文件名>");
         assertThat(tool.toParams()).containsEntry("type", "object");

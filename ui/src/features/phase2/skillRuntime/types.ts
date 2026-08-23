@@ -30,8 +30,18 @@ export const BROWSER_SKILL_EXECUTION_LIMITS = {
   MAX_WORKSPACE_OUTPUT_FILE_BYTES: 25 * 1024 * 1024,
 } as const;
 
-export type WorkspaceExecutionInputFile = WorkspaceBinaryFile;
-export type WorkspaceExecutionOutputFile = WorkspaceBinaryFile;
+/**
+ * `relativePath` carries the file's folder position using '/' separators
+ * (e.g. "sub/dir/report.txt"), independent of `name` (the leaf file name,
+ * still validated by normalizeFileName and thus '/'-free). Absent means the
+ * file lives at the workspace root.
+ */
+export interface WorkspaceExecutionInputFile extends WorkspaceBinaryFile {
+  readonly relativePath?: string;
+}
+export interface WorkspaceExecutionOutputFile extends WorkspaceBinaryFile {
+  readonly relativePath?: string;
+}
 
 export type WorkerToMainMessage =
   | { type: 'ready' }
