@@ -18,6 +18,46 @@ import static org.mockito.Mockito.verify;
 
 class ConfiguredAgentPrinterTest {
     @Test
+    void unescapesJsonStringEscapesInStreamedThoughtFragments() {
+        // Deltas landing inside the frozen contract's "output" value still carry
+        // JSON string escaping since the JSON document isn't complete/parseable yet.
+        assertEquals(
+                "第一段\n\n第二段",
+                ConfiguredAgentPrinter.unescapeJsonStringFragment("第一段\\n\\n第二段")
+        );
+        assertEquals(
+                "she said \"hi\"\tthen left",
+                ConfiguredAgentPrinter.unescapeJsonStringFragment("she said \\\"hi\\\"\\tthen left")
+        );
+        assertEquals("C:\\path", ConfiguredAgentPrinter.unescapeJsonStringFragment("C:\\\\path"));
+        // No backslash: returned unchanged (fast path).
+        assertEquals("plain text", ConfiguredAgentPrinter.unescapeJsonStringFragment("plain text"));
+        // Unknown escape (e.g. LaTeX/markdown backslash usage) is left untouched.
+        assertEquals("\\sqrt{2}", ConfiguredAgentPrinter.unescapeJsonStringFragment("\\sqrt{2}"));
+        // Trailing lone backslash (escape split across a chunk boundary) is kept as-is.
+        assertEquals("tail\\", ConfiguredAgentPrinter.unescapeJsonStringFragment("tail\\"));
+        assertEquals(null, ConfiguredAgentPrinter.unescapeJsonStringFragment(null));
+    }
+
+    @Test
+    void stripsJsonKeyBoundaryLandingExactlyOnAChunk() {
+        // A delta can land exactly on the status->output transition without
+        // containing enough of either half for the fragment detectors to fire.
+        assertEquals(
+                "光合作用是绿色植物…",
+                ConfiguredAgentPrinter.stripLeadingJsonKeyBoundary("\",\"output\":\"光合作用是绿色植物…")
+        );
+        assertEquals(
+                "SUCCESS",
+                ConfiguredAgentPrinter.stripLeadingJsonKeyBoundary("\"status\":\"SUCCESS")
+        );
+        // No boundary present: untouched.
+        assertEquals("光合作用是…", ConfiguredAgentPrinter.stripLeadingJsonKeyBoundary("光合作用是…"));
+        // Boundary only, no content yet: strips down to empty.
+        assertEquals("", ConfiguredAgentPrinter.stripLeadingJsonKeyBoundary("\",\"output\":\""));
+    }
+
+    @Test
     void detectsFrozenResultContractJson() {
         assertTrue(ConfiguredAgentPrinter.looksLikeResultContract(
                 "{\"status\":\"SUCCESS\",\"output\":\"**平台组周报**\",\"errorCode\":null,\"retryable\":false}"

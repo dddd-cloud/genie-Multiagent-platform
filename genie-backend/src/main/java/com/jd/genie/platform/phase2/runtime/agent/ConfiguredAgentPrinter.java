@@ -218,6 +218,24 @@ public final class ConfiguredAgentPrinter implements Printer {
             return;
         }
         boolean jsonTail = visible.length() < text.length();
+        // A delta can land exactly on the `"status":"SUCCESS","output":"` boundary
+        // without containing enough of either half to trip the fragment detectors
+        // above — unlike the closing `"errorCode"/"retryable"` tail, this one must
+        // only be stripped from this chunk, not treated as "suppress the rest of
+        // the stream", since real answer content follows immediately after it.
+        visible = stripLeadingJsonKeyBoundary(visible);
+        if (visible.isEmpty()) {
+            if (Boolean.TRUE.equals(isFinal)) {
+                resetThoughtStream();
+            }
+            return;
+        }
+        // The prefix-detector only recognizes the JSON wrapper's outer shape, not
+        // deltas that land inside the "output" string's value — those still carry
+        // JSON string escaping (literal \n, \", \\) since they're not a complete,
+        // parseable JSON document yet. Unescape them so the live view shows real
+        // line breaks instead of the backslash-n characters themselves.
+        visible = unescapeJsonStringFragment(visible);
         if (Boolean.FALSE.equals(isFinal)) {
             emitThoughtDelta(messageId, visible);
             if (jsonTail) {
@@ -291,6 +309,80 @@ public final class ConfiguredAgentPrinter implements Printer {
      * Human-readable prefix before a result-contract JSON object/fragment.
      * {@code null} means the whole chunk should be hidden.
      */
+    /**
+     * Undoes JSON string escaping (\n, \t, \r, \", \\, \/) on a fragment that may
+     * not be a complete JSON document — safe to call on any streamed chunk. A lone
+     * trailing backslash at the very end of a chunk (an escape sequence split
+     * across a chunk boundary) is left as-is; the odds of the model's underlying
+     * transport splitting exactly there are low, and it self-corrects once the
+     * next chunk's first character arrives and gets appended normally.
+     */
+    static String unescapeJsonStringFragment(String text) {
+        if (text == null || text.indexOf('\\') < 0) {
+            return text;
+        }
+        StringBuilder result = new StringBuilder(text.length());
+        int i = 0;
+        int length = text.length();
+        while (i < length) {
+            char current = text.charAt(i);
+            if (current == '\\' && i + 1 < length) {
+                char next = text.charAt(i + 1);
+                switch (next) {
+                    case 'n':
+                        result.append('\n');
+                        i += 2;
+                        continue;
+                    case 't':
+                        result.append('\t');
+                        i += 2;
+                        continue;
+                    case 'r':
+                        result.append('\r');
+                        i += 2;
+                        continue;
+                    case '"':
+                        result.append('"');
+                        i += 2;
+                        continue;
+                    case '\\':
+                        result.append('\\');
+                        i += 2;
+                        continue;
+                    case '/':
+                        result.append('/');
+                        i += 2;
+                        continue;
+                    default:
+                        break;
+                }
+            }
+            result.append(current);
+            i++;
+        }
+        return result.toString();
+    }
+
+    // Leading class also matches a stray closing quote from the previous field's
+    // value (e.g. the "SUCCESS" in `"status":"SUCCESS","output":"...`), not just
+    // the comma between fields.
+    private static final java.util.regex.Pattern JSON_KEY_BOUNDARY =
+            java.util.regex.Pattern.compile("^[\",\\s]*\"(?:status|output)\"\\s*:\\s*\"?");
+
+    /**
+     * Strips a leading `"status":"` / `,"output":"` style JSON key boundary that
+     * a chunk can land on exactly, without containing enough surrounding text for
+     * looksLikeResultJsonFragment/looksLikeJsonObject to recognize it as JSON.
+     * Only strips — never suppresses the rest of the stream — since real content
+     * (the actual answer) follows immediately after this specific boundary.
+     */
+    static String stripLeadingJsonKeyBoundary(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return JSON_KEY_BOUNDARY.matcher(text).replaceFirst("");
+    }
+
     static String humanThoughtPrefix(String text) {
         if (text == null) {
             return null;

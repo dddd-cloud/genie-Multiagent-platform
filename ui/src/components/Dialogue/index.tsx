@@ -261,7 +261,7 @@ const Dialogue: FC<Props> = (props) => {
           <PlanSection plan={chat.planList} />
         </div>
       ) : null}
-      {chat.tasks.length ? (
+      {!isReactType && chat.tasks.length ? (
         <div className="w-full mt-[24px]">
           <TimeLine
             chat={chat}
