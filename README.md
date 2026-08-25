@@ -52,7 +52,7 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 | 会话管理 | 已支持任务执行、上下文传递和流式回答；但没有结构化会话 CRUD、消息状态持久化、聊天附件和流式快照恢复 | 会话 CRUD、标题生成、消息状态机、附件、历史恢复、失败恢复和流式快照 | `conversation` / `conversation_message` / `conversation_attachment` 表，SSE Observer 持久化 |
 | Agent 管理 | 已内置报告、搜索、代码、文件等子 Agent，并支持挂载 Java Tool；但没有用户级 Agent CRUD、上下线、测试及 Skill/MCP 绑定管理 | 用户可创建、编辑、测试、上下线 Agent，并配置模型、Prompt、Skill 与 MCP | Agent Definition、Prompt Compiler、运行时 Catalog、乐观版本控制 |
 | 团队协作 | 已支持多 Agent、任务拆分、上下文管理和高并发 DAG 执行；但没有可持久化配置的 Team、主控人格、成员管理及 Auto/Solo/Ensemble 选择 | 可管理 Team、主控人格和成员；支持 Auto 交接、Solo 专家和 Ensemble 团队执行 | Team Runtime Resolver、路由模型、串并行编排、重试与 fallback |
-| 流式输出与编排可视化 | **已支持全链路流式输出**；但流式过程没有按平台会话持久化，也缺少快照恢复、版本化编排事件和可重放的多专家时间线 | 保留原有 SSE，并增加消息持久化、流式快照恢复、并行专家轨迹、工具状态和可重放编排时间线 | SSE Observer、版本化 orchestration event/trace、Snapshot、前端 reducer 与 timeline |
+| 流式输出与编排可视化 | 已支持全链路流式输出；但流式过程没有按平台会话持久化，也缺少快照恢复、版本化编排事件和可重放的多专家时间线 | 保留原有 SSE，并增加消息持久化、流式快照恢复、并行专家轨迹、工具状态和可重放编排时间线 | SSE Observer、版本化 orchestration event/trace、Snapshot、前端 reducer 与 timeline |
 | 模型配置 | 已支持 OpenAI-compatible 模型，并可通过后端配置选择模型参数；但主要是全局静态配置，没有用户模型 CRUD、密钥加密、请求级选择和用量统计 | 系统默认模型与用户自定义 OpenAI-compatible 模型并存，可按请求选择 | User Model Catalog、请求级 LLM Settings、API Key 加密、Token 计量 |
 | Skill | 已有丰富的内置 Agent、工具和 Prompt 能力；但没有独立的 Skill 领域模型、Package 导入、用户绑定和浏览器 Skill 运行时 | Skill CRUD、ZIP Package 导入、Agent 绑定、兼容型 Skill 运行时与浏览器 Python Skill | `SKILL.md` 解析、Package Guard、Pyodide Web Worker、执行结果回传协议 |
 | MCP | 已支持通过配置挂载一个或多个 MCP Server 并调用远端工具；但没有用户级 Server CRUD、凭据加密、工具发现管理和细粒度绑定 | 用户级 MCP 管理、加密凭据、工具发现、启停和最小权限绑定 | 独立 FastAPI MCP Client、MCP 表模型、内部 Token、工具能力快照 |
@@ -74,15 +74,35 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 
 ## 案例展示视频
 
-> 此处预留给项目维护者补充实际案例视频。建议将视频上传到 GitHub 的 Release、Issue 或用户附件，再把永久链接填入下表，避免使用带时效签名的临时 URL。
 
 | 案例 | 说明 | 视频 |
 | --- | --- | --- |
-| Auto 智能调度 | 系统根据问题自动选择一个专家或专家团队 | 待补充 |
-| Ensemble 多专家协作 | 多个专家并行分析、重试并汇总最终答案 | 待补充 |
-| 资源广场 | 专家团队、Skill 或 MCP，并在对话中真实调用 | 待补充 |
-| 浏览器工作区 | 上传数据、调用 Python 分析并保存生成文件 | 待补充 |
-| 自然语言创建资源 | 通过系统资源构建器创建 Agent 或 Team | 待补充 |
+| Auto 智能调度及浏览器工作区 | 系统根据问题自动选择一个专家或专家团队，上传数据、调用 Python 分析并保存生成文件 | 
+
+https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f
+
+ |
+| Ensemble 多专家协作 | 多个专家并行分析、重试并汇总最终答案 | 
+
+https://github.com/user-attachments/assets/7eb8ed25-fd7c-434f-9324-c2c4452e6e43
+
+ |
+| 资源广场 | 专家团队、Skill 或 MCP，并在对话中真实调用 | 
+
+https://github.com/user-attachments/assets/597403c8-7b67-467c-b14e-78cd71985167
+
+ |
+| 自然语言创建资源 | 通过系统资源构建器创建 Agent 或 Team | 
+
+https://github.com/user-attachments/assets/a545f25a-9e39-4e21-b556-bf4cf5a9a490
+
+ |
+
+总体二次开发视频
+
+
+https://github.com/user-attachments/assets/6ed08acd-9c81-4613-b926-e4a9ee9138e3
+
 
 ## 系统架构
 
