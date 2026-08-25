@@ -113,57 +113,8 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 
 ## 系统架构
 
-```mermaid
-flowchart TB
-    User[用户浏览器]
+<img width="1672" height="941" alt="二开架构图" src="https://github.com/user-attachments/assets/a300bcc7-466a-462d-9314-4f38cb32d580" />
 
-    subgraph Browser[React 19 / Vite 6 前端]
-        UI[会话、设置、资源广场、管理后台]
-        Timeline[编排时间线与 SSE 状态]
-        Workspace["浏览器工作区<br/>IndexedDB / localStorage"]
-        Pyodide["Pyodide Web Worker<br/>浏览器 Python Skill"]
-    end
-
-    subgraph Backend[Spring Boot 3.2.2 / Java 17]
-        Security[登录、Session、CSRF、用户隔离]
-        Conversation[会话、附件、快照、历史]
-        Config[Model / Agent / Team / Skill / MCP]
-        Runtime["Auto / Solo / Ensemble<br/>路由、规划、并行、重试、汇总"]
-        Marketplace[资源广场与资源安装]
-        Usage[用量计量与管理员 API]
-    end
-
-    subgraph Services[Python 服务]
-        Tool["genie-tool :1601<br/>搜索、报告、代码、文件、数据分析"]
-        McpClient["genie-client :8188<br/>MCP 发现与调用"]
-    end
-
-    DB[("MySQL 8.0<br/>用户、会话、配置、用量")]
-    Memory[("用户记忆目录<br/>Markdown / Summary")]
-    LLM[OpenAI-compatible LLM]
-    RemoteMCP[远程 MCP Servers]
-
-    User --> UI
-    UI --> Security
-    UI <--> Timeline
-    UI <--> Workspace
-    Workspace <--> Pyodide
-    Security --> Conversation
-    Conversation --> Runtime
-    Config --> Runtime
-    Marketplace --> Config
-    Runtime <--> LLM
-    Runtime <--> Tool
-    Runtime <--> McpClient
-    McpClient <--> RemoteMCP
-    Security <--> DB
-    Conversation <--> DB
-    Config <--> DB
-    Usage <--> DB
-    Runtime <--> Memory
-    Tool -.生成文件.-> Workspace
-    Pyodide -.执行结果.-> Runtime
-```
 
 ### 服务边界
 
