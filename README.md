@@ -88,7 +88,7 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
       <td>系统根据问题自动选择一个专家或专家团队，上传数据、调用 Python 分析并保存生成文件</td>
 
 
-      <td><video src="[https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f](https://github.com/user-attachments/assets/8ed2e3db-508a-49eb-b75f-1b7888e06532)" width="240" controls><a href="[https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f](https://github.com/user-attachments/assets/8ed2e3db-508a-49eb-b75f-1b7888e06532)">查看视频</a></video></td>
+      <td><video src="https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f" width="240" controls><a href="https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f">查看视频</a></video></td>
     </tr>
     <tr>
       <td>Ensemble 多专家协作</td>
