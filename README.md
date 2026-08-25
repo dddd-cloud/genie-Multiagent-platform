@@ -74,36 +74,6 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 
 ## 案例展示视频
 
-等待覆盖的视频：
-工作区演示
-
-https://github.com/user-attachments/assets/6d965045-0f24-4284-80bb-a4dd07484207
-
-多专家协作
-
-https://github.com/user-attachments/assets/38adb69a-6146-48b9-b11d-065c8e08f8a8
-
-资源广场
-
-
-https://github.com/user-attachments/assets/e2ab2357-64d4-4acd-92b3-db63d2a2ea71
-
-
-自然语言创建资源
-
-
-
-https://github.com/user-attachments/assets/b67de35c-82c1-48c6-97a4-301438744504
-
-
-完整平台演示
-
-
-https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55
-
-
-
-
 <table>
   <thead>
     <tr>
@@ -116,32 +86,31 @@ https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55
     <tr>
       <td>Auto 智能调度及浏览器工作区</td>
       <td>系统根据问题自动选择一个专家或专家团队，上传数据、调用 Python 分析并保存生成文件</td>
-
-
-      <td><video src="https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f" width="240" controls><a href="https://github.com/user-attachments/assets/36e39700-34f7-491a-a7dc-1b3eeb73bd2f">查看视频</a></video></td>
+      <td><video src="https://github.com/user-attachments/assets/6d965045-0f24-4284-80bb-a4dd07484207" width="240" controls><a href="https://github.com/user-attachments/assets/6d965045-0f24-4284-80bb-a4dd07484207">查看视频</a></video></td>
     </tr>
     <tr>
       <td>Ensemble 多专家协作</td>
       <td>多个专家并行分析、重试并汇总最终答案</td>
-      <td><video src="https://github.com/user-attachments/assets/7eb8ed25-fd7c-434f-9324-c2c4452e6e43" width="240" controls><a href="https://github.com/user-attachments/assets/7eb8ed25-fd7c-434f-9324-c2c4452e6e43">查看视频</a></video></td>
+      <td><video src="https://github.com/user-attachments/assets/38adb69a-6146-48b9-b11d-065c8e08f8a8" width="240" controls><a href="https://github.com/user-attachments/assets/38adb69a-6146-48b9-b11d-065c8e08f8a8">查看视频</a></video></td>
     </tr>
     <tr>
       <td>资源广场</td>
       <td>安装专家团队、Skill 或 MCP，并在对话中真实调用</td>
-      <td><video src="https://github.com/user-attachments/assets/597403c8-7b67-467c-b14e-78cd71985167" width="240" controls><a href="https://github.com/user-attachments/assets/597403c8-7b67-467c-b14e-78cd71985167">查看视频</a></video></td>
+      <td><video src="https://github.com/user-attachments/assets/e2ab2357-64d4-4acd-92b3-db63d2a2ea71" width="240" controls><a href="https://github.com/user-attachments/assets/e2ab2357-64d4-4acd-92b3-db63d2a2ea71">查看视频</a></video></td>
     </tr>
     <tr>
       <td>自然语言创建资源</td>
       <td>通过系统资源构建器创建 Agent 或 Team</td>
-      <td><video src="https://github.com/user-attachments/assets/a545f25a-9e39-4e21-b556-bf4cf5a9a490" width="240" controls><a href="https://github.com/user-attachments/assets/a545f25a-9e39-4e21-b556-bf4cf5a9a490">查看视频</a></video></td>
-    </tr>
-    <tr>
-      <td>完整平台演示</td>
-      <td>集中展示平台的主要二次开发能力与操作流程</td>
-      <td><video src="https://github.com/user-attachments/assets/6ed08acd-9c81-4613-b926-e4a9ee9138e3" width="240" controls><a href="https://github.com/user-attachments/assets/6ed08acd-9c81-4613-b926-e4a9ee9138e3">查看视频</a></video></td>
+      <td><video src="https://github.com/user-attachments/assets/b67de35c-82c1-48c6-97a4-301438744504" width="240" controls><a href="https://github.com/user-attachments/assets/b67de35c-82c1-48c6-97a4-301438744504">查看视频</a></video></td>
     </tr>
   </tbody>
 </table>
+
+### 完整平台演示
+
+集中展示平台的主要二次开发能力与完整操作流程。
+
+<video src="https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55" width="720" controls><a href="https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55">查看完整平台演示</a></video>
 
 ## 系统架构
 
