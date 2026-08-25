@@ -458,7 +458,6 @@ docker exec joyagent-mvp-ui-1 bash -lc "cd /workspace/ui && pnpm build"
 - [ ] 完善更多 MCP Transport 和 OAuth/凭据生命周期管理。
 - [ ] 增加生产镜像、反向代理、监控、告警、限流和备份恢复手册。
 - [ ] 建立上游 JoyAgent 定期同步与冲突审计流程。
-- [ ] 重写与当前版本一致的英文 README 和面向使用者的操作手册。
 
 ## 文档索引
 
