@@ -1,402 +1,487 @@
-# Agent开源git开源文档
-简体中文 | [English Version](README_EN.md)
+# Genie Multi-Agent Platform
 
-## 业界首个开源高完成度轻量化通用多智能体产品(JoyAgent-JDGenie)
-**解决快速构建多智能体产品的最后一公里问题**
+> 基于 [JoyAgent-JDGenie](https://github.com/jd-opensource/joyagent-jdgenie) 二次开发的多用户、可配置、可扩展多智能体平台。
 
-## new release
-多模态知识管理平台是一款面向多模态非结构化知识的RAG解决方案，集成解析、检索与生成能力，能够高效处理复杂文档，为智能问答与内容生成提供一站式支持。
-
-[**<font color=red>多模态知识管理：面向多模态文档的综合性RAG平台，为复杂文档的智能问答与内容生成提供一站式解决方案。</font>**](README_mrag.md)
-（注意使用mrag分支）
-![](./docs/img/mrag/mrag_struct.png)
-
-企业内部知识主要包括结构化表格知识和非结构化知识。因此对于结构化表格知识建设了开箱即用的DataAgent能力，主要包括数据治理DGP协议、智能问数和智能诊断分析。
-
-[**<font color=red>JoyDataAgent：首个开源的包含数据治理DGP协议、智能问数和智能诊断分析的智能体</font>**](README_DataAgent.md)
-（注意使用data_agent分支）
-<img width="1200" height="675" alt="image" src="https://github.com/user-attachments/assets/3a449185-4863-4171-8dda-72cb70b2fa91" />
+![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
+![Java](https://img.shields.io/badge/Java-17-orange.svg)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.2-brightgreen.svg)
+![Node.js](https://img.shields.io/badge/Node.js-20-brightgreen.svg)
+![React](https://img.shields.io/badge/React-19-61DAFB.svg)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg)
+![Docker Compose](https://img.shields.io/badge/Docker%20Compose-supported-2496ED.svg)
 
 ## 简介
 
-当前相关开源agent主要是SDK或者框架，用户还需基于此做进一步的开发，无法直接做到开箱即用。我们开源的JoyAgent-JDGenie是端到端的多Agent产品，对于输入的query或者任务，可以直接回答或者解决。例如用户query"给我做一个最近美元和黄金的走势分析"，JoyAgent-Genie可以直接给出网页版或者PPT版的报告文档。
+Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础上的二次开发版本。
 
-JoyAgent-JDGenie是一个通用的多智能体框架，对于用户需要定制的一些新场景功能，只需将相关的子智能体或者工具挂载到JoyAgent-Genie即可。为了验证JoyAgent-JDGenie的通用性，在GAIA榜单Validation集准确率**75.15%、**Test集**65.12%**，已超越OWL（CAMEL）、Smolagent（Huggingface）、LRC-Huawei（Huawei）、xManus（OpenManus）、AutoAgent（香港大学）等行业知名产品。
-
-此外，我们的开源多智能体产品JoyAgent-JDGenie相对比较轻量，不像阿里的SpringAI-Alibaba需要依赖阿里云百炼平台相关功能（基于百炼平台调用LLM），Coze依赖火山引擎平台。
-
-我们整体开源了智能体产品JoyAgent-JDGenie，包括前端、后端、框架、引擎、核心子智能体（报告生成智能体、代码智能体、PPT智能体、文件智能体等）、想用微调后效果更好的欢迎使用JoyAgent。
-## 案例展示
-<table>
-<tbody>
-<tr>
-<td><img src="./docs/img/首页.png" alt=""></td>
-<td><img src="./docs/img/ppt.png" alt=""></td>
-</tr>
-<tr>
-<td><img src="./docs/img/report.png" alt=""></td>
-<td><img src="./docs/img/table_analysis.png" alt=""></td>
-</tr>
-</tbody>
-</table>
+保留了原项目的 ReAct、Plan & Executor、多智能体协作、Deep Search、报告生成、代码执行、文件处理、数据分析和 SSE 流式输出等核心能力，并进一步将其扩展为一个面向真实多用户场景的智能体平台：用户可以管理自己的模型、专家 Agent、专家团队、Skill 和 MCP 连接，在 `Auto`、`Solo`、`Ensemble` 三种模式下完成单智能体或多智能体任务，也可以在隔离的浏览器工作区中管理输入文件与智能体生成的交付物。
 
 
+- 仓库地址：<https://github.com/dddd-cloud/genie-Multiagent-platform.git>
+- 上游项目：<https://github.com/jd-opensource/joyagent-jdgenie>
+- 开源许可：Apache License 2.0，详见 [LICENSE](./LICENSE)
 
-<table>
-<tbody>
-<tr>
-<td>
+## 核心能力
 
-<video src="https://private-user-images.githubusercontent.com/49786633/469170308-065b8d1a-92e4-470a-bbe3-426fafeca5c4.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzAzMDgtMDY1YjhkMWEtOTJlNC00NzBhLWJiZTMtNDI2ZmFmZWNhNWM0Lm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWRjNGY5ZTlmMTA4ODVhMWE0ZmEzYzU3YTIwYzJkYmIyY2Y0ZWE0NGUwZWU2ODAxNDA2MzQ0NzMyMWFlNTdiNWImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.fJyoUGcWjPWyG64ZwIcWWKz3FrBWuXAHHfdTLpIaaeU" data-canonical-src="https://private-user-images.githubusercontent.com/49786633/469170308-065b8d1a-92e4-470a-bbe3-426fafeca5c4.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzAzMDgtMDY1YjhkMWEtOTJlNC00NzBhLWJiZTMtNDI2ZmFmZWNhNWM0Lm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWRjNGY5ZTlmMTA4ODVhMWE0ZmEzYzU3YTIwYzJkYmIyY2Y0ZWE0NGUwZWU2ODAxNDA2MzQ0NzMyMWFlNTdiNWImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.fJyoUGcWjPWyG64ZwIcWWKz3FrBWuXAHHfdTLpIaaeU" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-fit" style="max-height:640px; min-height: 200px">
-</video>
+| 能力 | 说明 |
+| --- | --- |
+| 多种执行模式 | `Auto` 自动选择一个专家或团队；`Solo` 指定单个在线专家；`Ensemble` 使用指定团队或自定义专家集合协作。 |
+| 可配置 Agent 与 Team | 支持 Agent 创建、编辑、上下线、模型与 Prompt 配置、Skill/MCP 绑定，以及带主控人格的团队配置。 |
+| 多智能体编排 | 支持规划、串并行步骤、子任务拆分、执行重试、降级回退、结果汇总和实时思考过程时间线。 |
+| 资源广场 | 提供专家、专家团队、SkillHub Skill 与 MCP 资源入口；安装后生成当前用户真正拥有的资源及绑定关系。 |
+| Skill 运行时 | 支持文件系统 Skill Package、`SKILL.md` 导入、Prompt 编译，以及受控的浏览器 Pyodide Python Skill 执行。 |
+| MCP 管理 | 支持 MCP Server 配置、凭据加密、连通性测试、工具发现、启停和 Agent/Skill 工具绑定。 |
+| 浏览器工作区 | 支持多工作区、文件夹、上传、预览、重命名、移动、删除、Python 数据处理和生成文件回收。 |
+| 浏览器执行沙箱 | Skill 包校验后在独立 Pyodide Worker 中运行，仅加载当前工作区明确授权的文件，并提供输入输出限额、超时终止和崩溃重建。 |
+| 会话与记忆 | 支持会话持久化、历史上下文、附件、流式快照恢复、长期记忆与会话摘要。 |
+| 多用户与管理 | 支持登录会话、CSRF 防护、用户隔离、管理员用户管理、会话撤销和模型用量统计。 |
+| 原版工具能力 | 保留搜索、报告、代码解释器、文件工具、NL2SQL、表格 RAG 和自动数据分析等能力。 |
 
-<td>
+## 与京东原版 JoyAgent-JDGenie 的对比
 
-<video src="https://private-user-images.githubusercontent.com/49786633/469171050-15dcf089-5659-489e-849d-39c651ca7e5a.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzEwNTAtMTVkY2YwODktNTY1OS00ODllLTg0OWQtMzljNjUxY2E3ZTVhLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTY5ZGU2MWU3NzA5NjYxM2ZhZDYxYTZjMWQxYWMzNGM2MTY2ODkzMTIzYjQ1NzRiOGZkOWUyODYzNmQ4N2Y5ZTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.7KW-JGmFACnf5IS3kL7M0eV8uZhlxDD8Br61XvcgmjY" data-canonical-src="https://private-user-images.githubusercontent.com/49786633/469171050-15dcf089-5659-489e-849d-39c651ca7e5a.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzEwNTAtMTVkY2YwODktNTY1OS00ODllLTg0OWQtMzljNjUxY2E3ZTVhLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTY5ZGU2MWU3NzA5NjYxM2ZhZDYxYTZjMWQxYWMzNGM2MTY2ODkzMTIzYjQ1NzRiOGZkOWUyODYzNmQ4N2Y5ZTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.7KW-JGmFACnf5IS3kL7M0eV8uZhlxDD8Br61XvcgmjY" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-fit" style="max-height:640px; min-height: 200px">
-</video>
+### 对比口径
 
-</td>
-</tr>
-<tr>
-<td>
-<video src="https://private-user-images.githubusercontent.com/49786633/469171112-cd99e2f8-9887-459f-ae51-00e7883fa050.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzExMTItY2Q5OWUyZjgtOTg4Ny00NTlmLWFlNTEtMDBlNzg4M2ZhMDUwLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWYyYmU5ODg4ZjI5NDNjZjBiYTVjYWRjMTI2ZGEyMDdjOWU2OTk2M2EwZjU4N2ZkYzU5NTQ5ZDJjMmUxMWNjNjAmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.OSPODm-E7K7PJaao8uThG1toIKsX3h93UEXS5GDqruQ" data-canonical-src="https://private-user-images.githubusercontent.com/49786633/469171112-cd99e2f8-9887-459f-ae51-00e7883fa050.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzExMTItY2Q5OWUyZjgtOTg4Ny00NTlmLWFlNTEtMDBlNzg4M2ZhMDUwLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWYyYmU5ODg4ZjI5NDNjZjBiYTVjYWRjMTI2ZGEyMDdjOWU2OTk2M2EwZjU4N2ZkYzU5NTQ5ZDJjMmUxMWNjNjAmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.OSPODm-E7K7PJaao8uThG1toIKsX3h93UEXS5GDqruQ" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-fit" style="max-height:640px; min-height: 200px">
-</video>
-</td>
-<td>
+这里的“原版”指本项目开始二次开发时使用的 JoyAgent-JDGenie 上游代码与原 README 所描述的能力，不代表京东仓库后续分支的所有变化。二次开发没有替换原有智能体内核，而是在其上增加平台层、配置层、持久化层和新的编排运行时。
 
-<video src="https://private-user-images.githubusercontent.com/49786633/469171151-657bbe61-5516-4ab9-84c2-c6ca75cc4a6f.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzExNTEtNjU3YmJlNjEtNTUxNi00YWI5LTg0YzItYzZjYTc1Y2M0YTZmLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTVmNGExZTlhNmM5NWMzMjc3ZWFlNTcyMzZjZTA4NWU4ZjY3OTA5ZTg5NzgwNDA2ODExNTg5MTkyNGQ5NDYzNTgmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.n3ZWlSK1GSM5Zyibk-D9jAArzDqvX3WdZtj7IdzG-4I" data-canonical-src="https://private-user-images.githubusercontent.com/49786633/469171151-657bbe61-5516-4ab9-84c2-c6ca75cc4a6f.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTMxOTEzNzEsIm5iZiI6MTc1MzE5MTA3MSwicGF0aCI6Ii80OTc4NjYzMy80NjkxNzExNTEtNjU3YmJlNjEtNTUxNi00YWI5LTg0YzItYzZjYTc1Y2M0YTZmLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MjIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzIyVDEzMzExMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTVmNGExZTlhNmM5NWMzMjc3ZWFlNTcyMzZjZTA4NWU4ZjY3OTA5ZTg5NzgwNDA2ODExNTg5MTkyNGQ5NDYzNTgmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.n3ZWlSK1GSM5Zyibk-D9jAArzDqvX3WdZtj7IdzG-4I" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-fit" style="max-height:640px; min-height: 200px">
-</video>
-  
-</td>
-</tr>
-</tbody>
-</table>
+### 功能与技术差异
 
-## 产品对比
+| 维度 | JoyAgent-JDGenie 原始能力 | 本项目扩展 | 主要技术实现 |
+| --- | --- | --- | --- |
+| 产品定位 | 已是开箱即用的端到端通用多智能体产品，包含前端、后端、智能体和工具服务；但主要面向单实例使用，缺少多用户平台化管理能力 | 面向多用户的可配置多智能体平台 | 在原 `agent`、`tool` 和 SSE 链路外增加 `platform` 领域层 |
+| 身份与数据隔离 | 已具备完整产品入口和任务执行链路；但没有登录 Session、用户角色、租户/用户数据隔离和管理员后台 | 登录、用户角色、用户状态、租户/用户数据隔离、管理员后台 | Spring Security、Spring Session JDBC、MySQL、CSRF、Flyway |
+| 会话管理 | 已支持任务执行、上下文传递和流式回答；但没有结构化会话 CRUD、消息状态持久化、聊天附件和流式快照恢复 | 会话 CRUD、标题生成、消息状态机、附件、历史恢复、失败恢复和流式快照 | `conversation` / `conversation_message` / `conversation_attachment` 表，SSE Observer 持久化 |
+| Agent 管理 | 已内置报告、搜索、代码、文件等子 Agent，并支持挂载 Java Tool；但没有用户级 Agent CRUD、上下线、测试及 Skill/MCP 绑定管理 | 用户可创建、编辑、测试、上下线 Agent，并配置模型、Prompt、Skill 与 MCP | Agent Definition、Prompt Compiler、运行时 Catalog、乐观版本控制 |
+| 团队协作 | 已支持多 Agent、任务拆分、上下文管理和高并发 DAG 执行；但没有可持久化配置的 Team、主控人格、成员管理及 Auto/Solo/Ensemble 选择 | 可管理 Team、主控人格和成员；支持 Auto 交接、Solo 专家和 Ensemble 团队执行 | Team Runtime Resolver、路由模型、串并行编排、重试与 fallback |
+| 流式输出与编排可视化 | **已支持全链路流式输出**；但流式过程没有按平台会话持久化，也缺少快照恢复、版本化编排事件和可重放的多专家时间线 | 保留原有 SSE，并增加消息持久化、流式快照恢复、并行专家轨迹、工具状态和可重放编排时间线 | SSE Observer、版本化 orchestration event/trace、Snapshot、前端 reducer 与 timeline |
+| 模型配置 | 已支持 OpenAI-compatible 模型，并可通过后端配置选择模型参数；但主要是全局静态配置，没有用户模型 CRUD、密钥加密、请求级选择和用量统计 | 系统默认模型与用户自定义 OpenAI-compatible 模型并存，可按请求选择 | User Model Catalog、请求级 LLM Settings、API Key 加密、Token 计量 |
+| Skill | 已有丰富的内置 Agent、工具和 Prompt 能力；但没有独立的 Skill 领域模型、Package 导入、用户绑定和浏览器 Skill 运行时 | Skill CRUD、ZIP Package 导入、Agent 绑定、兼容型 Skill 运行时与浏览器 Python Skill | `SKILL.md` 解析、Package Guard、Pyodide Web Worker、执行结果回传协议 |
+| MCP | 已支持通过配置挂载一个或多个 MCP Server 并调用远端工具；但没有用户级 Server CRUD、凭据加密、工具发现管理和细粒度绑定 | 用户级 MCP 管理、加密凭据、工具发现、启停和最小权限绑定 | 独立 FastAPI MCP Client、MCP 表模型、内部 Token、工具能力快照 |
+| 资源生态 | 已支持通过代码新增子 Agent 和 Tool，扩展机制清晰；但资源需要手工开发或配置，没有统一资源广场、模板目录和用户级安装流程 | 专家/团队模板、内置 Skill、SkillHub 和 MCP 资源聚合与真实安装 | Marketplace Catalog、用户级资源安装、内容哈希复用、隐藏资源构建器 |
+| 文件与工作区 | 已具备文件 Agent、服务端文件处理和 HTML/PPT/Markdown 等交付能力；但没有浏览器本地多工作区、文件夹管理、会话作用域和生成文件导入机制 | 多个浏览器本地工作区、文件夹、数据分析、会话关联与生成文件导入 | IndexedDB、localStorage、Pyodide、受限文件索引、远端文件适配器 |
+| 浏览器执行沙箱 | 已有服务端代码解释器和文件处理工具；但没有浏览器工作区文件挂载沙箱，也没有基于显式文件授权的 Worker 隔离执行 | Skill 在独立 Worker 中执行，只加载显式授权文件；限制包路径、文件数量和大小，超时或崩溃后销毁运行实例 | ZIP/Manifest/路径校验、Pyodide Web Worker、Workspace Execution Bridge、Worker 重建 |
+| 记忆 | 已提出并实现跨任务 Workflow Memory 的核心思路；但没有当前项目中的用户级长期记忆文件、会话摘要、自动捕获和管理界面 | 用户级长期记忆、会话摘要、自动捕获、分析与可视化管理 | 磁盘 Markdown 存储、Memory Guard、摘要/补丁协议、用户路径隔离 |
+| 工程保障 | 已提供 Dockerfile、手动部署、一键启动脚本和基础测试；但没有平台级契约冻结、数据库迁移验证和当前这套单元/集成/E2E/真实服务分层验收 | 契约冻结、数据库迁移、单元/集成/E2E/真实服务验收和可恢复的本地开发栈 | JSON Schema、Testcontainers、Vitest、Playwright、Docker Compose、验收脚本 |
 
-<table>
-<thead>
-<tr>
-<th>分类</th>
-<th>agent</th>
-<th>是否开源</th>
-<th>是否开源完整产品</th>
-<th>是否依赖生态</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td rowspan="2"><strong>SDK类</strong></td>
-<td>SpringAI-Alibaba</td>
-<td>部分</td>
-<td>否，只开源SDK（SDK）</td>
-<td>是（阿里云百炼平台）</td>
-</tr>
-<tr>
-<td>Coze</td>
-<td>部分</td>
-<td>否，只开源部分Nieo SDK（SDK）</td>
-<td>是（火山引擎平台）</td>
-</tr>
-<tr>
-<td rowspan="6"><strong>框架类</strong></td>
-<td>Fellow</td>
-<td>是</td>
-<td>否，只开源了Eko智能体框架（框架）</td>
-<td>否</td>
-</tr>
-<tr>
-<td>Dify</td>
-<td>是</td>
-<td>否，只开源了智能体框架，且主要是workflow（框架）</td>
-<td>否</td>
-</tr>
-<tr>
-<td>SkyworkAI</td>
-<td>是</td>
-<td>否，只开源了智能体框架（框架）</td>
-<td>否</td>
-</tr>
-<tr>
-<td>OpenManus</td>
-<td>是</td>
-<td>否，只开源了智能体框架（框架）</td>
-<td>否</td>
-</tr>
-<tr>
-<td>Owl</td>
-<td>是</td>
-<td>否，只开源了智能体框架（框架）</td>
-<td>否</td>
-</tr>
-<tr>
-<td>n8n</td>
-<td>是</td>
-<td>否，只开源了智能体框架，且主要是workflow（框架）</td>
-<td>否</td>
-</tr>
-<tr>
-<td rowspan="3"><strong>协议类</strong></td>
-<td>MCP</td>
-<td>是</td>
-<td>否，只是开源协议</td>
-<td>否</td>
-</tr>
-<tr>
-<td>A2A</td>
-<td>是</td>
-<td>否，只是开源协议</td>
-<td>否</td>
-</tr>
-<tr>
-<td>AG-UI</td>
-<td>是</td>
-<td>否，只是开源协议</td>
-<td>否</td>
-</tr>
-<tr>
-<td rowspan="2"><strong>技术模块类</strong></td>
-<td>memory0</td>
-<td>是</td>
-<td>否，只是开源的技术模块</td>
-<td>否</td>
-</tr>
-<tr>
-<td>LlamaIndex</td>
-<td>是</td>
-<td>否，只是开源的技术模块</td>
-<td>否</td>
-</tr>
-<tr>
-<td><strong>产品类</strong></td>
-<td>Our</td>
-<td>是</td>
-<td>是，开源端到端完整的Agent产品（产品）</td>
-<td>否</td>
-</tr>
-</tbody>
-</table>
 
-## 框架效果先进性
+### 仍然继承的原版核心
 
-### Test集效果 65.12%
-<img width="3524" height="1022" alt="test" src="https://github.com/user-attachments/assets/06c85286-e61f-4b5e-8335-413cd22ecbf4" />
+- ReAct 与 Plan & Executor 智能体模式
+- 多智能体任务分解、上下文管理与 DAG 执行思想
+- Deep Search、报告生成、代码解释器、文件处理和数据分析工具
+- HTML、Markdown、图表等交付物生成能力
+- Java 后端、Python 工具服务、MCP Client 与 React 前端的基本服务划分
+- OpenAI-compatible 模型接入方式和全链路流式输出
 
-### Validation集效果 75.15%
+## 案例展示视频
 
-| Agent                     | Score      | Score_level1 | Score_level2 | Score_level3 | 机构         |
-|---------------------------|------------|--------------|--------------|--------------|------------|
-| Alita v2.1                | 0.8727     | 0.8868       | 0.8953       | 0.7692       | Princeton  |
-| Skywork                   | 0.8242     | 0.9245       | 0.8372       | 0.5769       | 天工         |
-| AWorld                    | 0.7758     | 0.8868       | 0.7791       | 0.5385       | Ant Group  |
-| Langfun                   | 0.7697     | 0.8679       | 0.7674       | 0.5769       | DeepMind   |
-| **JoyAgent-JDGenie** | **0.7515** | **0.8679**   | **0.7791**   | **0.4230**   | **JD**    |
-| OWL                       | 0.6909     | 0.8491       | 0.6744       | 0.4231       | CAMEL      |
-| Smolagent                 | 0.5515     | 0.6792       | 0.5349       | 0.3462       | Huggingface |
-| AutoAgent                 | 0.5515     | 0.7170       | 0.5349       | 0.2692       | HKU        |
-| Magentic                  | 0.4606     | 0.5660       | 0.4651       | 0.2308       | MSR AI Frontiers |
-| LRC-Huawei                | 0.406      | 0.5283       | 0.4302       | 0.0769       | Huawei     |
-| xManus                    | 0.4061     | 0.8113       | 0.2791       | 0.0000       | OpenManus  |
+> 此处预留给项目维护者补充实际案例视频。建议将视频上传到 GitHub 的 Release、Issue 或用户附件，再把永久链接填入下表，避免使用带时效签名的临时 URL。
 
-<img width="1073" height="411" alt="score" src="https://github.com/user-attachments/assets/9d997b68-565e-4228-8f5b-229158f33617" />
+| 案例 | 说明 | 视频 |
+| --- | --- | --- |
+| Auto 智能调度 | 系统根据问题自动选择一个专家或专家团队 | 待补充 |
+| Ensemble 多专家协作 | 多个专家并行分析、重试并汇总最终答案 | 待补充 |
+| 资源广场 | 专家团队、Skill 或 MCP，并在对话中真实调用 | 待补充 |
+| 浏览器工作区 | 上传数据、调用 Python 分析并保存生成文件 | 待补充 |
+| 自然语言创建资源 | 通过系统资源构建器创建 Agent 或 Team | 待补充 |
 
 ## 系统架构
 
-![archi](./docs/img/archi.png)
+```mermaid
+flowchart TB
+    User[用户浏览器]
 
-本开源项目基于JoyAgent-JDGenie产品开源了整体的产品界面、智能体的多种核心模式（react模式、plan and executor模式等）、多个子智能体（report agent、search agent等）以及多整体间交互协议。
+    subgraph Browser[React 19 / Vite 6 前端]
+        UI[会话、设置、资源广场、管理后台]
+        Timeline[编排时间线与 SSE 状态]
+        Workspace["浏览器工作区<br/>IndexedDB / localStorage"]
+        Pyodide["Pyodide Web Worker<br/>浏览器 Python Skill"]
+    end
 
-### 主要特点和优势
+    subgraph Backend[Spring Boot 3.2.2 / Java 17]
+        Security[登录、Session、CSRF、用户隔离]
+        Conversation[会话、附件、快照、历史]
+        Config[Model / Agent / Team / Skill / MCP]
+        Runtime["Auto / Solo / Ensemble<br/>路由、规划、并行、重试、汇总"]
+        Marketplace[资源广场与资源安装]
+        Usage[用量计量与管理员 API]
+    end
 
-- **端到端完整的多智能体产品，开箱即用，支持二次开发**
-- **智能体框架协议**
-  - 支持多种智能体设计模式
-  - 多智能体上下文管理
-  - 高并发DAG执行引擎，极致的执行效率
-- **子智能体和工具**
-  - 子Agent和工具可插拔：预置多种子智能体和工具
-  - 多种文件交付样式：html、ppt、markdown
-  - plan和工具调用 RL优化迭代
-  - 全链路流式输出
+    subgraph Services[Python 服务]
+        Tool["genie-tool :1601<br/>搜索、报告、代码、文件、数据分析"]
+        McpClient["genie-client :8188<br/>MCP 发现与调用"]
+    end
 
-### 主要创新点
+    DB[("MySQL 8.0<br/>用户、会话、配置、用量")]
+    Memory[("用户记忆目录<br/>Markdown / Summary")]
+    LLM[OpenAI-compatible LLM]
+    RemoteMCP[远程 MCP Servers]
 
-![invo](./docs/img/invo.png)
+    User --> UI
+    UI --> Security
+    UI <--> Timeline
+    UI <--> Workspace
+    Workspace <--> Pyodide
+    Security --> Conversation
+    Conversation --> Runtime
+    Config --> Runtime
+    Marketplace --> Config
+    Runtime <--> LLM
+    Runtime <--> Tool
+    Runtime <--> McpClient
+    McpClient <--> RemoteMCP
+    Security <--> DB
+    Conversation <--> DB
+    Config <--> DB
+    Usage <--> DB
+    Runtime <--> Memory
+    Tool -.生成文件.-> Workspace
+    Pyodide -.执行结果.-> Runtime
+```
 
-#### multi-level and multi-pattern thinking:结合多种智能体设计模式支持多层级的规划和思考
-- **multi-level**：work level 和 task level
-- **multi-pattern**：plan and executor模式和react模式
+### 服务边界
 
-#### cross task workflow memory:跨任务级别的相似任务memory
+| 服务 | 技术栈 | 默认端口 | 职责 |
+| --- | --- | --- | --- |
+| `ui` | React 19、TypeScript、Vite 6、Ant Design、Tailwind CSS | `3000` | 产品界面、SSE 消费、工作区、编排可视化、Pyodide Skill 执行 |
+| `genie-backend` | Java 17、Spring Boot 3.2.2、MyBatis Plus、Flyway | `8080`（Compose 内部） | 身份、会话、配置、编排、资源安装、记忆、用量和统一 API |
+| `genie-tool` | Python 3.11、FastAPI、LiteLLM、Pandas、SciPy | `1601` | 搜索、报告、代码、文件、数据分析和表格相关工具 |
+| `genie-client` | Python 3.10+、FastAPI、MCP SDK | `8188`（Compose 内部） | MCP Server 连通性、工具发现和调用 |
+| `mysql` | MySQL 8.0 | `3306`（Compose 内部） | 用户、Session、会话、Agent、Team、Skill、MCP 和用量数据 |
 
-#### tool evolution via auto-disassembly-and-reassembly of atom-tools
-- 基于已有工具迭代产生新工具，而不是从0-1直接生成新工具（减少错误工具的生成） 
-- 基于已有工具隐性拆解为原子工具，并基于原子工具结合大模型自动组合成新工具（不需要花费人力预先定义和拆解原子工具）
+正式 Compose 默认只向宿主机暴露 UI 的 `3000` 端口；本地开发覆盖文件会额外暴露 `genie-tool:1601`，便于调试文件和工具接口。
 
+### 三种执行模式
 
+- **Auto**：系统主控根据问题、历史和在线资源，选择一个最合适的 Agent 或一个 Team；选定后由目标资源接管执行。
+- **Solo**：用户明确指定一个在线 Agent，适合边界清晰、强调稳定人设或固定工具集的任务。
+- **Ensemble**：用户指定 Team 或一组 Agent，由编排器生成计划；无依赖的子任务可并行，有依赖的步骤按顺序执行，最后统一汇总。
+
+### 文件与工作区边界
+
+聊天附件与浏览器工作区是两条独立的数据链路：
+
+- 聊天附件由服务端保存，并绑定到当前用户和会话。
+- 浏览器工作区文件主要保存在当前浏览器的 IndexedDB 中；工作区目录保存在 localStorage 中。
+- 工作区内容按用户、工作区和会话作用域隔离，不会自动跨浏览器或跨设备同步。
+- `genie-tool` 或 Agent 生成的远端文件会先作为可导入文件显示，用户导入后才进入本地工作区。
+- 浏览器 Python 只能接触明确放入执行上下文的文件索引和内容，不能任意读取其他工作区或浏览器凭据。
+
+### 浏览器执行沙箱
+
+浏览器 Skill 会先校验 ZIP、Manifest、入口文件、相对路径和文件大小，再加载到独立的 Pyodide Web Worker 中执行。沙箱只挂载当前工作区明确授权的文件，单次最多加载 32 个、总计 50 MiB；输出文件同样经过名称、路径、数量和大小校验后才会写回工作区。执行超时、用户取消或 Worker 崩溃时，运行实例会被终止，并在下一次任务中重新创建。
+
+该机制提供的是浏览器进程内的代码与工作区作用域隔离，不等同于虚拟机或容器级安全边界；网络能力仍受浏览器和 CORS 策略约束，因此只应安装和运行可信 Skill。
+
+## 项目结构
+
+```text
+.
+├── ui/                       # React 前端、工作区、资源广场、编排时间线
+├── genie-backend/            # Spring Boot 平台后端与原 JoyAgent 智能体内核
+├── genie-tool/               # FastAPI 工具服务：搜索、报告、代码、数据分析
+├── genie-client/             # FastAPI MCP 客户端服务
+├── skills/                   # 运行时 Skill Package 根目录
+├── deploy/                   # Docker Compose 与本地热更新配置
+├── scripts/acceptance/       # MVP / Phase2 分层验收脚本
+├── docs/mvp-contract/        # REST、SSE、Snapshot 与编排契约
+├── data/memory/              # Docker 本地用户记忆挂载目录
+├── .env.example              # 无密钥的环境变量模板
+├── Makefile                  # 单元、集成、UI、E2E 与契约验收入口
+└── Dockerfile                # 原一体化镜像构建方式
+```
+
+## 使用环境
+
+### 推荐方式：Docker Compose
+
+宿主机只需要：
+
+- Git，并已获得本私有仓库的访问权限
+- Docker Desktop 或 Docker Engine
+- Docker Compose v2（使用 `docker compose` 命令）
+- 可访问所选模型 API；使用 Deep Search 时还需可访问配置的搜索服务
+
+Compose 会在容器内使用以下运行时：
+
+| 组件 | 版本/要求 |
+| --- | --- |
+| Java | 17 |
+| Maven | 3.9.9（Compose 开发栈） |
+| Node.js | 20 |
+| pnpm | 9.15.0 |
+| Python | 3.11（`genie-client` 代码兼容 3.10–3.13） |
+| uv | 0.6.14（Compose 开发栈） |
+| MySQL | 8.0 |
+
+### 手动开发环境
+
+如果不使用 Docker，需要自行准备 JDK 17、Maven、Node.js 20、pnpm 9.15、Python 3.11、uv、MySQL 8.0，以及 Bash 环境。Windows 建议使用 Git Bash 或 WSL 执行 Makefile 和验收脚本。
 
 ## 快速开始
 
-### 方式1: docker 一键启动服务
+### 1. 克隆私有仓库
 
-```
-1. git clone https://github.com/jd-opensource/joyagent-jdgenie.git
-
-2. 手动更新 genie-backend/src/main/resources/application.yml中 base_url、apikey、model、max_tokens、model_name等配置
-使用DeepSeek时: 注意deepseek-chat 为max_tokens: 8192
-
-手动更新 genie-tool/.env_template 中的 OPENAI_API_KEY、OPENAI_BASE_URL、DEFAULT_MODEL、SERPER_SEARCH_API_KEY
-使用DeepSeek时: 设置DEEPSEEK_API_KEY、DEEPSEEK_API_BASE，DEFAULT_MODEL 设置为 deepseek/deepseek-chat，所有 ${DEFAULT_MODEL} 也都改成deepseek/deepseek-chat
-
-3. 编译dockerfile
-docker build -t genie:latest .
-
-4. 启动dockerfile
-docker run -d -p 3000:3000 -p 8080:8080 -p 1601:1601 --name genie-app genie:latest
-
-5. 浏览器输入 localhost:3000 访问genie
-```
-如果部署遇到问题，可以参考视频:【5分钟使用deepseek启动开源智能体应用joyagent-genie-哔哩哔哩】 https://b23.tv/8VQDBOK
-
-### 方式2: 手动初始化环境，启动服务
-
-#### 环境准备
-- jdk17
-- python3.11
-- python环境准备
-  - pip install uv
-  - cd genie-tool
-  - uv sync
-  - source .venv/bin/activate
-
-#### 方案1：手动step by step部署手册
-手动超详细攻略参考 [Step by Step](./Deploy.md)
-
-#### 方案2：手动一键启动部署（推荐）
-
-直接通过shell启动所有服务
-```
-sh check_dep_port.sh # 检查所有依赖和端口占用情况
-sh Genie_start.sh  # 直接启动，以后改动配置直接重启动脚本即可，control+c 一键kill所有服务
-```
-部署时可以参考视频:【joyagent-jdgenie部署演示】 https://www.bilibili.com/video/BV1Py8Yz4ELK/?vd_source=a5601a346d433a490c55293e76180c9d
-
-## 二次开发
-
-### 如何添加自己的MCP工具到JoyAgent-JDGenie中
-
-#### 配置文件
-
-在 `genie-backend/src/main/resources/application.yml` 添加mcp_server服务，多个server逗号分隔
-在 `ui/.env` 中可以修改前端请求后端的路径
-
-```yaml
-mcp_server_url: "http://ip1:port1/sse,http://ip2:port2/sse"
-```
-
-#### 启动服务
+先在 GitHub 配置有权限的 SSH Key、PAT 或 Git Credential Manager，然后执行：
 
 ```bash
-sh start_genie.sh
+git clone https://github.com/dddd-cloud/genie-Multiagent-platform.git
+cd genie-Multiagent-platform
 ```
 
-#### 开始对话
+### 2. 创建本地配置
 
-比如添加12306工具后，规划7月7天2人从北京出发去新疆旅行计划，并查询相关火车票信息，
-genie会进行旅行计划设计，然后调用mcp工具查询车票信息，最终输出报告。
-![img.png](./docs/img/mcp_example.png)
+PowerShell：
 
-
-### 新增自定义子Agent到JoyAgent-JDGenie中
-
-实现BaseTool接口，声明工具的名称、描述、参数、调用方法。
-
-```java
-/**
- * 工具基接口
- */
-public interface BaseTool {
-    String getName(); // 工具名称
-    String getDescription(); // 工具描述
-    Map<String, Object> toParams(); // 工具参数
-    Object execute(Object input); // 调用工具
-}
-
-// 天气智能体示例
-public class WeatherTool implements BaseTool {
-    @Override
-    public String getName() {
-        return "agent_weather";
-    }
-
-    @Override
-    public String getDescription() {
-        return "这是一个可以查询天气的智能体";
-    }
-
-    @Override
-    public Map<String, Object> toParams() {
-        return "{\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"地点\",\"type\":\"string\"}},\"required\":[\"location\"]}";
-    }
-
-    @Override
-    public Object execute(Object input) {
-        return "今日天气晴朗";
-    }
-}
+```powershell
+Copy-Item .env.example .env
 ```
 
-在`com.jd.genie.controller.GenieController#buildToolCollection`中添加如下代码，引入自定义Agent
-
-```java
-WeatherTool weatherTool = new WeatherTool();
-toolCollection.addTool(weatherTool);
-```
-
-#### 启动服务
+Bash：
 
 ```bash
-sh start_genie.sh
+cp .env.example .env
 ```
 
+至少替换 `.env` 中的以下值，禁止把真实密钥提交到 Git：
 
-## 项目共建者
-贡献者：Liu Shangkun,Li Xiang,[Li Yang](https://scholar.google.com.hk/citations?hl=zh-CN&user=AeCTbv8AAAAJ&view_op=list_works&gmla=AH8HC4zYqeayQxrQFmScZ7XYxLah1enc8ynhQYMtBdPmjwfpMBvsTj_OoBkFTPCw1Xi2xk7gbTzHPH-QpJSw_sGkCKdYDVXSu8Ty2tNJMhs),Jia Shilin,Tian Shaohua,Wang Zhen,Yao Ting,Wang Hongtao,Zhou Xiaoqing,Liu min,Zhang Shuang,Liuwen,Yangdong,Xu Jialei,Zhou Meilei,Zhao Tingchong,Wu jiaxing, Wang Hanmin, Zhou Zhiyuan, Xu Shiyue,Liu Jiarun, Hou Kang, Jing Lingtuan, Guo Hongliang, Wang Zhijiang, Liu Yanchen, Chen Kun, Ke Huilin, Pan Zheyi, Duan Zhewen, Tu Shengkun, Zhang Haidong, Wang Heng,Li Bo,Zhang Konghongbo,Guo fenghua, [Wang Haofen](https://tjdi.tongji.edu.cn/TeacherDetail.do?id=4991&lang=), Zhang Junbo, Liu Haibo, Yang Haoran, Qiao Jiayang
-
-所属机构:京东CHO企业信息化团队（EI）、京东科技协同办公团队、京东物流数据资产团队
-
-## 贡献和合作
-
-我们欢迎所有好想法和建议，如果您想成为项目的共建者，可随时向我们提Pull Request。无论是完善产品和框架、修复bug还是添加新特性，您的贡献都非常宝贵。
-在此之前需要您阅读并签署贡献者协议并发送到邮箱org.developer3@jd.com，请阅读 [贡献指南中文版](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_ZH.pdf)，[贡献指南英文版](https://github.com/jd-opensource/joyagent-jdgenie/blob/main/contributor_EN.pdf)
-
-
-## 引用
-
-如需学术引用，请使用以下 BibTeX：
-```bibtex
-@software{JoyAgent-JDGenie,
-  author = {Agent Team at JDCHO},
-  title = {JoyAgent-JDGenie},
-  year = {2025},
-  url = {https://github.com/jd-opensource/joyagent-jdgenie},
-  version = {0.1.0},
-  publisher = {GitHub},
-  email = {jiashilin1@jd.com;liyang.1236@jd.com;liushangkun@jd.com;tianshaohua.1@jd.com;wangzhen449@jd.com;yaoting.2@jd.com;houkang6@jd.com;jinglingtuan@jd.com;guohongliang@jd.com}
-}
+```dotenv
+GENIE_DB_USERNAME=genie
+GENIE_DB_PASSWORD=<your-mysql-password>
+GENIE_BOOTSTRAP_ADMIN_USERNAME=admin
+GENIE_BOOTSTRAP_ADMIN_PASSWORD=<your-admin-password>
+GENIE_INTERNAL_AGENT_TOKEN=<your-internal-agent-token>
+MVP_ACCEPTANCE_USER_PASSWORD=<your-local-acceptance-user-password>
+MVP_ACCEPTANCE_ADMIN_PASSWORD=<your-local-acceptance-admin-password>
 ```
 
-## Contributors
+要启用完整的模型、Agent、Team、Skill 与 MCP 能力，还需要：
 
-<a href="https://github.com/jd-opensource/joyagent-jdgenie/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=jd-opensource/joyagent-jdgenie" />
-</a>
+```dotenv
+SPRING_PROFILES_ACTIVE=local
+VITE_PHASE2_ENABLED=true
+GENIE_MCP_CREDENTIAL_KEY=<base64-encoded-32-byte-key>
+GENIE_INTERNAL_MCP_TOKEN=<your-internal-mcp-token>
 
-# Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=jd-opensource/joyagent-jdgenie&type=Date&cache=false)](https://star-history.com/#jd-opensource/joyagent-jdgenie&Date)
+DEFAULT_MODEL=<your-model-name>
+OPENAI_BASE_URL=<openai-compatible-base-url>
+OPENAI_API_KEY=<your-api-key>
+```
 
-欢迎沟通和联系我们  
-<img width="396" height="396" alt="ME1758722833951" src="https://github.com/user-attachments/assets/0c47720f-78a4-4a98-b634-a8274072d36c" />
+可使用下面的 PowerShell 生成 32 字节随机 MCP 加密密钥：
 
+```powershell
+$key = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($key)
+[Convert]::ToBase64String($key)
+```
 
-[//]: # (![contact]&#40;./docs/img/contact.jpg&#41;)
+Deep Search 为可选能力，可按需设置：
+
+```dotenv
+USE_SEARCH_ENGINE=serp
+SERPER_SEARCH_URL=https://google.serper.dev/search
+SERPER_SEARCH_API_KEY=<your-serper-api-key>
+```
+
+### 3. 启动真实模型开发栈
+
+PowerShell：
+
+```powershell
+docker compose --env-file .env `
+  -f deploy/docker-compose.mvp.yml `
+  -f deploy/docker-compose.local.override.yml `
+  -f deploy/docker-compose.real-model.override.yml config --quiet
+
+docker compose --env-file .env `
+  -f deploy/docker-compose.mvp.yml `
+  -f deploy/docker-compose.local.override.yml `
+  -f deploy/docker-compose.real-model.override.yml up -d
+```
+
+Bash：
+
+```bash
+docker compose --env-file .env \
+  -f deploy/docker-compose.mvp.yml \
+  -f deploy/docker-compose.local.override.yml \
+  -f deploy/docker-compose.real-model.override.yml config --quiet
+
+docker compose --env-file .env \
+  -f deploy/docker-compose.mvp.yml \
+  -f deploy/docker-compose.local.override.yml \
+  -f deploy/docker-compose.real-model.override.yml up -d
+```
+
+首次启动会安装依赖并构建前后端，耗时取决于网络和本地缓存。服务就绪后访问：
+
+- 产品入口：<http://localhost:3000/app>
+- 根地址：<http://localhost:3000>（自动跳转）
+- 本地工具 OpenAPI：<http://localhost:1601/docs>
+
+使用 `.env` 中的 `GENIE_BOOTSTRAP_ADMIN_USERNAME` 和 `GENIE_BOOTSTRAP_ADMIN_PASSWORD` 登录。管理员账号只在数据库首次初始化时引导创建；数据库已有数据后，修改 `.env` 不会自动修改该账号密码。
+
+### 4. 无真实模型的 Fake Agent 验收
+
+如只验证登录、会话、SSE、持久化和基础页面，可将：
+
+```dotenv
+SPRING_PROFILES_ACTIVE=mvp-acceptance
+```
+
+然后不叠加 real-model override：
+
+```powershell
+docker compose --env-file .env `
+  -f deploy/docker-compose.mvp.yml `
+  -f deploy/docker-compose.local.override.yml up -d
+```
+
+Fake Agent 不能代表真实模型、MCP、Skill 和多专家编排已经可用，只适合基础链路验收。
+
+### 5. 查看状态与停止
+
+```powershell
+docker compose --env-file .env `
+  -f deploy/docker-compose.mvp.yml `
+  -f deploy/docker-compose.local.override.yml ps
+
+docker compose --env-file .env `
+  -f deploy/docker-compose.mvp.yml `
+  -f deploy/docker-compose.local.override.yml logs -f
+
+docker compose --env-file .env `
+  -f deploy/docker-compose.mvp.yml `
+  -f deploy/docker-compose.local.override.yml stop
+```
+
+`stop` 会保留 MySQL、Maven、pnpm、uv 和 Python 虚拟环境卷，方便下次快速启动。
+
+## 基本使用
+
+1. 使用管理员账号登录，并在“用户管理”中创建其他用户。
+2. 在设置中添加或确认一个可用的 OpenAI-compatible 模型。
+3. 从“资源广场”安装专家、专家团队、Skill 或 MCP，或在设置中自行创建。
+4. 回到新会话，在输入框下方选择 `Auto`、`Solo` 或 `Ensemble`。
+5. 如需处理本地数据，进入“工作区”，创建工作区并上传文件，再在该工作区内发起会话。
+6. 观察实时编排时间线；任务结束后检查最终回答、专家步骤、工具状态和生成文件。
+7. 管理员可以在“用量”页面查看模型调用汇总和用户用量。
+
+## 配置说明
+
+完整模板见 [.env.example](./.env.example)，本地部署说明见 [deploy/README.local.md](./deploy/README.local.md)。常用配置分为：
+
+| 类别 | 变量 |
+| --- | --- |
+| 数据库与登录 | `GENIE_DB_*`、`GENIE_BOOTSTRAP_ADMIN_*`、`GENIE_SESSION_TIMEOUT` |
+| 内部服务安全 | `GENIE_INTERNAL_AGENT_TOKEN`、`GENIE_INTERNAL_MCP_TOKEN` |
+| MCP 凭据 | `GENIE_MCP_CREDENTIAL_KEY` |
+| 模型 | `DEFAULT_MODEL`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`、`GENIE_TITLE_MODEL` |
+| 搜索 | `USE_SEARCH_ENGINE`、`SERPER_SEARCH_URL`、`SERPER_SEARCH_API_KEY` |
+| 记忆与上下文 | `GENIE_MEMORY_DIR`、`GENIE_HISTORY_MAX_TURNS`、`GENIE_HISTORY_MAX_CHARACTERS` |
+| SSE 与快照 | `GENIE_SSE_TIMEOUT_MILLIS`、`GENIE_STREAM_SNAPSHOT_MAX_BYTES` |
+| 前端功能 | `VITE_PHASE2_ENABLED`、`VITE_PYODIDE_INDEX_URL`、`FILE_SERVER_URL` |
+
+`VITE_*` 变量会在前端构建时写入产物。修改后需要重新执行前端构建，而不是只重启浏览器。
+
+## 开发与测试
+
+### 常用命令
+
+后端：
+
+```bash
+cd genie-backend
+mvn test
+```
+
+前端：
+
+```bash
+cd ui
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Python 服务：
+
+```bash
+cd genie-tool
+uv sync --frozen
+uv run python server.py
+```
+
+### 统一验收入口
+
+```bash
+make mvp-unit
+make mvp-ui
+make mvp-acceptance
+make phase2-005-acceptance
+```
+
+验收体系包括 Java 单元/集成测试、Testcontainers MySQL、前端 Vitest、Playwright E2E、JSON Schema 契约校验和真实服务脚本。详细契约见 [docs/mvp-contract](./docs/mvp-contract/)。
+
+### 本地快速更新
+
+Docker 本地栈启动后，普通 Java 修改可执行：
+
+```powershell
+.\deploy\reload-backend.ps1
+```
+
+前端修改可在 UI 容器中重新构建：
+
+```powershell
+docker exec joyagent-mvp-ui-1 bash -lc "cd /workspace/ui && pnpm build"
+```
+
+修改 `pom.xml` 或新增 Maven 依赖时，需要设置 `GENIE_BACKEND_REPACKAGE=1` 后重新创建后端容器。更多说明见 [deploy/README.local.md](./deploy/README.local.md)。
+
+## 安全与数据说明
+
+- 不要提交 `.env`、模型 API Key、MCP Token、数据库密码或本地运行数据。
+- MCP 凭据使用 32 字节密钥加密保存；生产环境必须使用稳定、安全备份且不入库的密钥。
+- Agent、Team、Skill、MCP、会话、附件、记忆和模型配置均应通过当前用户作用域访问。
+- 安装外部 Skill 或连接 MCP 前，应核对来源、权限、网络访问范围和数据处理方式。
+- 浏览器 Pyodide Skill 运行在前端 Worker 中，但仍应只安装可信 Skill，并限制输入文件和输出大小。
+- 浏览器工作区默认不跨设备同步；清理浏览器站点数据前请先导出重要文件。
+- 正式环境建议由反向代理统一提供 HTTPS，不要直接暴露 MySQL、后端或内部 MCP Client 端口。
+
+## 已知边界与建议路线
+
+- [ ] 补充真实案例视频、截图和可公开演示数据。
+- [ ] 为浏览器工作区增加可选的服务端同步、备份和跨设备恢复。
+- [ ] 完善更多 MCP Transport 和 OAuth/凭据生命周期管理。
+- [ ] 增加生产镜像、反向代理、监控、告警、限流和备份恢复手册。
+- [ ] 建立上游 JoyAgent 定期同步与冲突审计流程。
+- [ ] 重写与当前版本一致的英文 README 和面向使用者的操作手册。
+
+## 文档索引
+
+- [本地 Docker 部署](./deploy/README.local.md)
+- [传统手动部署说明](./Deploy.md)
+- [MVP REST API 契约](./docs/mvp-contract/rest-api-v1.md)
+- [流式快照协议](./docs/mvp-contract/snapshot-v1.md)
+- [配置契约](./docs/mvp-contract/configuration.md)
+- [错误码](./docs/mvp-contract/error-codes.md)
+- [Phase2 契约说明](./docs/mvp-contract/phase2/README.md)
+
+## 贡献
+
+本仓库为私有项目。提交改动前建议：
+
+1. 从当前主线创建功能分支。
+2. 不提交密钥、本地卷、构建产物和测试证据中的敏感数据。
+3. 完成与改动范围匹配的单元测试、类型检查和验收脚本。
+4. 在 Pull Request 中说明用户影响、技术实现、配置变化、数据库迁移和回滚方式。
+5. 涉及上游代码时保留原版权、许可证和第三方 Notice。
+
+## 上游致谢与许可
+
+本项目基于京东开源的 [JoyAgent-JDGenie](https://github.com/jd-opensource/joyagent-jdgenie) 进行二次开发。感谢原项目团队提供多智能体框架、工具服务、前端产品和相关开源成果。
+
+项目沿用 Apache License 2.0。使用、分发或二次开发时，请同时遵守 [LICENSE](./LICENSE) 与 [NOTICE-Third Party](./NOTICE-Third%20Party) 中的条款和第三方许可要求。
