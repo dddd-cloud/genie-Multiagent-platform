@@ -65,7 +65,7 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 If the user asks for one Agent/智能体/助手 and does not ask for a Team/团队/multiple members, output team:false with exactly one agent. Never silently create a Team to support a single Agent request.
                 For a Team create 2..20 distinct, domain-specific agents; the first is the Team master. Agent name is a human professional role title, not a task, workflow, function, deliverable, or capability. For Chinese names, end with a role word such as 负责人、总监、科学家、研究员、专家、工程师、分析师、架构师、顾问 or 审校; examples: 频谱地图补全算法专家, 无线信道研究员. Do not use generic names such as 协作专员, and do not use names such as 谱图补全算法设计 or 数据治理.
                 Every systemPrompt must state the role's concrete method, deliverables, evidence/risk rules, and that it may only use bound capabilities.
-                capabilityHints are concise keywords used to select the least-privilege subset of the listed capabilities.
+                capabilityHints must contain the exact enabled Skill names and MCP runtime names copied from the provided catalog that this role needs, separated by commas. Select the least-privilege subset and never invent a name.
                 Reuse an existing agent only when its name/description/prompt materially matches the planned role; otherwise design a new one.
                 Do not invent tools or capabilities outside the provided catalog. No markdown or commentary.
                 """;
@@ -496,13 +496,13 @@ public class OpenAiOrchestrationModelPort implements OrchestrationModelPort {
                 - inputRefs may only uniquely reference earlier top-level stepIds
                 - When candidates holds exactly one agent, emit exactly one SINGLE_AGENT step assigned to it
                 - SINGLE_AGENT requires a candidate agentId and subTasks []
-                - PARALLEL_AGENTS requires agentId null and 2..4 subTasks
+                - PARALLEL_AGENTS requires agentId null and 2..4 subTasks assigned to 2..4 different candidates; never assign the same agentId twice within one parallel step
                 - Every subTask must contain exactly subTaskId, agentId, objective; subTaskId values are unique across the plan
                 - Every agentId must be from candidates
                 - The reserved candidate id __system_resource_builder__ is a hidden platform Agent. Only use it for a request that creates an Agent or Team; when used it must be the first SINGLE_AGENT step, never a PARALLEL subTask. Its step creates resources only. Any later work must remain assigned to the user's existing visible candidates; never assume the newly created Team has replaced the current conversation Team.
                 - Treat a requested deliverable such as "给我一个游戏测试 Agent" / "I need a game testing agent" as resource creation even if the user did not write 创建/create. Use the hidden system resource builder for it. Do not assign a normal visible Agent to create platform resources.
                 - For a resource creation request, the system resource builder objective must state whether the user asks for one Agent or a Team. Never expand a single-Agent request into a Team. For a Team, state the requested member count and domain-specific roles; for one Agent, state its exact role, responsibilities, prompt requirements and least-privilege capability needs.
-                - A candidate may appear in multiple distinct parallel subTasks
+                - A candidate may execute multiple top-level steps over time, but may appear at most once within a PARALLEL_AGENTS step
                 - When the user asks multiple agents to each do something (各/分别/每个), use one PARALLEL_AGENTS step with independent subTasks when suitable
                 - Do not add a final summary / 汇总成稿 / 回答用户全部问题 step; the system synthesizes the user-facing answer after specialists finish
                 - Every objective must stay on the user's original query; never substitute a generic industry, region, or role-default topic

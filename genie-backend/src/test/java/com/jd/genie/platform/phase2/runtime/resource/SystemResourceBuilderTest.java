@@ -1,5 +1,6 @@
 package com.jd.genie.platform.phase2.runtime.resource;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.platform.contract.CurrentUser;
 import com.jd.genie.platform.contract.PageResponse;
 import com.jd.genie.platform.contract.UserRole;
@@ -15,6 +16,8 @@ import com.jd.genie.platform.phase2.configuration.team.dto.TeamResponse;
 import com.jd.genie.platform.phase2.configuration.team.service.AgentTeamService;
 import com.jd.genie.platform.phase2.tooling.McpServerService;
 import com.jd.genie.platform.phase2.tooling.McpToolResponse;
+import com.jd.genie.platform.phase2.runtime.orchestration.OrchestrationModelPort;
+import com.jd.genie.platform.phase2contract.capability.CapabilityKeys;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -100,10 +103,57 @@ class SystemResourceBuilderTest {
         assertTrue(created.stream().noneMatch(request ->
                 request.name().contains("·") || request.description().contains("系统资源构建器")));
         assertTrue(created.get(1).systemPrompt().contains("数据分析师"));
+        assertTrue(created.stream().allMatch(request ->
+                request.capabilityKeys().contains(CapabilityKeys.BUILTIN_DATA_ANALYSIS)));
         ArgumentCaptor<TeamCreateRequest> teamCreate = ArgumentCaptor.forClass(TeamCreateRequest.class);
         verify(teams).createTeam(eq(USER), teamCreate.capture());
         assertEquals("数据分析团队", teamCreate.getValue().name());
         assertFalse(teamCreate.getValue().description().contains("系统资源构建器"));
+    }
+
+    @Test
+    void bindsExactBuiltInAndMcpCapabilitiesFromTheGeneratedBlueprint() {
+        SkillDefinitionService skills = mock(SkillDefinitionService.class);
+        McpServerService mcps = mock(McpServerService.class);
+        AgentDefinitionService agents = mock(AgentDefinitionService.class);
+        AgentTeamService teams = mock(AgentTeamService.class);
+        OrchestrationModelPort model = mock(OrchestrationModelPort.class);
+        when(skills.listSkills(USER, 1, 100)).thenReturn(new PageResponse<>(List.of(), 1, 100, false));
+        when(mcps.capabilities(USER)).thenReturn(List.of(
+                new McpToolResponse("maps-geo", "maps_geo", "mcp_maps_geo", "地理编码和经纬度查询", null, true, true, 0L),
+                new McpToolResponse("maps-route", "maps_direction_driving", "mcp_maps_direction_driving", "驾车路径规划和距离", null, true, true, 0L)
+        ));
+        when(model.designResourceTeam(any(), any())).thenReturn("""
+                {"team":true,"teamName":"旅行服务团队","teamDescription":"提供网页检索和地图出行服务","agents":[
+                  {"name":"网页搜索专家","description":"检索旅行信息","systemPrompt":"你是网页搜索专家，只使用绑定能力，返回来源、风险和可复核结果。","capabilityHints":"builtin:deep_search"},
+                  {"name":"地图服务专家","description":"查询位置和驾车路线","systemPrompt":"你是地图服务专家，只使用绑定能力，返回路线依据、风险和可复核结果。","capabilityHints":"mcp_maps_geo,mcp_maps_direction_driving"}
+                ]}
+                """);
+        when(agents.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        when(teams.nextAvailableName(eq(USER), any())).thenAnswer(call -> call.getArgument(1));
+        AtomicInteger sequence = new AtomicInteger();
+        when(agents.createAgent(eq(USER), any(AgentCreateRequest.class))).thenAnswer(call -> {
+            AgentCreateRequest request = call.getArgument(1);
+            return new AgentResponse("agent-" + sequence.incrementAndGet(), request.name(), request.description(),
+                    "RAW", null, request.systemPrompt(), "system-default", "DRAFT", 0L,
+                    List.of(), request.capabilityKeys(), Instant.now(), Instant.now());
+        });
+        when(agents.onlineAgent(eq(USER), any(), any())).thenAnswer(call -> {
+            String id = call.getArgument(1);
+            return new AgentResponse(id, id, "", "RAW", null, "", "system-default", "ONLINE", 1L,
+                    List.of(), List.of(), Instant.now(), Instant.now());
+        });
+        when(teams.createTeam(eq(USER), any(TeamCreateRequest.class))).thenReturn(new TeamResponse(
+                "team-travel", "旅行服务团队", "", "agent-1", "", List.of("agent-2"), 0L, Instant.now(), Instant.now()));
+
+        new SystemResourceBuilder(
+                skills, mcps, agents, teams, new AgentPromptCompiler(), new ObjectMapper(), model
+        ).create(USER, "创建一个两人旅行服务团队，一个搜网页，一个使用地图 MCP");
+
+        ArgumentCaptor<AgentCreateRequest> created = ArgumentCaptor.forClass(AgentCreateRequest.class);
+        verify(agents, times(2)).createAgent(eq(USER), created.capture());
+        assertEquals(List.of(CapabilityKeys.BUILTIN_DEEP_SEARCH), created.getAllValues().get(0).capabilityKeys());
+        assertEquals(List.of("mcp:maps-geo", "mcp:maps-route"), created.getAllValues().get(1).capabilityKeys());
     }
 
     @Test

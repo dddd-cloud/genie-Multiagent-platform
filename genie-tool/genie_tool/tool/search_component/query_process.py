@@ -11,7 +11,7 @@ import time
 
 from loguru import logger
 
-from genie_tool.util.llm_util import ask_llm
+from genie_tool.util.llm_util import ask_llm, resolve_llm_model
 from genie_tool.util.prompt_util import get_prompt
 from genie_tool.model.context import RequestIdCtx
 from genie_tool.util.log_util import timer
@@ -20,10 +20,11 @@ from genie_tool.util.log_util import timer
 @timer()
 async def query_decompose(
         query: str,
+        request_model: str | None = None,
         **kwargs
 ):
-    model = os.getenv("QUERY_DECOMPOSE_MODEL", "deepseek-v4-flash")
-    think_model = os.getenv("QUERY_DECOMPOSE_THINK_MODEL", "deepseek-v4-flash")
+    model = resolve_llm_model(request_model, "QUERY_DECOMPOSE_MODEL")
+    think_model = resolve_llm_model(request_model, "QUERY_DECOMPOSE_THINK_MODEL")
     current_date = time.strftime("%Y-%m-%d", time.localtime())
     decompose_prompt = get_prompt("deepsearch")
     # think

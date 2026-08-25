@@ -34,4 +34,6 @@ public class AgentContext {
     Integer agentType;
     List<File> taskProductFiles;
     String templateType;
+    /** Actual provider model selected for this request; safe to pass to internal tools (never credentials). */
+    String runtimeModelName;
 }

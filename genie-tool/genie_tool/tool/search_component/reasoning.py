@@ -10,19 +10,19 @@ import os
 import time
 from json_repair import repair_json
 
-from genie_tool.util.llm_util import ask_llm
+from genie_tool.util.llm_util import ask_llm, resolve_llm_model
 from genie_tool.util.prompt_util import get_prompt
 from genie_tool.util.log_util import timer
 
 
 @timer()
 async def search_reasoning(
-        request_id: str, query: str, content: str, history_query_list: list = [],
+        request_id: str, query: str, content: str, history_query_list: list = [], request_model: str | None = None,
 ):
     if not request_id or not query or not content:
         return {}
 
-    model = os.getenv("SEARCH_REASONING_MODEL", "deepseek-v4-flash")
+    model = resolve_llm_model(request_model, "SEARCH_REASONING_MODEL")
     prompt = get_prompt("deepsearch")["reasoning_prompt"]
     prompt_content = prompt.format(
         query=query,

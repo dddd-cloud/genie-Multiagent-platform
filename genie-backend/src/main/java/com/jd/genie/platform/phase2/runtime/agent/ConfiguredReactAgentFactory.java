@@ -47,7 +47,12 @@ public final class ConfiguredReactAgentFactory {
 
     /** Short nudge only — never re-inject the full system prompt (skills) each step. */
     private static final String NEXT_STEP_NUDGE = """
-            After the latest tool result: finish NOW with ONLY the SUCCESS/FAILURE JSON object. Do not call another tool.
+            After the latest tool result, check whether the current step objective is complete.
+            If it is complete, finish NOW with ONLY the SUCCESS/FAILURE JSON object.
+            If it is still incomplete and the existing result supplies inputs required by a different authorized tool or command,
+            call only that necessary next tool. A workspace task may require read_file followed by run_code or an exact
+            mapped Skill tool, and then a file/chart tool.
+            Never repeat a tool with the same arguments and never make exploratory calls unrelated to the step objective.
             If the tool JSON has token or previewFile, output one short sentence with that token. Never paste html or file content into output.
             Put compact bullets and sources into output (under 20000 characters). Do not paste the full search report.
             Answer from the data the tool already returned; do not repeat the same query for a fuller result.
@@ -87,9 +92,15 @@ public final class ConfiguredReactAgentFactory {
         agent.setSystemPromptSnapshot(prompt);
         agent.setNextStepPrompt(NEXT_STEP_NUDGE);
         agent.setNextStepPromptSnapshot(NEXT_STEP_NUDGE);
-        agent.setLlm(new LLM(profile.resolvedModelName(), ""));
+        LLM llm = new LLM(profile.resolvedModelName(), "");
+        // Tool instances hold this same context, so they observe the actual model resolved for this request.
+        context.setRuntimeModelName(llm.getModel());
+        agent.setLlm(llm);
         agent.setMaxSteps(boundedSteps);
         agent.setMaxObserve(MAX_OBSERVE_CHARS);
+        // Permit a short dependency chain (for example read CSV -> analyze -> chart),
+        // then force a final response so tool loops remain bounded.
+        agent.setMaxToolObservationCount(3);
         agent.setFinishWithoutToolsAfterObservations(true);
         agent.setLlmTimeoutSeconds(600);
         agent.setAvailableTools(context.getToolCollection());

@@ -278,6 +278,7 @@ async def post_deepsearch(
         async for chunk in deepsearch.run(
                 query=body.query,
                 request_id=body.request_id,
+                model=body.model,
                 max_loop=body.max_loop,
                 stream=True,
                 stream_mode=body.stream_mode,

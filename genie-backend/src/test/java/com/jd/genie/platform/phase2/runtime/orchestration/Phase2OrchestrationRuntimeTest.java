@@ -108,6 +108,47 @@ class Phase2OrchestrationRuntimeTest {
     }
 
     @Test
+    void invalidParallelPlanFallsBackToOneCompleteSingleAgentTask() {
+        RecordingCatalogPort catalog = new RecordingCatalogPort();
+        ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
+        AtomicInteger executions = new AtomicInteger();
+        doAnswer(invocation -> {
+            executions.incrementAndGet();
+            return AgentTaskResult.success("travel findings");
+        }).when(executor).execute(any(AgentContext.class), any(AgentRuntimeProfile.class), any(Printer.class), any(Integer.TYPE));
+        Phase2OrchestrationRuntime runtime = new Phase2OrchestrationRuntime(
+                new DuplicateParallelAgentModel(),
+                new OrchestrationPlanValidator(),
+                new SerialOrchestrationService(catalog, new FakeRuntimeToolCollectionPort(), executor, 10),
+                new OrchestrationEventMapper()
+        );
+        FakeConversationExecutionPort port = new FakeConversationExecutionPort();
+        RecordingChannel channel = new RecordingChannel();
+        ConversationStreamObserver observer = new ConversationStreamObserver(
+                new StreamPersistenceObserver(port, USER, "assistant-1"), channel
+        );
+
+        runtime.execute(
+                USER,
+                "request-fallback",
+                "123e4567-e89b-12d3-a456-426614174000",
+                "查大连景点并计算车站到学校的距离",
+                "",
+                CANDIDATES,
+                new RouteDecision(RouteDecision.Route.ORCHESTRATED, "FORCED_BY_REQUEST"),
+                observer
+        );
+
+        assertEquals(1, executions.get());
+        Map<?, ?> planCreated = orchestrationEvent(channel.events, "PLAN_CREATED");
+        OrchestrationPlanStepView fallbackStep = (OrchestrationPlanStepView) ((List<?>) planCreated.get("steps")).get(0);
+        assertEquals(StepMode.SINGLE_AGENT, fallbackStep.mode());
+        assertEquals("agent-a", fallbackStep.agentId());
+        assertEquals("SUCCESS", finalEvent(channel.events).get("completionStatus"));
+        assertTrue(port.getCalls().stream().noneMatch(call -> call.type() == FakeConversationExecutionPort.CallType.FAIL));
+    }
+
+    @Test
     void followUpTurnPassesConversationHistoryToPlannerSpecialistAndSummarizer() {
         RecordingCatalogPort catalog = new RecordingCatalogPort();
         ConfiguredAgentExecutor executor = mock(ConfiguredAgentExecutor.class);
@@ -448,6 +489,39 @@ class Phase2OrchestrationRuntimeTest {
                     List.of(
                             new OrchestrationSubTask("sub-a", "agent-a", "inspect source A"),
                             new OrchestrationSubTask("sub-b", "agent-b", "inspect source B")
+                    )
+            )));
+        }
+
+        @Override
+        public String summarize(String query, Map<String, String> successes, Map<String, String> failures) {
+            return "final answer";
+        }
+    }
+
+    private static final class DuplicateParallelAgentModel implements OrchestrationModelPort {
+        @Override
+        public RouteDecision selectRoute(String query, String conversationSummary, List<AgentCapabilitySummary> candidates) {
+            return new RouteDecision(RouteDecision.Route.ORCHESTRATED, "TEST");
+        }
+
+        @Override
+        public OrchestrationPlan createPlan(
+                String query,
+                List<AgentCapabilitySummary> candidates,
+                int attemptNo,
+                Map<String, String> successfulResultSummaries,
+                Map<String, String> failureMetadata
+        ) {
+            return new OrchestrationPlan(List.of(new OrchestrationStep(
+                    "parallel",
+                    StepMode.PARALLEL_AGENTS,
+                    "查找景点并计算距离",
+                    List.of(),
+                    null,
+                    List.of(
+                            new OrchestrationSubTask("sub-attractions", "agent-a", "查找景点"),
+                            new OrchestrationSubTask("sub-distance", "agent-a", "计算距离")
                     )
             )));
         }

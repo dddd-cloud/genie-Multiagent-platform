@@ -97,6 +97,32 @@ describe('OrchestrationTimeline', () => {
     expect(onToggleMaster).toHaveBeenCalled();
   });
 
+  it('wraps long handoff objectives instead of widening the page', () => {
+    render(
+      <OrchestrationTimeline
+        state={state({
+          masterOpen: true,
+          attempts: {
+            1: {
+              attemptNo: 1,
+              steps: {
+                s1: step({
+                  stepId: 's1',
+                  objective: '搜索大连市热门旅游景点并查询大连北站到大连理工大学的驾车距离和预计时间'.repeat(6),
+                }),
+              },
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('orchestration-timeline')).toHaveClass('overflow-x-hidden');
+    const handoff = screen.getByTestId('orchestration-handoff-assign-s1');
+    expect(handoff).toHaveClass('overflow-hidden');
+    expect(handoff.querySelector('span:nth-child(2)')).toHaveClass('whitespace-normal');
+  });
+
   it('renders markdown, thinking status, and hides raw error codes', () => {
     render(
       <OrchestrationTimeline

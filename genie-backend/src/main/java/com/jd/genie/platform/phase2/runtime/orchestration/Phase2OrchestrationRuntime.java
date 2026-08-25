@@ -229,8 +229,9 @@ public final class Phase2OrchestrationRuntime {
                     planningQuery, conversationHistory, longTermMemory, conversationSummary, candidates,
                     1, Map.of(), Map.of(), persona
             );
-            OrchestrationPlan plan = planValidator.validate(
-                    enforceSystemResourceStep(planningQuery, assignCandidatesToMainOnlySteps(modelPlan, candidates)), candidates);
+            OrchestrationPlan preparedPlan = enforceSystemResourceStep(
+                    planningQuery, assignCandidatesToMainOnlySteps(modelPlan, candidates));
+            OrchestrationPlan plan = validatePlanOrFallback(planningQuery, preparedPlan, candidates);
             List<OrchestrationPlanStepView> steps = plan.steps().stream()
                     .map(step -> stepView(step, candidates))
                     .toList();
@@ -758,6 +759,112 @@ public final class Phase2OrchestrationRuntime {
             }
         }
         return changed ? new OrchestrationPlan(remapped) : plan;
+    }
+
+    /**
+     * Model output is untrusted even after JSON parsing. If its semantic plan is
+     * invalid, keep ordinary user requests usable by assigning the complete
+     * request to one valid visible candidate. Resource-creation plans remain
+     * strict because silently changing their target could create the wrong
+     * platform resource.
+     */
+    OrchestrationPlan validatePlanOrFallback(
+            String query,
+            OrchestrationPlan plan,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        try {
+            return planValidator.validate(plan, candidates);
+        } catch (AgentBridgeException error) {
+            if (error.getErrorCode() != MvpErrorCode.ORCHESTRATION_PLAN_INVALID
+                    || containsSystemResourceAgent(plan)) {
+                throw error;
+            }
+            String fallbackAgentId = fallbackCandidateId(plan, candidates);
+            if (fallbackAgentId == null) {
+                throw error;
+            }
+            log.warn(
+                    "Planner emitted an invalid semantic plan; falling back to one candidate. agentId={}, reason={}",
+                    fallbackAgentId,
+                    error.getMessage()
+            );
+            OrchestrationPlan fallback = new OrchestrationPlan(List.of(new OrchestrationStep(
+                    "validation-fallback-1",
+                    StepMode.SINGLE_AGENT,
+                    fallbackObjective(query),
+                    List.of(),
+                    fallbackAgentId,
+                    List.of()
+            )));
+            return planValidator.validate(fallback, candidates);
+        }
+    }
+
+    private boolean containsSystemResourceAgent(OrchestrationPlan plan) {
+        if (plan == null || plan.steps() == null) {
+            return false;
+        }
+        for (OrchestrationStep step : plan.steps()) {
+            if (step == null) {
+                continue;
+            }
+            if (SystemResourceBuilder.isSystemAgent(step.agentId())) {
+                return true;
+            }
+            for (OrchestrationSubTask subTask : step.subTasks()) {
+                if (subTask != null && SystemResourceBuilder.isSystemAgent(subTask.agentId())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private String fallbackCandidateId(
+            OrchestrationPlan plan,
+            List<AgentCapabilitySummary> candidates
+    ) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        if (plan != null && plan.steps() != null) {
+            for (OrchestrationStep step : plan.steps()) {
+                if (step == null) {
+                    continue;
+                }
+                if (isVisibleCandidate(step.agentId(), candidates)) {
+                    return step.agentId();
+                }
+                for (OrchestrationSubTask subTask : step.subTasks()) {
+                    if (subTask != null && isVisibleCandidate(subTask.agentId(), candidates)) {
+                        return subTask.agentId();
+                    }
+                }
+            }
+        }
+        for (AgentCapabilitySummary candidate : candidates) {
+            if (candidate != null && isVisibleCandidate(candidate.agentId(), candidates)) {
+                return candidate.agentId();
+            }
+        }
+        return null;
+    }
+
+    private boolean isVisibleCandidate(String agentId, List<AgentCapabilitySummary> candidates) {
+        if (agentId == null || agentId.isBlank() || SystemResourceBuilder.isSystemAgent(agentId)) {
+            return false;
+        }
+        return candidates.stream()
+                .anyMatch(candidate -> candidate != null && agentId.equals(candidate.agentId()));
+    }
+
+    private String fallbackObjective(String query) {
+        String objective = query == null ? "" : query.trim();
+        if (objective.isBlank()) {
+            return "Complete the user's request and return the supporting findings.";
+        }
+        return objective.length() <= 4_000 ? objective : objective.substring(0, 4_000);
     }
 
     /**

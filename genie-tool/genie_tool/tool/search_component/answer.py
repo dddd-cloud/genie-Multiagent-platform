@@ -8,16 +8,16 @@
 import os
 import time
 
-from genie_tool.util.llm_util import ask_llm
+from genie_tool.util.llm_util import ask_llm, resolve_llm_model
 from genie_tool.util.log_util import timer
 from genie_tool.util.prompt_util import get_prompt
 
 
 @timer()
-async def answer_question(query: str, search_content: str):
+async def answer_question(query: str, search_content: str, request_model: str | None = None):
     prompt_template = get_prompt("deepsearch")["answer_prompt"]
 
-    model = os.getenv("SEARCH_ANSWER_MODEL", "deepseek-v4-flash")
+    model = resolve_llm_model(request_model, "SEARCH_ANSWER_MODEL")
     answer_length = os.getenv("SEARCH_ANSWER_LENGTH", "10000")
 
     prompt = prompt_template.format(

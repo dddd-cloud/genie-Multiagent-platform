@@ -66,6 +66,21 @@ class BaseAgentToolArgumentsTest {
         assertThat(fourth.getId()).isNotEqualTo("provider-id");
     }
 
+    @Test
+    void reportsMissingRequiredToolArgumentsBeforeExecution() {
+        Map<String, Object> schema = Map.of(
+                "type", "object",
+                "required", List.of("origin", "destination")
+        );
+
+        assertThat(BaseAgent.missingRequiredArguments(schema, Map.of("origin", "121.1,38.9")))
+                .containsExactly("destination");
+        assertThat(BaseAgent.missingRequiredArguments(
+                schema,
+                Map.of("origin", "121.1,38.9", "destination", "121.6,39.0")
+        )).isEmpty();
+    }
+
     private Map<String, Object> asMap(String json) throws Exception {
         return mapper.readValue(json, new TypeReference<>() { });
     }

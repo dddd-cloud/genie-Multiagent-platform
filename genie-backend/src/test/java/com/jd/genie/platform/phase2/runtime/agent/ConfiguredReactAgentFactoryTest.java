@@ -52,11 +52,15 @@ class ConfiguredReactAgentFactoryTest {
             assertEquals(agent.getNextStepPrompt(), agent.getNextStepPromptSnapshot());
             assertEquals(true, agent.getNextStepPrompt().contains("After the latest tool result"));
             assertEquals("frozen-model", agent.getLlm().getModel());
+            assertEquals("frozen-model", context.getRuntimeModelName());
             assertEquals(20, agent.getMaxSteps());
             assertEquals(ConfiguredReactAgentFactory.MAX_OBSERVE_CHARS, agent.getMaxObserve());
             assertEquals(true, agent.isFinishWithoutToolsAfterObservations());
+            assertEquals(3, agent.getMaxToolObservationCount());
             assertEquals(true, agent.getSystemPrompt().contains("file_tool"));
-            assertEquals(true, agent.getNextStepPrompt().contains("Do not call another tool"));
+            assertEquals(true, agent.getNextStepPrompt().contains("different authorized tool"));
+            assertEquals(true, agent.getNextStepPrompt().contains("read_file followed by run_code"));
+            assertEquals(true, agent.getNextStepPrompt().contains("Never repeat a tool with the same arguments"));
             assertEquals(true, agent.getNextStepPrompt().contains("Never paste html"));
             assertSame(tools, agent.getAvailableTools());
             assertSame(printer, context.getPrinter());

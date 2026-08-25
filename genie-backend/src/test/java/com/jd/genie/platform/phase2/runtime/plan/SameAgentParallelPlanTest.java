@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -22,7 +21,7 @@ class SameAgentParallelPlanTest {
     private final OrchestrationPlanValidator validator = new OrchestrationPlanValidator();
 
     @Test
-    void acceptsTheSameAgentAcrossDifferentSubTasksWithinOneParallelGroup() {
+    void rejectsTheSameAgentAcrossDifferentSubTasksWithinOneParallelGroup() {
         OrchestrationPlan plan = new OrchestrationPlan(List.of(
                 new OrchestrationStep(
                         "parallel",
@@ -37,10 +36,11 @@ class SameAgentParallelPlanTest {
                 )
         ));
 
-        OrchestrationPlan validated = assertDoesNotThrow(() -> validator.validate(plan, CANDIDATES));
-        assertEquals(2, validated.steps().get(0).subTasks().size());
-        assertEquals("agent-a", validated.steps().get(0).subTasks().get(0).agentId());
-        assertEquals("agent-a", validated.steps().get(0).subTasks().get(1).agentId());
+        AgentBridgeException error = assertThrows(
+                AgentBridgeException.class,
+                () -> validator.validate(plan, CANDIDATES)
+        );
+        assertEquals(MvpErrorCode.ORCHESTRATION_PLAN_INVALID, error.getErrorCode());
     }
 
     @Test

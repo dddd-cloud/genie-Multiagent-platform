@@ -108,12 +108,13 @@ public final class OrchestrationPlanValidator {
         if (step.agentId() != null || size < MIN_PARALLEL_SUB_TASKS || size > MAX_PARALLEL_SUB_TASKS) {
             throw invalidPlan("PARALLEL_AGENTS requires two to four subTasks and no agentId");
         }
+        Set<String> parallelAgentIds = new HashSet<>();
         for (OrchestrationSubTask subTask : step.subTasks()) {
             if (subTask == null || blank(subTask.subTaskId()) || subTask.subTaskId().length() > MAX_STEP_ID_LENGTH
                     || blank(subTask.objective()) || subTask.objective().length() > MAX_OBJECTIVE_LENGTH
                     || blank(subTask.agentId()) || !candidateIds.contains(subTask.agentId())
-                    || !subTaskIds.add(subTask.subTaskId())) {
-                throw invalidPlan("Each subTask must have a unique valid candidate agentId and objective");
+                    || !subTaskIds.add(subTask.subTaskId()) || !parallelAgentIds.add(subTask.agentId())) {
+                throw invalidPlan("Each parallel subTask must have a unique id, a distinct valid candidate agentId, and an objective");
             }
         }
     }

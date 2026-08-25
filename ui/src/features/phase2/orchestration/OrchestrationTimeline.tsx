@@ -291,16 +291,24 @@ function ChatMessage({
   }, [blocks, thinking]);
 
   return (
-    <div className="flex items-start gap-12 py-12" data-testid={testId}>
+    <div
+      className="flex min-w-0 w-full max-w-full items-start gap-12 overflow-hidden py-12"
+      style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}
+      data-testid={testId}
+    >
       <AgentAvatar name={name} tone={tone} thinking={thinking} />
-      <div className="min-w-0 flex-1 pt-2">
+      <div className="min-w-0 flex-1 overflow-hidden pt-2" style={{ minWidth: 0, overflowX: 'hidden' }}>
         <div className="mb-6 flex flex-wrap items-center gap-8 text-[13px] leading-[18px]">
           <span className="font-medium text-text-primary">{name}</span>
           <span data-testid={`${testId}-status`}>
             <StatusChip phase={phase} />
           </span>
         </div>
-        <div ref={scrollerRef} className="max-h-[320px] overflow-auto pr-4">
+        <div
+          ref={scrollerRef}
+          className="max-h-[320px] min-w-0 max-w-full overflow-y-auto overflow-x-hidden pr-4"
+          style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}
+        >
           {blocks.length === 0 ? (
             thinking ? (
               <ThinkingPlaceholder label="正在思考" />
@@ -317,7 +325,7 @@ function ChatMessage({
                     className="mb-8 last:mb-0 flex items-start gap-6 text-[12px] leading-[20px] text-text-tertiary"
                   >
                     <span className="mt-[7px] size-4 shrink-0 rounded-full bg-black/15" aria-hidden />
-                    <span>{block.text}</span>
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{block.text}</span>
                   </div>
                 );
               }
@@ -328,7 +336,7 @@ function ChatMessage({
                     className="mb-8 last:mb-0 flex items-start gap-6 rounded-lg bg-black/[0.03] px-10 py-8 text-[13px] leading-[22px] text-text-secondary"
                   >
                     <span className="mt-[6px] size-6 shrink-0 rounded-full bg-warning/70" aria-hidden />
-                    <span>{block.text}</span>
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{block.text}</span>
                   </div>
                 );
               }
@@ -366,14 +374,18 @@ function ThinkingPlaceholder({ label, muted }: { label: string; muted?: boolean 
 function Notice({ children, testId }: { children: ReactNode; testId: string }) {
   return (
     <div
-      className="my-4 flex items-center gap-10 py-2"
+      className="my-4 flex min-w-0 max-w-full items-center gap-6 overflow-hidden py-2"
+      style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}
       data-testid={testId}
     >
-      <span className="h-[1px] flex-1 bg-border" aria-hidden />
-      <span className="shrink-0 text-center text-[11.5px] leading-[16px] text-text-tertiary">
+      <span className="h-[1px] min-w-6 flex-1 bg-border" aria-hidden />
+      <span
+        className="min-w-0 max-w-full flex-[0_1_auto] whitespace-normal break-words text-center text-[11.5px] leading-[16px] text-text-tertiary [overflow-wrap:anywhere]"
+        style={{ minWidth: 0, maxWidth: '100%', whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+      >
         {children}
       </span>
-      <span className="h-[1px] flex-1 bg-border" aria-hidden />
+      <span className="h-[1px] min-w-6 flex-1 bg-border" aria-hidden />
     </div>
   );
 }
@@ -416,7 +428,8 @@ export default function OrchestrationTimeline({
 
   return (
     <div
-      className="phase2-orchestration-timeline w-full max-w-[720px]"
+      className="phase2-orchestration-timeline min-w-0 w-full max-w-[720px] overflow-x-hidden"
+      style={{ minWidth: 0, width: '100%', maxWidth: 720, overflowX: 'hidden' }}
       data-testid="orchestration-timeline"
     >
       <button

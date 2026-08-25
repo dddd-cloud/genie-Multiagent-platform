@@ -21,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -34,6 +36,9 @@ import java.util.concurrent.TimeoutException;
 public class ReactImplAgent extends ReActAgent {
 
     static final int FINISH_TURN_TIMEOUT_SECONDS = 120;
+    static final String FINISH_TURN_FAILURE =
+            "{\"status\":\"FAILURE\",\"output\":null,\"errorCode\":\"EXECUTION_ERROR\",\"retryable\":true}";
+    private static final Pattern JSON_FENCE = Pattern.compile("(?s)```(?:json)?\\s*(\\{.*?})\\s*```");
 
     private List<ToolCall> toolCalls;
     private Integer maxObserve;
@@ -42,6 +47,8 @@ public class ReactImplAgent extends ReActAgent {
     private String nextStepPromptSnapshot;
     /** After tool results exist, the next LLM turn must emit text (no tools). */
     private boolean finishWithoutToolsAfterObservations;
+    /** Bound the dependent tool chain instead of stopping after its first observation. */
+    private int maxToolObservationCount = 1;
 
     public ReactImplAgent(AgentContext context) {
         setName("react");
@@ -83,7 +90,8 @@ public class ReactImplAgent extends ReActAgent {
 
     @Override
     public boolean think() {
-        boolean finishTurn = finishWithoutToolsAfterObservations && hasToolObservation(getMemory());
+        boolean finishTurn = finishWithoutToolsAfterObservations
+                && toolExecutionRoundCount(getMemory()) >= Math.max(1, maxToolObservationCount);
         String filesStr = finishWithoutToolsAfterObservations
                 ? FileUtil.formatFileNames(context.getProductFiles(), true)
                 : FileUtil.formatFileInfo(context.getProductFiles(), true);
@@ -114,17 +122,22 @@ public class ReactImplAgent extends ReActAgent {
 
             LLM.ToolCallResponse response = awaitResponse(future, requestTimeout, TimeUnit.SECONDS);
 
-            setToolCalls(toolCallsForTurn(finishTurn, response.getToolCalls()));
+            List<ToolCall> acceptedToolCalls = toolCallsForTurn(finishTurn, response.getToolCalls());
+            if (acceptedToolCalls.isEmpty() && !finishTurn) {
+                acceptedToolCalls = embeddedToolCalls(response.getContent(), availableTools);
+            }
+            String acceptedContent = contentForTurn(finishTurn, response.getContent(), getMemory());
+            setToolCalls(acceptedToolCalls);
 
             // 记录响应信息
-            if (!context.getIsStream() && response.getContent() != null && !response.getContent().isEmpty()) {
-                printer.send("tool_thought", response.getContent());
+            if (!context.getIsStream() && acceptedContent != null && !acceptedContent.isEmpty()) {
+                printer.send("tool_thought", acceptedContent);
             }
 
             // 创建并添加助手消息
-            Message assistantMsg = response.getToolCalls() != null && !response.getToolCalls().isEmpty() && !"struct_parse".equals(llm.getFunctionCallType()) ?
-                    Message.fromToolCalls(response.getContent(), response.getToolCalls()) :
-                    Message.assistantMessage(response.getContent(), null);
+            Message assistantMsg = !acceptedToolCalls.isEmpty() && !"struct_parse".equals(llm.getFunctionCallType()) ?
+                    Message.fromToolCalls(acceptedContent, acceptedToolCalls) :
+                    Message.assistantMessage(acceptedContent, null);
             getMemory().addMessage(assistantMsg);
 
         } catch (Exception e) {
@@ -132,9 +145,7 @@ public class ReactImplAgent extends ReActAgent {
             log.error("{} react think error", context.getRequestId(), e);
             // Emit a parseable Phase2 FAILURE envelope so orchestration does not map
             // timeouts to AGENT_INVALID_RESULT.
-            getMemory().addMessage(Message.assistantMessage(
-                    "{\"status\":\"FAILURE\",\"output\":null,\"errorCode\":\"EXECUTION_ERROR\",\"retryable\":true}",
-                    null));
+            getMemory().addMessage(Message.assistantMessage(toolResultFallback(getMemory()), null));
             setState(AgentState.FINISHED);
             return false;
         }
@@ -156,6 +167,92 @@ public class ReactImplAgent extends ReActAgent {
             return List.of();
         }
         return responseToolCalls;
+    }
+
+    static String contentForTurn(boolean finishTurn, String responseContent) {
+        return contentForTurn(finishTurn, responseContent, null);
+    }
+
+    static String contentForTurn(boolean finishTurn, String responseContent, Memory memory) {
+        if (finishTurn && (responseContent == null || responseContent.isBlank())) {
+            return toolResultFallback(memory);
+        }
+        return responseContent;
+    }
+
+    /** Preserve already successful tool evidence when the final wording call times out or is empty. */
+    static String toolResultFallback(Memory memory) {
+        if (memory == null || memory.getMessages() == null) {
+            return FINISH_TURN_FAILURE;
+        }
+        StringBuilder evidence = new StringBuilder();
+        for (Message message : memory.getMessages()) {
+            if (message == null || message.getRole() != RoleType.TOOL
+                    || message.getContent() == null || message.getContent().isBlank()
+                    || message.getContent().startsWith("Tool input validation failed")) {
+                continue;
+            }
+            if (evidence.length() > 0) {
+                evidence.append("\n\n");
+            }
+            evidence.append(message.getContent().trim());
+            if (evidence.length() >= 12_000) {
+                evidence.setLength(12_000);
+                evidence.append("…");
+                break;
+            }
+        }
+        if (evidence.isEmpty()) {
+            return FINISH_TURN_FAILURE;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "SUCCESS");
+        payload.put("output", "已取得以下工具结果，最终整理模型未正常返回，请由主规划据此汇总：\n" + evidence);
+        payload.put("errorCode", null);
+        payload.put("retryable", false);
+        return JSON.toJSONString(payload);
+    }
+
+    /**
+     * Some OpenAI-compatible providers occasionally print a function call as a
+     * fenced JSON object instead of returning it in the native tool_calls field.
+     * Accept one call only when its name belongs to this Agent's frozen tools.
+     */
+    static List<ToolCall> embeddedToolCalls(String content, ToolCollection availableTools) {
+        if (content == null || content.isBlank() || availableTools == null) {
+            return List.of();
+        }
+        Matcher matcher = JSON_FENCE.matcher(content);
+        ToolCall accepted = null;
+        while (matcher.find()) {
+            try {
+                Map<String, Object> value = JSON.parseObject(matcher.group(1), Map.class);
+                Object rawName = value.get("name");
+                if (rawName == null) rawName = value.get("tool");
+                String name = rawName == null ? "" : String.valueOf(rawName).trim();
+                if (name.isEmpty() || !availableTools.getToolMap().containsKey(name)) {
+                    continue;
+                }
+                Object rawArguments = value.get("arguments");
+                if (!(rawArguments instanceof Map<?, ?>)) {
+                    continue;
+                }
+                if (accepted != null) {
+                    return List.of();
+                }
+                accepted = ToolCall.builder()
+                        .id("text-tool-" + UUID.randomUUID())
+                        .type("function")
+                        .function(ToolCall.Function.builder()
+                                .name(name)
+                                .arguments(JSON.toJSONString(rawArguments))
+                                .build())
+                        .build();
+            } catch (RuntimeException ignored) {
+                // Provider text remains untrusted unless every check above passes.
+            }
+        }
+        return accepted == null ? List.of() : List.of(accepted);
     }
 
     @Override
@@ -254,15 +351,34 @@ public class ReactImplAgent extends ReActAgent {
     }
 
     static boolean hasToolObservation(Memory memory) {
+        return toolObservationCount(memory) > 0;
+    }
+
+    static int toolObservationCount(Memory memory) {
         if (memory == null || memory.getMessages() == null) {
-            return false;
+            return 0;
         }
-        for (Message message : memory.getMessages()) {
-            if (message != null && message.getRole() == RoleType.TOOL) {
-                return true;
-            }
+        return (int) memory.getMessages().stream()
+                .filter(message -> message != null && message.getRole() == RoleType.TOOL)
+                .count();
+    }
+
+    /**
+     * One reasoning round may intentionally issue several independent tools in
+     * parallel. Count the assistant tool-call batches, not individual TOOL
+     * messages, so a three-step chain still permits follow-up calls that depend
+     * on coordinates or ids returned by the first batch.
+     */
+    static int toolExecutionRoundCount(Memory memory) {
+        if (memory == null || memory.getMessages() == null) {
+            return 0;
         }
-        return false;
+        return (int) memory.getMessages().stream()
+                .filter(message -> message != null
+                        && message.getRole() == RoleType.ASSISTANT
+                        && message.getToolCalls() != null
+                        && !message.getToolCalls().isEmpty())
+                .count();
     }
 
     private static String truncate(String text, int maxChars) {

@@ -92,6 +92,7 @@ public class DeepSearchTool implements BaseTool {
                     .src_configs(srcConfig)
                     .stream(true)
                     .content_stream(agentContext.getIsStream())
+                    .model(agentContext.getRuntimeModelName())
                     .build();
 
             // 调用流式 API

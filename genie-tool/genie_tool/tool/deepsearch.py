@@ -54,6 +54,7 @@ class DeepSearch:
             self,
             query: str,
             request_id: str = None,
+            model: str = None,
             max_loop: int = 1,
             stream: bool = False,
             stream_mode: StreamMode = StreamMode(),
@@ -67,7 +68,7 @@ class DeepSearch:
         while current_loop <= max_loop:
             logger.info(f"{request_id} 第 {current_loop} 轮深度搜索...")
             # 查询分解
-            sub_queries = await query_decompose(query=query)
+            sub_queries = await query_decompose(query=query, request_model=model)
 
             yield json.dumps({
                 "requestId": request_id,
@@ -114,6 +115,7 @@ class DeepSearch:
                 request_id=request_id,
                 query=query,
                 content=self.search_docs_str(os.getenv("SEARCH_REASONING_MODEL")),
+                request_model=model,
             )
 
             # 如果推理判断已经可以回答，跳出循环
@@ -128,7 +130,9 @@ class DeepSearch:
         acc_content = ""
         acc_token = 0
         async for chunk in answer_question(
-                query=query, search_content=self.search_docs_str(os.getenv("SEARCH_ANSWER_MODEL"))
+                query=query,
+                search_content=self.search_docs_str(model or os.getenv("SEARCH_ANSWER_MODEL")),
+                request_model=model,
         ):
             if stream:
                 if acc_token >= stream_mode.token:

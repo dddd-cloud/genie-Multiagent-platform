@@ -145,6 +145,7 @@ public class GenieController {
                         .agentType(request.getAgentType())
                         .isStream(Objects.nonNull(request.getIsStream()) ? request.getIsStream() : false)
                         .templateType("dataAgent".equals(request.getOutputStyle()) ? "fix" : "empty")
+                        .runtimeModelName(resolveRuntimeModelName(request))
                         .build();
                 // 构建工具列表
                 agentContext.setToolCollection(buildToolCollection(agentContext, request));
@@ -187,6 +188,14 @@ public class GenieController {
         } catch (Exception error) {
             log.warn("{} failed to resolve selected model, falling back to env catalog", request.getRequestId(), error);
         }
+    }
+
+    private String resolveRuntimeModelName(AgentRequest request) {
+        var settings = RequestScopedLlmSettings.get();
+        if (settings != null && StringUtils.isNotBlank(settings.getModel())) {
+            return settings.getModel();
+        }
+        return request == null ? null : request.getRuntimeModelName();
     }
 
 
@@ -321,4 +330,3 @@ public class GenieController {
     }
 
 }
-    

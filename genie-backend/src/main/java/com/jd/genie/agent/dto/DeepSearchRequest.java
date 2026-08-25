@@ -21,4 +21,6 @@ public class DeepSearchRequest {
     private String scene_type;
     private Boolean stream;
     private Boolean content_stream;
+    /** Current conversation model. The tool service normalizes it for its OpenAI-compatible LiteLLM client. */
+    private String model;
 }

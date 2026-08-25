@@ -3,6 +3,7 @@ package com.jd.genie.agent.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jd.genie.agent.dto.Memory;
 import com.jd.genie.agent.dto.Message;
+import com.jd.genie.agent.dto.tool.McpToolInfo;
 import com.jd.genie.agent.dto.tool.ToolCall;
 import com.jd.genie.agent.enums.AgentState;
 import com.jd.genie.agent.enums.RoleType;
@@ -15,6 +16,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -129,7 +131,17 @@ public abstract class BaseAgent {
                     command.getFunction().getArguments()
             );
             command.getFunction().setArguments(normalizedArguments);
-            Object args = mapper.readValue(normalizedArguments, Object.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> args = mapper.readValue(normalizedArguments, Map.class);
+
+            List<String> missing = missingRequiredArguments(toolSchema(name, mapper), args);
+            if (!missing.isEmpty()) {
+                String message = "Tool input validation failed for " + name
+                        + ": missing required parameter(s): " + String.join(", ", missing)
+                        + ". Use existing tool results to fill them, then retry only this necessary tool.";
+                log.warn("{} {}", context.getRequestId(), message);
+                return message;
+            }
 
             // 执行工具
             Object result = availableTools.execute(name, args);
@@ -138,9 +150,49 @@ public abstract class BaseAgent {
                 return stringifyToolResult(result, mapper);
             }
         } catch (Exception e) {
-            log.error("{} execute tool {} failed ", context.getRequestId(), name, e);
+            // Keep the assistant/tool message pair valid even when a provider emits
+            // malformed JSON such as "{{". The error becomes an observation that the
+            // next reasoning round can correct instead of crashing trace rendering.
+            command.getFunction().setArguments("{}");
+            log.warn("{} rejected invalid tool input for {}: {}", context.getRequestId(), name, e.getMessage());
+            return "Tool input validation failed for " + name
+                    + ": arguments must be a valid JSON object. Correct the arguments and retry only if needed.";
         }
         return "Tool" + name + " Error.";
+    }
+
+    private Map<String, Object> toolSchema(String name, ObjectMapper mapper) {
+        try {
+            McpToolInfo mcp = availableTools.getMcpTool(name);
+            if (mcp != null && mcp.getParameters() != null && !mcp.getParameters().isBlank()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> schema = mapper.readValue(mcp.getParameters(), Map.class);
+                return schema;
+            }
+            if (availableTools.getTool(name) != null) {
+                return availableTools.getTool(name).toParams();
+            }
+        } catch (Exception error) {
+            log.warn("{} could not read schema for tool {}: {}", context.getRequestId(), name, error.getMessage());
+        }
+        return Map.of();
+    }
+
+    static List<String> missingRequiredArguments(Map<String, Object> schema, Map<String, Object> arguments) {
+        if (schema == null || arguments == null || !(schema.get("required") instanceof Collection<?> required)) {
+            return List.of();
+        }
+        List<String> missing = new ArrayList<>();
+        for (Object item : required) {
+            if (!(item instanceof String name) || name.isBlank()) {
+                continue;
+            }
+            Object value = arguments.get(name);
+            if (!arguments.containsKey(name) || value == null || (value instanceof String text && text.isBlank())) {
+                missing.add(name);
+            }
+        }
+        return List.copyOf(missing);
     }
 
     /**

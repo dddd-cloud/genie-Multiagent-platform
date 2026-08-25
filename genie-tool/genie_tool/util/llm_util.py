@@ -15,6 +15,23 @@ from genie_tool.util.log_util import timer, AsyncTimer
 from genie_tool.util.sensitive_detection import SensitiveWordsReplace
 
 
+def resolve_llm_model(request_model: str | None = None, env_name: str | None = None) -> str:
+    """Resolve one request's model and make bare names explicit for LiteLLM.
+
+    This tool service talks to an OpenAI-compatible endpoint. LiteLLM cannot infer a
+    provider from bare names such as ``qwen3.7-plus`` or ``deepseek-v4-flash``.
+    A model carried by the current chat takes precedence over tool-specific env vars.
+    """
+    selected = (request_model or "").strip()
+    if not selected and env_name:
+        selected = os.getenv(env_name, "").strip()
+    if not selected:
+        selected = os.getenv("DEFAULT_MODEL", "").strip()
+    if not selected:
+        selected = "deepseek-v4-flash"
+    return selected if "/" in selected else f"openai/{selected}"
+
+
 @timer(key="enter")
 async def ask_llm(
         messages: str | List[Any],

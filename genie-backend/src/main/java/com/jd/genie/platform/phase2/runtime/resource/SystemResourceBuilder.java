@@ -43,6 +43,8 @@ import java.util.regex.Pattern;
 @Service
 public class SystemResourceBuilder {
     public static final String AGENT_ID = "__system_resource_builder__";
+    private static final int MAX_AUTO_BOUND_SKILLS = 5;
+    private static final int MAX_AUTO_BOUND_CAPABILITIES = 12;
     private static final AgentCapabilitySummary CANDIDATE = new AgentCapabilitySummary(
             AGENT_ID, 1L, "系统资源构建器",
             "仅用于创建当前用户自己的 Agent 或 Team；按最小权限读取可用 Skill/MCP 并完成绑定。"
@@ -131,9 +133,10 @@ public class SystemResourceBuilder {
         for (SkillResponse skill : available.skills()) {
             catalog.append("- ").append(skill.name()).append(": ").append(nullToEmpty(skill.description())).append('\n');
         }
-        catalog.append("availableMcpTools:\n");
-        for (McpToolResponse tool : available.mcpTools()) {
-            catalog.append("- ").append(tool.runtimeName()).append(": ").append(nullToEmpty(tool.description())).append('\n');
+        catalog.append("availableCapabilities:\n");
+        for (CapabilityOption capability : available.capabilities()) {
+            catalog.append("- ").append(capability.name()).append(": ")
+                    .append(nullToEmpty(capability.description())).append('\n');
         }
         catalog.append("existingOnlineAgents:\n");
         for (AgentResponse agent : available.agents()) {
@@ -226,7 +229,7 @@ public class SystemResourceBuilder {
             CurrentUser user, RoleSpec role, Available available, String query
     ) {
         List<SkillResponse> skills = selectSkills(available.skills(), role, query);
-        List<String> capabilities = selectCapabilities(available.mcpTools(), role.skillHint(), query);
+        List<String> capabilities = selectCapabilities(available.capabilities(), role.skillHint(), query);
         List<AgentSkillBindingRequest> bindings = new ArrayList<>();
         for (int index = 0; index < skills.size(); index++) {
             bindings.add(new AgentSkillBindingRequest(skills.get(index).id(), index + 1));
@@ -247,7 +250,26 @@ public class SystemResourceBuilder {
         List<AgentResponse> onlineAgents = agents == null || agents.items() == null ? List.of() : agents.items().stream()
                 .filter(agent -> "ONLINE".equals(agent.status()))
                 .toList();
-        return new Available(skills, mcpServerService.capabilities(user), onlineAgents);
+        List<CapabilityOption> capabilities = new ArrayList<>(List.of(
+                new CapabilityOption(CapabilityKeys.BUILTIN_DEEP_SEARCH, CapabilityKeys.BUILTIN_DEEP_SEARCH,
+                        "联网搜索网页、检索公开信息并整理来源"),
+                new CapabilityOption(CapabilityKeys.BUILTIN_CODE_INTERPRETER, CapabilityKeys.BUILTIN_CODE_INTERPRETER,
+                        "在浏览器 Python 环境运行代码并读写工作区文件"),
+                new CapabilityOption(CapabilityKeys.BUILTIN_DATA_ANALYSIS, CapabilityKeys.BUILTIN_DATA_ANALYSIS,
+                        "分析 CSV、Excel 等结构化数据"),
+                new CapabilityOption(CapabilityKeys.BUILTIN_FILE, CapabilityKeys.BUILTIN_FILE,
+                        "读取、写入和管理工作区文件"),
+                new CapabilityOption(CapabilityKeys.BUILTIN_REPORT, CapabilityKeys.BUILTIN_REPORT,
+                        "生成报告和可下载交付文件")
+        ));
+        for (McpToolResponse tool : mcpServerService.capabilities(user)) {
+            capabilities.add(new CapabilityOption(
+                    CapabilityKeys.forMcpTool(tool.id()),
+                    tool.runtimeName(),
+                    tool.description()
+            ));
+        }
+        return new Available(skills, List.copyOf(capabilities), onlineAgents);
     }
 
     private Optional<AgentResponse> findReusable(List<AgentResponse> candidates, RoleSpec role, LinkedHashSet<String> claimedAgentIds) {
@@ -267,7 +289,15 @@ public class SystemResourceBuilder {
     private List<SkillResponse> selectSkills(List<SkillResponse> candidates, RoleSpec role, String query) {
         List<SkillResponse> selected = new ArrayList<>();
         for (SkillResponse candidate : candidates) {
-            if (!matches(role.skillHint() + " " + query,
+            if (explicitlyRequests(role.skillHint(), candidate.name()) && isCompilable(role.systemPrompt(), List.of(candidate))) {
+                selected.add(candidate);
+            }
+            if (selected.size() == MAX_AUTO_BOUND_SKILLS) return List.copyOf(selected);
+        }
+        if (!selected.isEmpty()) return List.copyOf(selected);
+        String selectionText = role.skillHint().isBlank() ? query : role.skillHint();
+        for (SkillResponse candidate : candidates) {
+            if (!matches(selectionText,
                     candidate.name() + " " + candidate.description() + " " + candidate.instruction())) {
                 continue;
             }
@@ -276,7 +306,7 @@ public class SystemResourceBuilder {
             if (isCompilable(role.systemPrompt(), proposed)) {
                 selected.add(candidate);
             }
-            if (selected.size() == 5) break;
+            if (selected.size() == MAX_AUTO_BOUND_SKILLS) break;
         }
         return List.copyOf(selected);
     }
@@ -296,23 +326,52 @@ public class SystemResourceBuilder {
         }
     }
 
-    private List<String> selectCapabilities(List<McpToolResponse> candidates, String skillHint, String query) {
+    private List<String> selectCapabilities(List<CapabilityOption> candidates, String skillHint, String query) {
         LinkedHashSet<String> selected = new LinkedHashSet<>();
-        for (McpToolResponse tool : candidates) {
-            if (matches(skillHint + " " + query, tool.toolName() + " " + nullToEmpty(tool.description()))) {
-                selected.add(CapabilityKeys.forMcpTool(tool.id()));
+        for (CapabilityOption capability : candidates) {
+            if (explicitlyRequests(skillHint, capability.name())) {
+                selected.add(capability.key());
             }
-            if (selected.size() == 5) break;
+            if (selected.size() == MAX_AUTO_BOUND_CAPABILITIES) return List.copyOf(selected);
+        }
+        if (!selected.isEmpty()) return List.copyOf(selected);
+        String selectionText = skillHint == null || skillHint.isBlank() ? query : skillHint;
+        for (CapabilityOption capability : candidates) {
+            if (matches(selectionText, capability.name() + " " + nullToEmpty(capability.description()))) {
+                selected.add(capability.key());
+            }
+            if (selected.size() == MAX_AUTO_BOUND_CAPABILITIES) break;
         }
         return List.copyOf(selected);
+    }
+
+    private static boolean explicitlyRequests(String hints, String resourceName) {
+        String left = normalize(hints);
+        String right = normalize(resourceName);
+        return !right.isBlank() && left.contains(right);
     }
 
     private static boolean matches(String request, String resource) {
         String left = normalize(request);
         String right = normalize(resource);
-        for (String keyword : List.of("python", "数据", "csv", "分析", "报表", "pdf", "文档", "前端", "后端", "代码", "github", "测试", "research", "report", "data", "file", "web", "api")) {
-            if (left.contains(keyword) && right.contains(keyword)) return true;
+        List<List<String>> domains = List.of(
+                List.of("python", "代码解释器", "脚本", "运行代码", "code interpreter"),
+                List.of("数据", "csv", "excel", "分析", "统计", "图表", "data", "analytics"),
+                List.of("pdf", "文档", "文件", "报告", "file", "document", "report"),
+                List.of("网页", "联网", "搜索", "检索", "调研", "web", "search", "research"),
+                List.of("地图", "高德", "poi", "地理", "经纬度", "位置", "定位", "路线", "导航", "驾车", "步行", "公交", "距离", "天气", "旅游", "景点", "maps", "geo", "location", "route", "direction", "distance", "weather"),
+                List.of("前端", "后端", "代码", "开发", "github", "api", "frontend", "backend", "code"),
+                List.of("测试", "质量", "验收", "qa", "test"),
+                List.of("紫微", "命盘", "运势", "星盘", "ziwei")
+        );
+        for (List<String> domain : domains) {
+            if (containsAny(left, domain) && containsAny(right, domain)) return true;
         }
+        return false;
+    }
+
+    private static boolean containsAny(String value, List<String> values) {
+        for (String item : values) if (value.contains(item)) return true;
         return false;
     }
 
@@ -339,7 +398,9 @@ public class SystemResourceBuilder {
 
     private static String nullToEmpty(String value) { return value == null ? "" : value; }
 
-    private record Available(List<SkillResponse> skills, List<McpToolResponse> mcpTools, List<AgentResponse> agents) { }
+    private record Available(List<SkillResponse> skills, List<CapabilityOption> capabilities, List<AgentResponse> agents) { }
+
+    private record CapabilityOption(String key, String name, String description) { }
 
     private record RoleSpec(String name, String description, String systemPrompt, String skillHint, List<String> reuseHints) {
         RoleSpec(String name, String description, String systemPrompt, String skillHint) {

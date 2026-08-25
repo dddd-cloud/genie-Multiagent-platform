@@ -39,6 +39,9 @@ skills/users/
 # Local toolchain cache (portable Maven/pnpm helpers; never commit)
 .tools/
 
+# Local agent/skill cache (machine-specific; never commit)
+.agents/
+
 # Local acceptance / scratch artifacts
 gate-*.txt
 tmp-*
