@@ -74,6 +74,36 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 
 ## 案例展示视频
 
+等待覆盖的视频：
+工作区演示
+
+https://github.com/user-attachments/assets/6d965045-0f24-4284-80bb-a4dd07484207
+
+多专家协作
+
+https://github.com/user-attachments/assets/38adb69a-6146-48b9-b11d-065c8e08f8a8
+
+资源广场
+
+
+https://github.com/user-attachments/assets/e2ab2357-64d4-4acd-92b3-db63d2a2ea71
+
+
+自然语言创建资源
+
+
+
+https://github.com/user-attachments/assets/b67de35c-82c1-48c6-97a4-301438744504
+
+
+完整平台演示
+
+
+https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55
+
+
+
+
 <table>
   <thead>
     <tr>
