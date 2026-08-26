@@ -14,7 +14,7 @@
 
 Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础上的二次开发版本。
 
-保留、改进了原项目的核心能力，并进一步将其扩展为一个面向真实多用户场景的智能体平台：用户可以一站式管理自己的模型、专家 Agent、专家团队、Skill 和 MCP 连接，在 `Auto`、`Solo`、`Ensemble` 三种模式下完成单智能体或多智能体任务，也可以在隔离的浏览器工作区中管理输入文件与智能体生成的交付物。
+保留、改进了原项目的核心能力，并进一步将其扩展为一个面向真实多用户场景的智能体平台：用户可以“一站式”管理自己的模型、专家 Agent、专家团队、Skill 和 MCP 连接，在 `Auto`、`Solo`、`Ensemble` 三种模式下完成单智能体或多智能体任务，也可以在隔离的浏览器工作区中管理输入文件与智能体生成的交付物。
 
 
 - 仓库地址：<https://github.com/dddd-cloud/genie-Multiagent-platform.git>
