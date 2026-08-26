@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "variables": [
+    {
+      "name": "GENIE_DB_URL",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_DB_USERNAME",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_DB_PASSWORD",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_BOOTSTRAP_ADMIN_USERNAME",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_BOOTSTRAP_ADMIN_PASSWORD",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_INTERNAL_AGENT_TOKEN",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_SESSION_TIMEOUT",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_STREAM_SNAPSHOT_MAX_BYTES",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_HISTORY_MAX_TURNS",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_HISTORY_MAX_CHARACTERS",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "GENIE_SSE_TIMEOUT_MILLIS",
+      "profiles": ["local", "test", "prod", "mvp-acceptance"]
+    },
+    {
+      "name": "MVP_FAKE_AGENT_MODE",
+      "profiles": ["mvp-acceptance"]
+    },
+    {
+      "name": "MVP_FAKE_AGENT_EVENT_COUNT",
+      "profiles": ["mvp-acceptance"]
+    },
+    {
+      "name": "MVP_FAKE_AGENT_DELAY_MS",
+      "profiles": ["mvp-acceptance"]
+    },
+    {
+      "name": "MVP_ACCEPTANCE_USER_PASSWORD",
+      "profiles": ["mvp-acceptance"]
+    },
+    {
+      "name": "MVP_ACCEPTANCE_ADMIN_PASSWORD",
+      "profiles": ["mvp-acceptance"]
+    }
+  ]
+}

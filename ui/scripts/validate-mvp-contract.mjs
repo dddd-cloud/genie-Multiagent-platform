@@ -937,18 +937,21 @@ function validateMirrorFields() {
 }
 
 function parseConfigTable() {
-  const configDoc = readText(join(contractDir, 'configuration.md'));
-  const rows = [...configDoc.matchAll(/^\| (GENIE_[A-Z_]+|MVP_[A-Z_]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$/gm)];
-  return rows.map((row) => ({
-    name: row[1].trim(),
-    profiles: row[5].split(',').map((item) => item.trim()).filter(Boolean),
+  const contract = JSON.parse(readText(join(contractDir, 'configuration.json')));
+  if (!isPlainObject(contract) || !Array.isArray(contract.variables)) {
+    fail('configuration.json must contain a variables array');
+    return [];
+  }
+  return contract.variables.map((row) => ({
+    name: row.name,
+    profiles: Array.isArray(row.profiles) ? row.profiles : [],
   }));
 }
 
 function validateConfigNames() {
   const rows = parseConfigTable();
   const found = rows.map((row) => row.name);
-  if (new Set(found).size !== found.length) fail('Duplicate configuration names in configuration.md');
+  if (new Set(found).size !== found.length) fail('Duplicate configuration names in configuration.json');
   if (JSON.stringify(found) !== JSON.stringify(EXPECTED_CONFIG_VARS)) {
     fail(`Configuration names mismatch: ${JSON.stringify(found)}`);
   } else {
