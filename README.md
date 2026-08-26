@@ -460,3 +460,5 @@ docker exec joyagent-mvp-ui-1 bash -lc "cd /workspace/ui && pnpm build"
 本项目基于京东开源的 [JoyAgent-JDGenie](https://github.com/jd-opensource/joyagent-jdgenie) 进行二次开发。感谢原项目团队提供多智能体框架、工具服务、前端产品和相关开源成果。
 
 项目沿用 Apache License 2.0。使用、分发或二次开发时，请同时遵守 [LICENSE](./LICENSE) 与 [NOTICE-Third Party](./NOTICE-Third%20Party) 中的条款和第三方许可要求。
+
+如有问题请联系：zzz281663@gmail.com
