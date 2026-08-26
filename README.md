@@ -46,7 +46,7 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 ### 功能与技术差异
 
 | 维度 | JoyAgent-JDGenie 原始能力 | 本项目扩展 | 主要技术实现 |
-| --- | --- | --- | --- |
+| ---  | ---  | ---  | ---  |
 | 产品定位 | 已是开箱即用的端到端通用多智能体产品，包含前端、后端、智能体和工具服务；但主要面向单实例使用，缺少多用户平台化管理能力 | 面向多用户的可配置多智能体平台 | 在原 `agent`、`tool` 和 SSE 链路外增加 `platform` 领域层 |
 | 身份与数据隔离 | 已具备完整产品入口和任务执行链路；但没有登录 Session、用户角色、租户/用户数据隔离和管理员后台 | 登录、用户角色、用户状态、租户/用户数据隔离、管理员后台 | Spring Security、Spring Session JDBC、MySQL、CSRF、Flyway |
 | 会话管理 | 已支持任务执行、上下文传递和流式回答；但没有结构化会话 CRUD、消息状态持久化、聊天附件和流式快照恢复 | 会话 CRUD、标题生成、消息状态机、附件、历史恢复、失败恢复和流式快照 | `conversation` / `conversation_message` / `conversation_attachment` 表，SSE Observer 持久化 |
