@@ -175,7 +175,7 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 
 宿主机只需要：
 
-- Git，并已获得本私有仓库的访问权限
+- Git
 - Docker Desktop 或 Docker Engine
 - Docker Compose v2（使用 `docker compose` 命令）
 - 可访问所选模型 API；使用 Deep Search 时还需可访问配置的搜索服务
@@ -198,9 +198,9 @@ Compose 会在容器内使用以下运行时：
 
 ## 快速开始
 
-### 1. 克隆私有仓库
+### 1. 克隆仓库
 
-先在 GitHub 配置有权限的 SSH Key、PAT 或 Git Credential Manager，然后执行：
+直接克隆 GitHub 仓库：
 
 ```bash
 git clone https://github.com/dddd-cloud/genie-Multiagent-platform.git
