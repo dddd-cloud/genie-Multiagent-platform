@@ -163,7 +163,7 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 ├── skills/                   # 运行时 Skill Package 根目录
 ├── deploy/                   # Docker Compose 与本地热更新配置
 ├── scripts/acceptance/       # MVP / Phase2 分层验收脚本
-├── docs/mvp-contract/        # REST、SSE、Snapshot 与编排契约
+├── docs/mvp-contract/        # 自动化测试使用的 Schema 与 fixture
 ├── data/memory/              # Docker 本地用户记忆挂载目录
 ├── .env.example              # 无密钥的环境变量模板
 ├── Makefile                  # 单元、集成、UI、E2E 与契约验收入口
@@ -403,7 +403,7 @@ make mvp-acceptance
 make phase2-005-acceptance
 ```
 
-验收体系包括 Java 单元/集成测试、Testcontainers MySQL、前端 Vitest、Playwright E2E、JSON Schema 契约校验和真实服务脚本。详细契约见 [docs/mvp-contract](./docs/mvp-contract/)。
+验收体系包括 Java 单元/集成测试、Testcontainers MySQL、前端 Vitest、Playwright E2E、JSON Schema 契约校验和真实服务脚本。
 
 ### 本地快速更新
 
@@ -444,15 +444,10 @@ docker exec joyagent-mvp-ui-1 bash -lc "cd /workspace/ui && pnpm build"
 
 - [本地 Docker 部署](./deploy/README.local.md)
 - [传统手动部署说明](./Deploy.md)
-- [MVP REST API 契约](./docs/mvp-contract/rest-api-v1.md)
-- [流式快照协议](./docs/mvp-contract/snapshot-v1.md)
-- [配置契约](./docs/mvp-contract/configuration.md)
-- [错误码](./docs/mvp-contract/error-codes.md)
-- [Phase2 契约说明](./docs/mvp-contract/phase2/README.md)
 
 ## 贡献
 
-本仓库为私有项目。提交改动前建议：
+本仓库面向公开协作。提交改动前建议：
 
 1. 从当前主线创建功能分支。
 2. 不提交密钥、本地卷、构建产物和测试证据中的敏感数据。
