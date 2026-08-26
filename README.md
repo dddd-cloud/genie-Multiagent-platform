@@ -423,6 +423,7 @@ docker exec joyagent-mvp-ui-1 bash -lc "cd /workspace/ui && pnpm build"
 ## 安全与数据说明
 
 - 不要提交 `.env`、模型 API Key、MCP Token、数据库密码或本地运行数据。
+- `genie-backend/src/main/resources/db/data.sql` 仅包含用于演示和测试的虚构销售样例数据，不代表真实人员、订单或业务记录。
 - MCP 凭据使用 32 字节密钥加密保存；生产环境必须使用稳定、安全备份且不入库的密钥。
 - Agent、Team、Skill、MCP、会话、附件、记忆和模型配置均应通过当前用户作用域访问。
 - 安装外部 Skill 或连接 MCP 前，应核对来源、权限、网络访问范围和数据处理方式。

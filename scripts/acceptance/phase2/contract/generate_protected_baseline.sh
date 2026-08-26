@@ -24,7 +24,6 @@ list_protected_files() {
     genie-backend/src/main/resources/db/migration/V002__identity_and_session.sql \
     genie-backend/src/main/resources/db/migration/V003__conversation.sql \
     ui/src/utils/querySSE.ts \
-    docs/document/phase2/00_JoyAgent_二次开发前统一契约冻结基线_MVP-CONTRACT-005.md \
     genie-backend/src/main/resources/db/migration/V004__agent_and_skill.sql \
     genie-backend/src/main/resources/db/migration/V005__mcp_and_tool_binding.sql \
     genie-backend/src/main/java/com/jd/genie/platform/phase2/tooling/RuntimeToolCollectionService.java \

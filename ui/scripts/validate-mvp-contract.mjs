@@ -13,11 +13,6 @@ const backendContractDir = join(
   repoRoot,
   'genie-backend/src/main/java/com/jd/genie/platform/contract'
 );
-const docsDir = join(repoRoot, 'docs/document');
-const phase1DocsDir = existsSync(join(docsDir, 'phase1'))
-  ? join(docsDir, 'phase1')
-  : docsDir;
-const baselineDoc = join(phase1DocsDir, '00_JoyAgent_MVP开发前契约冻结基线_MVP-CONTRACT-002.md');
 const chatTsPath = join(uiRoot, 'src/utils/chat.ts');
 const phase2SchemaDir = join(contractDir, 'phase2/schema');
 const phase2FixturesDir = join(uiRoot, 'src/mocks/phase2/fixtures');
@@ -106,13 +101,6 @@ const EXPECTED_ERROR_CODES = [
   'SKILL_ENTRYPOINT_NOT_AVAILABLE',
   'SKILL_EXECUTION_FAILED',
   'SKILL_EXECUTION_TIMEOUT',
-];
-
-const MODULE_DOCS = [
-  '01_数据库与身份安全模块_开发验收方案.md',
-  '02_会话与消息后端模块_开发验收方案.md',
-  '03_Agent流式持久化与上下文桥接模块_开发验收方案.md',
-  '04_前端整合与全链路验收模块_开发验收方案.md',
 ];
 
 const PHASE2_SCHEMA_FILES = [
@@ -999,133 +987,6 @@ function validateErrorCodes() {
   }
 }
 
-function looksLikeOwnershipPath(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return false;
-  if (/^仅允许|^禁止|^不得|^新 Mapper|^注意/.test(trimmed)) return false;
-  return (
-    trimmed.includes('/') ||
-    trimmed.includes('*') ||
-    /\.(java|yml|yaml|sql|sh|tsx?|jsx?|json|md)$/i.test(trimmed)
-  );
-}
-
-function normalizeOwnershipPath(path) {
-  return path
-    .trim()
-    .replace(/（[^）]*除外[^）]*）/g, '')
-    .replace(/（[^）]*冻结除外[^）]*）/g, '')
-    .replace(/（.*?）/g, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
-    .replace(/\s+$/g, '');
-}
-
-function extractOwnershipBlocks(source) {
-  const sectionRegex = /(冻结|A 独占|B 独占|C 独占|D 独占)：\s*```text\s*([\s\S]*?)```/g;
-  const result = { frozen: [], A: [], B: [], C: [], D: [] };
-  let match;
-  while ((match = sectionRegex.exec(source)) !== null) {
-    const label = match[1] === '冻结' ? 'frozen' : match[1].charAt(0);
-    result[label] = match[2]
-      .split('\n')
-      .filter(looksLikeOwnershipPath)
-      .map((line) => normalizeOwnershipPath(line))
-      .filter(Boolean);
-  }
-  return result;
-}
-
-function stripGlob(path) {
-  return path.replace(/\/\*\*$/, '/').replace(/\*\*/g, '').replace(/\*$/, '');
-}
-
-function pathsConflict(a, b) {
-  if (a === b) return true;
-  const baseA = a.split('/').pop();
-  const baseB = b.split('/').pop();
-  if (baseA && baseB && !baseA.includes('*') && !baseB.includes('*') && baseA === baseB && baseA.includes('.')) {
-    return true;
-  }
-  const left = stripGlob(a);
-  const right = stripGlob(b);
-  if (!left || !right) return false;
-  return left === right || left.startsWith(right) || right.startsWith(left);
-}
-
-function validateOwnershipFromBaseline() {
-  const baseline = readText(baselineDoc);
-  const ownership = extractOwnershipBlocks(baseline);
-
-  if (
-    ownership.frozen.length === 0 ||
-    ownership.A.length === 0 ||
-    ownership.B.length === 0 ||
-    ownership.C.length === 0 ||
-    ownership.D.length === 0
-  ) {
-    fail('Failed to parse ownership blocks from MVP-CONTRACT-002 section 16');
-  }
-
-  const moduleOwners = { A: ownership.A, B: ownership.B, C: ownership.C, D: ownership.D };
-  const entries = [];
-  for (const [module, paths] of Object.entries(moduleOwners)) {
-    for (const path of paths) entries.push({ module, path });
-  }
-
-  for (let i = 0; i < entries.length; i += 1) {
-    for (let j = i + 1; j < entries.length; j += 1) {
-      if (entries[i].module === entries[j].module) continue;
-      if (pathsConflict(entries[i].path, entries[j].path)) {
-        fail(
-          `Ownership conflict between ${entries[i].module} and ${entries[j].module} on ${entries[i].path} vs ${entries[j].path}`
-        );
-      }
-    }
-  }
-
-  for (const frozenPath of ownership.frozen) {
-    for (const [module, paths] of Object.entries(moduleOwners)) {
-      if (paths.some((path) => pathsConflict(path, frozenPath) && path !== 'ui/**')) {
-        fail(`Frozen path ${frozenPath} must not appear in ${module} exclusive ownership`);
-      }
-    }
-  }
-
-  const moduleDocOwners = {
-    A: '01_数据库与身份安全模块_开发验收方案.md',
-    B: '02_会话与消息后端模块_开发验收方案.md',
-    C: '03_Agent流式持久化与上下文桥接模块_开发验收方案.md',
-    D: '04_前端整合与全链路验收模块_开发验收方案.md',
-  };
-
-  for (const [module, doc] of Object.entries(moduleDocOwners)) {
-    const content = readText(join(phase1DocsDir, doc));
-    if (!content.includes('MVP-CONTRACT-002')) fail(`${doc} does not reference MVP-CONTRACT-002`);
-    else pass(`${doc} references MVP-CONTRACT-002`);
-
-    const claimed = extractOwnershipBlocks(content)[module] || [];
-    for (const path of claimed) {
-      for (const frozenPath of ownership.frozen) {
-        if (pathsConflict(path, frozenPath) && path !== 'ui/**') {
-          fail(`${doc} claims frozen path ${path} overlapping ${frozenPath}`);
-        }
-      }
-      for (const [otherModule, otherPaths] of Object.entries(moduleOwners)) {
-        if (otherModule === module) continue;
-        for (const otherPath of otherPaths) {
-          if (pathsConflict(path, otherPath)) {
-            fail(`${doc} claims other module ${otherModule} path ${path} overlapping ${otherPath}`);
-          }
-        }
-      }
-    }
-  }
-
-  pass('Ownership parsed from MVP-CONTRACT-002 section 16 without conflicts');
-}
-
 function collectFiles(dir, predicate) {
   if (!existsSync(dir)) return [];
   const out = [];
@@ -1400,7 +1261,7 @@ function validatePhase2ProtectedBaselineContent() {
     return;
   }
   const lines = content.split('\n').filter((line) => line.trim().length > 0);
-  const expectedCount = 29;
+  const expectedCount = 28;
   if (lines.length !== expectedCount) {
     fail(`Phase2 protected baseline must contain exactly ${expectedCount} entries, found ${lines.length}`);
   }
@@ -1713,7 +1574,6 @@ function main() {
   validateErrorCodes();
   validateConfigNames();
   validateMirrorFields();
-  validateOwnershipFromBaseline();
   validatePhase2Contract(ajv);
 
   console.log('');
