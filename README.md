@@ -14,12 +14,17 @@
 
 Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础上的二次开发版本。
 
-保留了原项目的 ReAct、Plan & Executor、多智能体协作、Deep Search、报告生成、代码执行、文件处理、数据分析和 SSE 流式输出等核心能力，并进一步将其扩展为一个面向真实多用户场景的智能体平台：用户可以管理自己的模型、专家 Agent、专家团队、Skill 和 MCP 连接，在 `Auto`、`Solo`、`Ensemble` 三种模式下完成单智能体或多智能体任务，也可以在隔离的浏览器工作区中管理输入文件与智能体生成的交付物。
+保留、改进了原项目的核心能力，并进一步将其扩展为一个面向真实多用户场景的智能体平台：用户可以一站式管理自己的模型、专家 Agent、专家团队、Skill 和 MCP 连接，在 `Auto`、`Solo`、`Ensemble` 三种模式下完成单智能体或多智能体任务，也可以在隔离的浏览器工作区中管理输入文件与智能体生成的交付物。
 
 
 - 仓库地址：<https://github.com/dddd-cloud/genie-Multiagent-platform.git>
 - 上游项目：<https://github.com/jd-opensource/joyagent-jdgenie>
 - 开源许可：Apache License 2.0，详见 [LICENSE](./LICENSE)
+
+## 系统架构
+
+<img width="1672" height="941" alt="二开架构图" src="https://github.com/user-attachments/assets/a300bcc7-466a-462d-9314-4f38cb32d580" />
+
 
 ## 核心能力
 
@@ -111,10 +116,6 @@ Genie Multi-Agent Platform 是在京东开源项目 **JoyAgent-JDGenie** 基础�
 集中展示平台的主要二次开发能力与完整操作流程。
 
 <video src="https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55" width="720" controls><a href="https://github.com/user-attachments/assets/f927595b-3a1e-4bd5-90ae-0f9f5c703c55">查看完整平台演示</a></video>
-
-## 系统架构
-
-<img width="1672" height="941" alt="二开架构图" src="https://github.com/user-attachments/assets/a300bcc7-466a-462d-9314-4f38cb32d580" />
 
 
 ### 服务边界
